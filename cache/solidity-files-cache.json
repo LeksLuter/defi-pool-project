@@ -625,6 +625,43 @@
       "artifacts": [
         "IERC165"
       ]
+    },
+    "C:\\Users\\Leks\\Documents\\GitHub\\defi-pool-project\\contracts\\PoolFactory.sol": {
+      "lastModificationDate": 1751912110174,
+      "contentHash": "af0d958ce01f09ade43064cdd55c35f5",
+      "sourceName": "contracts/PoolFactory.sol",
+      "solcConfig": {
+        "version": "0.8.17",
+        "settings": {
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./LiquidityPool.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "PoolFactory"
+      ]
     }
   }
 }
