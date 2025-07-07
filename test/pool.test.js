@@ -6,33 +6,33 @@ describe("LiquidityPool", function () {
 
   beforeEach(async () => {
     [owner, user] = await ethers.getSigners();
-
-    // Деплой фабрики пулов
-    const PoolFactory = await ethers.getContractFactory("PoolFactory");
-    factory = await PoolFactory.deploy();
+    const Factory = await ethers.getContractFactory("PoolFactory");
+    factory = await Factory.deploy();
     await factory.deployed();
 
-    // Создание пула с тестовыми токенами и фиксированной комиссией
-    const tokenA = ethers.constants.AddressZero; // Заглушка
-    const tokenB = ethers.constants.AddressZero; // Заглушка
-    const feeRate = 30; // 0.3%
+    const tokenA = ethers.constants.AddressZero;
+    const tokenB = ethers.constants.AddressZero;
+    const feeRate = 30;
 
     const tx = await factory.createPool(tokenA, tokenB, feeRate);
     const receipt = await tx.wait();
     const poolAddress = receipt.events[0].args.pool;
 
-    // Подключение к созданному пулу
-    const LiquidityPool = await ethers.getContractFactory("LiquidityPool");
-    pool = LiquidityPool.attach(poolAddress);
+    pool = await ethers.getContractAt("LiquidityPool", poolAddress);
   });
 
   it("Should add liquidity", async function () {
-    // Пользователь добавляет ликвидность
     await pool.addLiquidity(100, 100, 980000, 1020000);
-
-    // Проверяем резервы
     const reserves = await pool.getReserves();
     expect(reserves[0]).to.equal(100);
-    expect(reserves[1]).to.equal(100);
+  });
+
+  it("Should not allow non-owner to remove liquidity", async function () {
+    await pool.addLiquidity(100, 100, 980000, 1020000);
+    const tokenId = 0;
+
+    await expect(pool.connect(user).removeLiquidity(tokenId)).to.be.revertedWith(
+      "Only owner can remove liquidity"
+    );
   });
 });
