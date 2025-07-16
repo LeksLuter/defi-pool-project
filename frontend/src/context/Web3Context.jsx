@@ -1,5 +1,5 @@
 import React, { createContext, useState } from "react";
-import { connectWallet, getPoolContract } from "../web3";
+import { connectWallet, getPoolContract, getVaultContract } from "../web3";
 
 const Web3Context = createContext();
 
@@ -15,29 +15,14 @@ export const Web3Provider = ({ children }) => {
     }
   };
 
-  const addLiquidity = async (poolAddress, args) => {
+  const getContracts = async (poolAddress, vaultAddress) => {
     const pool = await getPoolContract(poolAddress);
-    const tx = await pool.addLiquidity(...args);
-    await tx.wait();
-    return tx;
-  };
-
-  const removeLiquidity = async (poolAddress, tokenId) => {
-    const pool = await getPoolContract(poolAddress);
-    const tx = await pool.removeLiquidity(tokenId);
-    await tx.wait();
-    return tx;
-  };
-
-  const swap = async (poolAddress, tokenIn, amountIn) => {
-    const pool = await getPoolContract(poolAddress);
-    const tx = await pool.swap(tokenIn, amountIn);
-    await tx.wait();
-    return tx;
+    const vault = await getVaultContract(vaultAddress);
+    return { pool, vault };
   };
 
   return (
-    <Web3Context.Provider value={{ account, connect, addLiquidity, removeLiquidity, swap }}>
+    <Web3Context.Provider value={{ account, connect, getContracts }}>
       {children}
     </Web3Context.Provider>
   );

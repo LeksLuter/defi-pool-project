@@ -1,11 +1,12 @@
 {
   "name": "defi-pool-project",
   "version": "1.0.0",
-  "description": "DeFi пул ликвидности на Polygon Mainnet",
+  "description": "DeFi пул ликвидности + безопасное хранилище токенов",
   "scripts": {
     "test": "npx hardhat test",
     "deploy:factory": "npx hardhat run scripts/deploy-factory.js --network polygon",
-    "create:pool": "npx hardhat run scripts/create-pool.js --network polygon"
+    "create:pool": "npx hardhat run scripts/create-pool.js --network polygon",
+    "deploy:vault": "npx hardhat run scripts/deploy-vault.js --network polygon"
   },
   "dependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.6",
@@ -14,6 +15,9 @@
     "ethers": "^5.7.2"
   },
   "devDependencies": {
-    "hardhat": "^2.14.0"
+    "hardhat": "^2.14.0",
+    "chai": "^4.3.7",
+    "mocha": "^10.2.0",
+    "dotenv": "^16.0.3"
   }
 }

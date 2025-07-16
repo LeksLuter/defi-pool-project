@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import POOL_ABI from "./abi/LiquidityPool.json";
+import VAULT_ABI from "./abi/TokenVault.json";
 
 let provider;
 let signer;
@@ -18,4 +19,8 @@ export const connectWallet = async () => {
 
 export const getPoolContract = (poolAddress) => {
   return new ethers.Contract(poolAddress, POOL_ABI, signer);
+};
+
+export const getVaultContract = (vaultAddress) => {
+  return new ethers.Contract(vaultAddress, VAULT_ABI, signer);
 };
