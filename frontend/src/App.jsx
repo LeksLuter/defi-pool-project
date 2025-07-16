@@ -1,32 +1,25 @@
-import React, { useContext, useEffect } from "react";
+import React, { useState } from "react";
 import Layout from "./components/Layout";
 import ConnectWallet from "./components/ConnectWallet";
 import DepositForm from "./components/DepositForm";
-import WithdrawForm from "./components/WithdrawForm";
 import MyDeposits from "./components/MyDeposits";
 import { useWeb3 } from "./context/Web3Context";
 
 function App() {
-  const { account, connect, initContracts } = useWeb3();
-  const [vaultAddress, setVaultAddress] = useState("0xYourVaultAddressHere");
-
-  useEffect(() => {
-    if (account && vaultAddress) {
-      initContracts(vaultAddress);
-    }
-  }, [account]);
+  const { account, connect } = useWeb3();
+  const vaultAddress = process.env.VAULT_ADDRESS || "0xYourVaultAddressHere";
 
   return (
     <Layout>
       <div className="container mx-auto p-6">
-        <h1 className="text-3xl font-bold text-center mb-8">DeFi Пул + Хранилище токенов</h1>
+        <h1 className="text-3xl font-bold text-center mb-8">DeFi Пул + Хранилище</h1>
 
-        <ConnectWallet />
-
-        {account && (
+        {!account ? (
+          <ConnectWallet />
+        ) : (
           <>
+            <p>Подключён: <strong>{account}</strong></p>
             <DepositForm vaultAddress={vaultAddress} />
-            <WithdrawForm vaultAddress={vaultAddress} />
             <MyDeposits vaultAddress={vaultAddress} />
           </>
         )}

@@ -1,12 +1,19 @@
 import React, { useEffect, useState } from "react";
+import { ethers } from "ethers"; // 🔥 Добавьте эту строку
 
 export default function MyDeposits({ vaultAddress }) {
   const [deposits, setDeposits] = useState([]);
 
   useEffect(() => {
     const loadDeposits = async () => {
-      const depositsList = await window.vaultContract.getDepositsByUser(window.userAddress);
-      setDeposits(depositsList);
+      if (!window.vaultContract) return;
+
+      try {
+        const depositsList = await window.vaultContract.getDepositsByUser(window.userAddress);
+        setDeposits(depositsList);
+      } catch (err) {
+        console.error("Ошибка загрузки депозитов", err);
+      }
     };
 
     if (window.vaultContract && window.userAddress) {
@@ -35,7 +42,7 @@ export default function MyDeposits({ vaultAddress }) {
               <tr key={i}>
                 <td>{i}</td>
                 <td>{dep.tokenAddress}</td>
-                <td>{ethers.utils.formatUnits(dep.amount.toString(), 18)}</td>
+                <td>{ethers.utils.formatUnits(dep.amount.toString(), 18)}</td> {/* ✅ Теперь работает */}
                 <td>
                   <button
                     onClick={() => window.vaultContract.withdraw(i)}

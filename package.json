@@ -1,14 +1,12 @@
 {
   "name": "defi-pool-project",
   "version": "1.0.0",
-  "description": "DeFi пул ликвидности с поддержкой Web3 и UI на React",
-  "main": "index.js",
+  "description": "DeFi пул ликвидности + хранилище токенов",
   "scripts": {
     "test": "npx hardhat test",
-      "start": "react-scripts start",
-  "build": "react-scripts build",
-    "deploy:factory": "npx hardhat run scripts/deploy-factory.js --network mumbai",
-    "create:pool": "npx hardhat run scripts/create-pool.js --network mumbai"
+    "deploy:factory": "npx hardhat run scripts/deploy-factory.js --network polygon",
+    "create:pool": "npx hardhat run scripts/create-pool.js --network polygon",
+    "deploy:vault": "npx hardhat run scripts/deploy-vault.js --network polygon"
   },
   "dependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.6",
@@ -21,28 +19,5 @@
     "chai": "^5.2.1",
     "hardhat": "^2.25.0",
     "mocha": "^11.7.1"
-  },
-  "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=8.0.0"
-  },
-  "keywords": [
-    "defi",
-    "liquidity-pool",
-    "uniswap-v3",
-    "polygon"
-  ],
-  "author": "knopka",
-  "license": "MIT",
-  "directories": {
-    "test": "test"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/LeksLuter/defi-pool-project.git"
-  },
-  "bugs": {
-    "url": "https://github.com/LeksLuter/defi-pool-project/issues"
-  },
-  "homepage": "https://github.com/LeksLuter/defi-pool-project#readme"
+  }
 }

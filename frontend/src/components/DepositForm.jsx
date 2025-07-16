@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { ethers } from "ethers"; // ✅ Добавлен импорт
 
 export default function DepositForm({ vaultAddress }) {
   const [token, setToken] = useState("");
@@ -6,12 +7,15 @@ export default function DepositForm({ vaultAddress }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!window.vaultContract) return;
     try {
-      const tx = await window.vaultContract.deposit(token, amount);
+      const amountInWei = ethers.utils.parseUnits(amount, 18); // ✅ Работает
+      const tx = await window.vaultContract.deposit(token, amountInWei);
       await tx.wait();
-      alert("Токены зачислены в хранилище");
+      alert("Токены зачислены");
     } catch (err) {
-      alert("Ошибка при зачислении токенов");
+      alert("Ошибка при зачислении");
       console.error(err);
     }
   };
