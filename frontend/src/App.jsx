@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useContext, useEffect } from "react";
 import Layout from "./components/Layout";
 import ConnectWallet from "./components/ConnectWallet";
 import DepositForm from "./components/DepositForm";
@@ -7,8 +7,14 @@ import MyDeposits from "./components/MyDeposits";
 import { useWeb3 } from "./context/Web3Context";
 
 function App() {
-  const { account, connect, addLiquidity, removeLiquidity, swap, vaultContract } = useWeb3();
+  const { account, connect, initContracts } = useWeb3();
   const [vaultAddress, setVaultAddress] = useState("0xYourVaultAddressHere");
+
+  useEffect(() => {
+    if (account && vaultAddress) {
+      initContracts(vaultAddress);
+    }
+  }, [account]);
 
   return (
     <Layout>

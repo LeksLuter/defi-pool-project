@@ -5,19 +5,21 @@
   "main": "index.js",
   "scripts": {
     "test": "npx hardhat test",
+      "start": "react-scripts start",
+  "build": "react-scripts build",
     "deploy:factory": "npx hardhat run scripts/deploy-factory.js --network mumbai",
     "create:pool": "npx hardhat run scripts/create-pool.js --network mumbai"
   },
   "dependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.6",
     "@nomiclabs/hardhat-waffle": "^2.0.6",
-    "@openzeppelin/contracts": "^4.9.0",
-    "dotenv": "^17.0.1",
-    "ethers": "^5.7.2"
+    "@openzeppelin/contracts": "^4.9.6",
+    "dotenv": "^17.2.0",
+    "ethers": "5.7"
   },
   "devDependencies": {
-    "chai": "^5.2.0",
-    "hardhat": "^2.14.0",
+    "chai": "^5.2.1",
+    "hardhat": "^2.25.0",
     "mocha": "^11.7.1"
   },
   "engines": {
@@ -31,5 +33,16 @@
     "polygon"
   ],
   "author": "knopka",
-  "license": "MIT"
+  "license": "MIT",
+  "directories": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LeksLuter/defi-pool-project.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LeksLuter/defi-pool-project/issues"
+  },
+  "homepage": "https://github.com/LeksLuter/defi-pool-project#readme"
 }
