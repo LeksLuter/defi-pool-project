@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import Layout from "./components/Layout";
 import Hero from "./components/Hero";
 import ConnectWallet from "./components/ConnectWallet";
@@ -9,9 +9,11 @@ import Stats from "./components/Stats";
 import { useWeb3 } from "./context/Web3Context";
 
 function App() {
-  const { account, connect, getContracts } = useWeb3();
-  const [vaultAddress, setVaultAddress] = useState(process.env.VAULT_ADDRESS);
-  const [poolAddress, setPoolAddress] = useState(process.env.POOL_ADDRESS);
+  const { account } = useWeb3(); // ✅ Теперь используем только нужные данные
+
+  // ✅ Адреса берутся из контекста или .env, а не через useState
+  const vaultAddress = process.env.VAULT_ADDRESS;
+  const poolAddress = process.env.POOL_ADDRESS;
 
   return (
     <Layout>
