@@ -1,15 +1,13 @@
-// src/components/Hero.jsx
 import React from "react";
-import StatCard from "./StatCard"; // ✅ Added import
+import StatCard from "./StatCard";
 
 export default function Hero() {
   return (
-    <section className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-20">
-      <div className="container mx-auto px-6 text-center">
-        <h1 className="text-4xl md:text-5xl font-bold mb-4">DeFi Пул Ликвидности</h1>
+    <section className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-20 px-6">
+      <div className="container mx-auto max-w-4xl text-center">
+        <h1 className="text-4xl md:text-5xl font-bold mb-4">DeFi Пул + Хранилище токенов</h1>
         <p className="text-lg md:text-xl mb-8 max-w-2xl mx-auto">
-          Защитите свои токены и добавьте ликвидность в безопасные пулы.
-          Только вы можете управлять своими средствами.
+          Защитите свои токены и добавьте ликвидность в безопасные пулы. Только вы можете управлять своими средствами.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
