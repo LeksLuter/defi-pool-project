@@ -14,9 +14,7 @@ export default function ConnectWallet() {
           Подключить MetaMask
         </button>
       ) : (
-        <p className="text-center">
-          Подключён: <strong>{account.slice(0, 6)}...{account.slice(-4)}</strong>
-        </p>
+        <p className="text-center py-2">Подключён: <strong>{account}</strong></p>
       )}
     </div>
   );

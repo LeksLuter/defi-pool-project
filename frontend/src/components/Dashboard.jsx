@@ -1,12 +1,11 @@
-// frontend/src/components/Dashboard.jsx
 import React, { useEffect, useState } from "react";
 import { ethers } from "ethers";
-import { useWeb3 } from "../context/Web3Context";
 import PoolList from "./PoolList";
-import MyDeposits from "./MyDeposits";
 import DepositForm from "./DepositForm";
 import WithdrawForm from "./WithdrawForm";
-import StatCard from "./StatCard"; // ✅ Теперь импортируем корректно
+import MyDeposits from "./MyDeposits";
+import StatCard from "./StatCard";
+import { useWeb3 } from "../context/Web3Context";
 
 export default function Dashboard() {
   const { account, poolContract, vaultContract } = useWeb3();
@@ -16,7 +15,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     const loadStats = async () => {
-      if (!poolContract || !vaultContract) return;
+      if (!poolContract || !vaultContract || !account) return;
 
       try {
         const pools = await poolContract.getPools();
@@ -25,7 +24,7 @@ export default function Dashboard() {
 
         setTotalPools(pools.length);
         setTotalLiquidity(
-          `${ethers.utils.formatUnits(reserves[0], 18)} / ${ethers.utils.formatUnits(reserves[1], 18)}`
+          `${ethers.utils.formatUnits(reserves[0].toString(), 18)} / ${ethers.utils.formatUnits(reserves[1].toString(), 18)}`
         );
         setLockedTokens(deposits.length);
       } catch (err) {
@@ -33,15 +32,21 @@ export default function Dashboard() {
       }
     };
 
-    if (account && poolContract && vaultContract) {
-      loadStats();
-    }
-  }, [account, poolContract, vaultContract]);
+    loadStats();
+  }, [poolContract, vaultContract, account]);
+
+  if (!account || !poolContract || !vaultContract) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <p>Загрузка данных...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-6">
       <h2 className="text-3xl font-bold text-center mb-10">
-        Добро пожаловать, {account ? `${account.slice(0, 6)}...${account.slice(-4)}` : "—"}
+        Добро пожаловать, {account.slice(0, 6)}...{account.slice(-4)}
       </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
@@ -53,7 +58,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <h3 className="text-xl font-semibold mb-4">Пулы ликвидности</h3>
-          <PoolList poolContract={poolContract} />
+          <PoolList poolContract={poolContract} account={account} />
         </div>
 
         <div>

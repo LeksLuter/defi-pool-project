@@ -5,9 +5,7 @@ import ConnectWallet from "./components/ConnectWallet";
 import { useWeb3 } from "./context/Web3Context";
 
 function App() {
-  const { account } = useWeb3(); // ✅ Убрали `connect`
-  const poolAddress = process.env.POOL_ADDRESS;
-  const vaultAddress = process.env.VAULT_ADDRESS;
+  const { account } = useWeb3(); // ✅ Убрали `connect` из деструктуризации
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -17,7 +15,7 @@ function App() {
           <ConnectWallet />
         </>
       ) : (
-        <Dashboard poolAddress={poolAddress} vaultAddress={vaultAddress} />
+        <Dashboard />
       )}
     </div>
   );
