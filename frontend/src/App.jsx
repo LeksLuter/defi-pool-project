@@ -9,7 +9,7 @@ import WithdrawForm from "./components/WithdrawForm";
 import { useWeb3 } from "./context/Web3Context";
 
 function App() {
-  const { account, connect } = useWeb3();
+  const { account } = useWeb3(); // ✅ Убрали `connect`
   const poolAddress = process.env.POOL_ADDRESS;
   const vaultAddress = process.env.VAULT_ADDRESS;
 
