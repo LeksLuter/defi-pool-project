@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ethers } from "ethers"; // ✅ Добавлен импорт
+import { ethers } from "ethers";
 import { useWeb3 } from "../context/Web3Context";
 
 export default function MyDeposits({ vaultAddress }) {
