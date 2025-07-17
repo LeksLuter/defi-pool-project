@@ -5,6 +5,8 @@ export default function WithdrawForm({ vaultContract }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!vaultContract) return;
+
     try {
       await vaultContract.withdraw(depositId);
       alert("Токены успешно выведены");
@@ -24,7 +26,10 @@ export default function WithdrawForm({ vaultContract }) {
         onChange={(e) => setDepositId(e.target.value)}
         className="w-full p-2 border rounded mt-2"
       />
-      <button type="submit" className="mt-2 w-full bg-green-600 text-white py-2 rounded hover:bg-green-700">
+      <button
+        type="submit"
+        className="mt-2 w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
+      >
         Вывести
       </button>
     </form>

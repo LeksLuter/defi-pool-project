@@ -14,7 +14,9 @@ export default function ConnectWallet() {
           Подключить MetaMask
         </button>
       ) : (
-        <p className="text-center py-2">Подключён: <strong>{account}</strong></p>
+        <p className="text-center py-2">
+          Подключён: <strong>{account}</strong>
+        </p>
       )}
     </div>
   );

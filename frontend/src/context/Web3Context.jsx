@@ -11,8 +11,8 @@ export const Web3Provider = ({ children }) => {
     setAccount(address);
   };
 
-  const poolContract = getPoolContract(process.env.POOL_ADDRESS);
-  const vaultContract = getVaultContract(process.env.VAULT_ADDRESS);
+  const poolContract = POOL_ADDRESS ? getPoolContract(POOL_ADDRESS) : null;
+  const vaultContract = VAULT_ADDRESS ? getVaultContract(VAULT_ADDRESS) : null;
 
   return (
     <Web3Context.Provider value={{ account, connect, poolContract, vaultContract }}>

@@ -6,14 +6,22 @@ export default function MyDeposits({ vaultContract, account }) {
 
   useEffect(() => {
     const loadDeposits = async () => {
-      const list = await vaultContract.getDepositsByUser(account);
-      setDeposits(list);
+      if (!vaultContract || !account) return;
+
+      try {
+        const list = await vaultContract.getDepositsByUser(account);
+        setDeposits(list);
+      } catch (err) {
+        console.error("Ошибка загрузки депозитов", err);
+      }
     };
 
-    if (vaultContract && account) {
-      loadDeposits();
-    }
+    loadDeposits();
   }, [vaultContract, account]);
+
+  if (!vaultContract || !account) {
+    return <p className="text-gray-500">Загрузка данных...</p>;
+  }
 
   return (
     <div className="mb-6">
@@ -23,7 +31,7 @@ export default function MyDeposits({ vaultContract, account }) {
       ) : (
         <ul className="bg-white p-4 rounded shadow">
           {deposits.map((dep, i) => (
-            <li key={i} className="flex justify-between items-center mb-2">
+            <li key={i} className="flex justify-between items-center mb-2 border-b py-2">
               <span>{dep.tokenAddress}</span>
               <span className="font-mono">
                 {ethers.utils.formatUnits(dep.amount.toString(), 18)}

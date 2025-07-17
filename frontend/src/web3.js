@@ -10,8 +10,7 @@ export const connectWallet = async () => {
     await window.ethereum.request({ method: "eth_requestAccounts" });
     provider = new ethers.providers.Web3Provider(window.ethereum);
     signer = provider.getSigner();
-    const address = await signer.getAddress();
-    return address;
+    return await signer.getAddress();
   } else {
     alert("MetaMask не установлен");
     throw new Error("MetaMask не найден");
@@ -19,9 +18,13 @@ export const connectWallet = async () => {
 };
 
 export const getPoolContract = (poolAddress) => {
-  return new ethers.Contract(poolAddress, POOL_ABI, signer);
+  return poolAddress
+    ? new ethers.Contract(poolAddress, POOL_ABI, signer)
+    : null;
 };
 
 export const getVaultContract = (vaultAddress) => {
-  return new ethers.Contract(vaultAddress, VAULT_ABI, signer);
+  return vaultAddress
+    ? new ethers.Contract(vaultAddress, VAULT_ABI, signer)
+    : null;
 };

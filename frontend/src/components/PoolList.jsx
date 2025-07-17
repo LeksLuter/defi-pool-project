@@ -1,19 +1,26 @@
 import React, { useEffect, useState } from "react";
 
-
 export default function PoolList({ poolContract, account }) {
   const [pools, setPools] = useState([]);
 
   useEffect(() => {
     const loadPools = async () => {
-      const list = await poolContract.getPools();
-      setPools(list);
+      if (!poolContract || !account) return;
+
+      try {
+        const list = await poolContract.getPools();
+        setPools(list);
+      } catch (err) {
+        console.error("Ошибка загрузки пулов", err);
+      }
     };
 
-    if (poolContract) {
-      loadPools();
-    }
-  }, [poolContract]);
+    loadPools();
+  }, [poolContract, account]);
+
+  if (!poolContract || !account) {
+    return <p className="text-gray-500">Загрузка пулов...</p>;
+  }
 
   return (
     <div className="bg-white shadow-md rounded p-4 mb-6">

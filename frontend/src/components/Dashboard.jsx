@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ethers } from "ethers";
+import { ethers } from "ethers"; // ✅ Используется только если есть данные
 import PoolList from "./PoolList";
 import DepositForm from "./DepositForm";
 import WithdrawForm from "./WithdrawForm";
@@ -7,8 +7,7 @@ import MyDeposits from "./MyDeposits";
 import StatCard from "./StatCard";
 import { useWeb3 } from "../context/Web3Context";
 
-export default function Dashboard() {
-  const { account, poolContract, vaultContract } = useWeb3();
+export default function Dashboard({ account, poolContract, vaultContract }) {
   const [totalPools, setTotalPools] = useState("...");
   const [totalLiquidity, setTotalLiquidity] = useState("...");
   const [lockedTokens, setLockedTokens] = useState("...");
@@ -24,21 +23,22 @@ export default function Dashboard() {
 
         setTotalPools(pools.length);
         setTotalLiquidity(
-          `${ethers.utils.formatUnits(reserves[0].toString(), 18)} / ${ethers.utils.formatUnits(reserves[1].toString(), 18)}`
+          `${ethers.utils.formatUnits(reserves[0], 18)} / ${ethers.utils.formatUnits(reserves[1], 18)}`
         );
         setLockedTokens(deposits.length);
       } catch (err) {
-        console.error("Ошибка загрузки статистики", err);
+        console.error("Ошибка загрузки данных", err);
       }
     };
 
     loadStats();
-  }, [poolContract, vaultContract, account]);
+  }, [account, poolContract, vaultContract]);
 
+  // ✅ Добавлена защита от undefined
   if (!account || !poolContract || !vaultContract) {
     return (
       <div className="flex justify-center items-center h-64">
-        <p>Загрузка данных...</p>
+        <p>Загрузка данных или подключите кошелёк</p>
       </div>
     );
   }

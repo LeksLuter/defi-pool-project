@@ -6,6 +6,8 @@ export default function DepositForm({ vaultContract }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!vaultContract) return;
+
     try {
       await vaultContract.deposit(token, amount);
       alert("Токены зачислены в хранилище");
@@ -33,7 +35,10 @@ export default function DepositForm({ vaultContract }) {
         onChange={(e) => setAmount(e.target.value)}
         className="w-full p-2 border rounded mt-2"
       />
-      <button type="submit" className="mt-2 w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
+      <button
+        type="submit"
+        className="mt-2 w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+      >
         Зачислить
       </button>
     </form>

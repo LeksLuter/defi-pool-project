@@ -5,7 +5,7 @@ import ConnectWallet from "./components/ConnectWallet";
 import { useWeb3 } from "./context/Web3Context";
 
 function App() {
-  const { account } = useWeb3(); // ✅ Убрали `connect` из деструктуризации
+  const { account, poolContract, vaultContract } = useWeb3(); // ✅ Убрана `connect` из деструктуризации
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -15,7 +15,11 @@ function App() {
           <ConnectWallet />
         </>
       ) : (
-        <Dashboard />
+        <Dashboard
+          account={account}
+          poolContract={poolContract}
+          vaultContract={vaultContract}
+        />
       )}
     </div>
   );
