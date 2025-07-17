@@ -1,16 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { ethers } from "ethers";
-
-// ✅ Удалён неиспользуемый импорт useWeb3
-// import { useWeb3 } from "../context/Web3Context";
-
 import PoolList from "./PoolList";
 import DepositForm from "./DepositForm";
 import WithdrawForm from "./WithdrawForm";
 import MyDeposits from "./MyDeposits";
 import StatCard from "./StatCard";
-
-// ✅ Добавлены PropTypes для строгой проверки props
 import PropTypes from "prop-types";
 
 export default function Dashboard({ account, poolContract, vaultContract }) {
@@ -33,14 +27,13 @@ export default function Dashboard({ account, poolContract, vaultContract }) {
         );
         setLockedTokens(deposits.length);
       } catch (err) {
-        console.error("Ошибка загрузки данных", err);
+        console.error("Ошибка загрузки статистики", err);
       }
     };
 
     loadStats();
   }, [account, poolContract, vaultContract]);
 
-  // ✅ Добавлена проверка на undefined
   if (!account || !poolContract || !vaultContract) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -78,7 +71,6 @@ export default function Dashboard({ account, poolContract, vaultContract }) {
   );
 }
 
-// ✅ Добавлены PropTypes для строгой типизации
 Dashboard.propTypes = {
   account: PropTypes.string.isRequired,
   poolContract: PropTypes.object,
