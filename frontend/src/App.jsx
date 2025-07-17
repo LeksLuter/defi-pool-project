@@ -5,22 +5,24 @@ import Dashboard from "./components/Dashboard";
 import { useWeb3 } from "./context/Web3Context";
 
 function App() {
-  const { account, poolContract, vaultContract } = useWeb3(); // ✅ Получаем из контекста
+  const { account, loading, error } = useWeb3(); // ✅ Используем loading и error
+  const [showDashboard, setShowDashboard] = React.useState(false);
+
+  React.useEffect(() => {
+    if (account) setShowDashboard(true);
+  }, [account]);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {!account ? (
+      {!account || !showDashboard ? (
         <>
           <Hero />
-          <ConnectWallet />
+          <div className="container mx-auto p-6">
+            <ConnectWallet />
+          </div>
         </>
       ) : (
-        // ✅ Передаём props в Dashboard
-        <Dashboard
-          account={account}
-          poolContract={poolContract}
-          vaultContract={vaultContract}
-        />
+        <Dashboard account={account} />
       )}
     </div>
   );

@@ -5,9 +5,9 @@ import DepositForm from "./DepositForm";
 import WithdrawForm from "./WithdrawForm";
 import MyDeposits from "./MyDeposits";
 import StatCard from "./StatCard";
-import PropTypes from "prop-types";
 
-export default function Dashboard({ account, poolContract, vaultContract }) {
+export default function Dashboard({ account }) {
+  const { poolContract, vaultContract } = useWeb3();
   const [totalPools, setTotalPools] = useState("...");
   const [totalLiquidity, setTotalLiquidity] = useState("...");
   const [lockedTokens, setLockedTokens] = useState("...");
@@ -37,7 +37,7 @@ export default function Dashboard({ account, poolContract, vaultContract }) {
   if (!account || !poolContract || !vaultContract) {
     return (
       <div className="flex justify-center items-center h-64">
-        <p>Загрузка данных или подключите кошелёк</p>
+        <p>Подключите кошелёк или загрузите данные</p>
       </div>
     );
   }
@@ -70,9 +70,3 @@ export default function Dashboard({ account, poolContract, vaultContract }) {
     </div>
   );
 }
-
-Dashboard.propTypes = {
-  account: PropTypes.string.isRequired,
-  poolContract: PropTypes.object,
-  vaultContract: PropTypes.object
-};

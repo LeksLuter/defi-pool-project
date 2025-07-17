@@ -15,9 +15,14 @@ export const Web3Provider = ({ children }) => {
     }
   };
 
-  // ✅ Переменные окружения теперь через process.env
-  const poolContract = process.env.POOL_ADDRESS ? getPoolContract(process.env.POOL_ADDRESS) : null;
-  const vaultContract = process.env.VAULT_ADDRESS ? getVaultContract(process.env.VAULT_ADDRESS) : null;
+  // ✅ Используем REACT_APP_ префикс
+  const poolContract = process.env.REACT_APP_POOL_ADDRESS
+    ? getPoolContract(process.env.REACT_APP_POOL_ADDRESS)
+    : null;
+
+  const vaultContract = process.env.REACT_APP_VAULT_ADDRESS
+    ? getVaultContract(process.env.REACT_APP_VAULT_ADDRESS)
+    : null;
 
   return (
     <Web3Context.Provider value={{ account, connect, poolContract, vaultContract }}>
@@ -26,4 +31,5 @@ export const Web3Provider = ({ children }) => {
   );
 };
 
+// ✅ Экспортируем хук
 export const useWeb3 = () => React.useContext(Web3Context);
