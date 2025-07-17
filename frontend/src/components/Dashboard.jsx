@@ -5,9 +5,11 @@ import DepositForm from "./DepositForm";
 import WithdrawForm from "./WithdrawForm";
 import MyDeposits from "./MyDeposits";
 import StatCard from "./StatCard";
+import { useWeb3 } from "../context/Web3Context"; // ✅ Правильный импорт
 
-export default function Dashboard({ account }) {
-  const { poolContract, vaultContract } = useWeb3();
+export default function Dashboard() {
+  const { account, poolContract, vaultContract } = useWeb3(); // ✅ Используем хук
+
   const [totalPools, setTotalPools] = useState("...");
   const [totalLiquidity, setTotalLiquidity] = useState("...");
   const [lockedTokens, setLockedTokens] = useState("...");
@@ -37,7 +39,7 @@ export default function Dashboard({ account }) {
   if (!account || !poolContract || !vaultContract) {
     return (
       <div className="flex justify-center items-center h-64">
-        <p>Подключите кошелёк или загрузите данные</p>
+        <p>Загрузка данных или подключите кошелёк</p>
       </div>
     );
   }
