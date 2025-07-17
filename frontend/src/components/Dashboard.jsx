@@ -1,11 +1,17 @@
 import React, { useEffect, useState } from "react";
-import { ethers } from "ethers"; // ✅ Используется только если есть данные
+import { ethers } from "ethers";
+
+// ✅ Удалён неиспользуемый импорт useWeb3
+// import { useWeb3 } from "../context/Web3Context";
+
 import PoolList from "./PoolList";
 import DepositForm from "./DepositForm";
 import WithdrawForm from "./WithdrawForm";
 import MyDeposits from "./MyDeposits";
 import StatCard from "./StatCard";
-import { useWeb3 } from "../context/Web3Context";
+
+// ✅ Добавлены PropTypes для строгой проверки props
+import PropTypes from "prop-types";
 
 export default function Dashboard({ account, poolContract, vaultContract }) {
   const [totalPools, setTotalPools] = useState("...");
@@ -34,7 +40,7 @@ export default function Dashboard({ account, poolContract, vaultContract }) {
     loadStats();
   }, [account, poolContract, vaultContract]);
 
-  // ✅ Добавлена защита от undefined
+  // ✅ Добавлена проверка на undefined
   if (!account || !poolContract || !vaultContract) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -71,3 +77,10 @@ export default function Dashboard({ account, poolContract, vaultContract }) {
     </div>
   );
 }
+
+// ✅ Добавлены PropTypes для строгой типизации
+Dashboard.propTypes = {
+  account: PropTypes.string.isRequired,
+  poolContract: PropTypes.object,
+  vaultContract: PropTypes.object
+};
