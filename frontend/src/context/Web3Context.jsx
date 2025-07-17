@@ -7,12 +7,17 @@ export const Web3Provider = ({ children }) => {
   const [account, setAccount] = useState(null);
 
   const connect = async () => {
-    const address = await connectWallet();
-    setAccount(address);
+    try {
+      const address = await connectWallet();
+      setAccount(address);
+    } catch (err) {
+      console.error("Ошибка подключения кошелька", err);
+    }
   };
 
-  const poolContract = POOL_ADDRESS ? getPoolContract(POOL_ADDRESS) : null;
-  const vaultContract = VAULT_ADDRESS ? getVaultContract(VAULT_ADDRESS) : null;
+  // ✅ Переменные окружения теперь через process.env
+  const poolContract = process.env.POOL_ADDRESS ? getPoolContract(process.env.POOL_ADDRESS) : null;
+  const vaultContract = process.env.VAULT_ADDRESS ? getVaultContract(process.env.VAULT_ADDRESS) : null;
 
   return (
     <Web3Context.Provider value={{ account, connect, poolContract, vaultContract }}>
