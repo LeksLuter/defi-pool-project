@@ -11,11 +11,10 @@ export const Web3Provider = ({ children }) => {
       const address = await connectWallet();
       setAccount(address);
     } catch (err) {
-      console.error("Ошибка подключения кошелька", err);
+      console.error("Ошибка подключения", err);
     }
   };
 
-  // ✅ Используем REACT_APP_ префикс
   const poolContract = process.env.REACT_APP_POOL_ADDRESS
     ? getPoolContract(process.env.REACT_APP_POOL_ADDRESS)
     : null;
@@ -31,5 +30,4 @@ export const Web3Provider = ({ children }) => {
   );
 };
 
-// ✅ Экспортируем хук
 export const useWeb3 = () => React.useContext(Web3Context);
