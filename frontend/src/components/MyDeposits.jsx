@@ -1,61 +1,59 @@
 import React, { useEffect, useState } from "react";
-import { ethers } from "ethers"; // 🔥 Добавьте эту строку
 
 export default function MyDeposits({ vaultAddress }) {
   const [deposits, setDeposits] = useState([]);
 
   useEffect(() => {
     const loadDeposits = async () => {
-      if (!window.vaultContract) return;
+      if (!window.vaultContract || !window.userAddress) return;
 
       try {
-        const depositsList = await window.vaultContract.getDepositsByUser(window.userAddress);
-        setDeposits(depositsList);
+        const depositList = await window.vaultContract.getDepositsByUser(window.userAddress);
+        setDeposits(depositList);
       } catch (err) {
-        console.error("Ошибка загрузки депозитов", err);
+        console.error("Не удалось загрузить депозиты", err);
       }
     };
 
-    if (window.vaultContract && window.userAddress) {
-      loadDeposits();
-    }
+    loadDeposits();
   }, [vaultAddress]);
 
   return (
-    <div className="bg-white shadow-md rounded p-4 mb-6">
-      <h2 className="text-xl font-semibold mb-4">Мои депозиты</h2>
-
+    <section className="max-w-4xl mx-auto">
+      <h2 className="text-2xl font-bold mb-4">Мои депозиты</h2>
       {deposits.length === 0 ? (
-        <p>Депозитов нет</p>
+        <p className="text-gray-500">Нет депозитов</p>
       ) : (
-        <table className="w-full table-auto">
-          <thead>
-            <tr className="bg-gray-100">
-              <th>ID</th>
-              <th>Токен</th>
-              <th>Количество</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {deposits.map((dep, i) => (
-              <tr key={i}>
-                <td>{i}</td>
-                <td>{dep.tokenAddress}</td>
-                <td>{ethers.utils.formatUnits(dep.amount.toString(), 18)}</td> {/* ✅ Теперь работает */}
-                <td>
-                  <button
-                    onClick={() => window.vaultContract.withdraw(i)}
-                    className="text-red-500 hover:underline"
-                  >
-                    Вывести
-                  </button>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="min-w-full bg-white border rounded-lg overflow-hidden">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="p-3 text-left">ID</th>
+                <th className="p-3 text-left">Токен</th>
+                <th className="p-3 text-left">Количество</th>
+                <th className="p-3 text-left">Действие</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {deposits.map((dep, i) => (
+                <tr key={i} className="border-t hover:bg-gray-50">
+                  <td className="p-3">{i}</td>
+                  <td className="p-3 truncate max-w-xs">{dep.tokenAddress}</td>
+                  <td className="p-3">{ethers.utils.formatUnits(dep.amount, 18)}</td>
+                  <td className="p-3">
+                    <button
+                      onClick={() => window.vaultContract.withdraw(i)}
+                      className="text-white bg-danger px-3 py-1 rounded hover:bg-red-700"
+                    >
+                      Вывести
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
-    </div>
+    </section>
   );
 }

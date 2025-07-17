@@ -2,17 +2,16 @@ import React from "react";
 
 export default function Layout({ children }) {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow p-4 text-center text-xl font-bold">
-        DeFi Пул + Хранилище
+    <div className="min-h-screen bg-gray-100 font-sans text-gray-900">
+      <header className="bg-white shadow py-4 px-6 flex justify-between items-center">
+        <h1 className="text-2xl font-bold text-primary">DeFi Пул + Хранилище</h1>
+        <div className="text-sm text-gray-500">Polygon Mainnet</div>
       </header>
-      <main className="py-8 px-4">
-        <div className="max-w-4xl mx-auto">
-          {children}
-        </div>
+      <main className="container mx-auto py-8 px-4">
+        {children}
       </main>
-      <footer className="bg-white shadow-inner p-4 text-center text-sm text-gray-500 mt-8">
-        &copy; DeFi Pool System | Polygon Mainnet
+      <footer className="bg-white shadow py-4 px-6 text-center text-gray-500 text-sm">
+        &copy; {new Date().getFullYear()} DeFi Пул Ликвидности
       </footer>
     </div>
   );

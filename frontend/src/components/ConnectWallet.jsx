@@ -5,16 +5,18 @@ export default function ConnectWallet() {
   const { account, connect } = useWeb3();
 
   return (
-    <div className="mb-6">
+    <div className="text-center mb-8">
       {!account ? (
         <button
           onClick={connect}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          className="bg-primary text-white px-6 py-3 rounded-lg shadow hover:bg-secondary transition"
         >
-          Подключить MetaMask
+          🔐 Подключить MetaMask
         </button>
       ) : (
-        <p>Подключён: <strong>{account}</strong></p>
+        <p className="text-lg text-gray-700">
+          Подключён: <strong className="text-primary">{account}</strong>
+        </p>
       )}
     </div>
   );

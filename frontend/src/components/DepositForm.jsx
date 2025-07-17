@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { ethers } from "ethers"; // ✅ Добавлен импорт
 
 export default function DepositForm({ vaultAddress }) {
   const [token, setToken] = useState("");
@@ -7,43 +6,40 @@ export default function DepositForm({ vaultAddress }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!token || !amount) return alert("Введите адрес и сумму");
 
-    if (!window.vaultContract) return;
     try {
-      const amountInWei = ethers.utils.parseUnits(amount, 18); // ✅ Работает
-      const tx = await window.vaultContract.deposit(token, amountInWei);
-      await tx.wait();
-      alert("Токены зачислены");
+      await window.vaultContract.deposit(token, amount);
+      alert("Токены зачислены в хранилище");
     } catch (err) {
-      alert("Ошибка при зачислении");
+      alert("Ошибка при зачислении токенов");
       console.error(err);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white shadow-md rounded p-4 mb-6">
-      <h2 className="text-xl font-semibold mb-4">Хранение токенов</h2>
+    <form onSubmit={handleSubmit} className="max-w-md mx-auto bg-white p-6 rounded-lg shadow-md mb-6">
+      <h2 className="text-2xl font-bold mb-4">Зачислить токены</h2>
 
       <div className="mb-4">
-        <label>Адрес токена</label>
+        <label className="block text-gray-700 mb-2">Адрес токена</label>
         <input
           type="text"
           value={token}
           onChange={(e) => setToken(e.target.value)}
-          className="w-full p-2 border rounded"
+          className="w-full p-2 border border-gray-300 rounded"
           placeholder="0x..."
           required
         />
       </div>
 
       <div className="mb-4">
-        <label>Количество токенов</label>
+        <label className="block text-gray-700 mb-2">Количество</label>
         <input
           type="number"
-          step="any"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          className="w-full p-2 border rounded"
+          className="w-full p-2 border border-gray-300 rounded"
           placeholder="0.1"
           required
         />
@@ -51,9 +47,9 @@ export default function DepositForm({ vaultAddress }) {
 
       <button
         type="submit"
-        className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition"
+        className="w-full bg-accent text-white py-2 px-4 rounded hover:bg-blue-700 transition"
       >
-        Зачислить в хранилище
+        Зачислить
       </button>
     </form>
   );
