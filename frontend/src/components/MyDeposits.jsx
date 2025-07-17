@@ -1,15 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { ethers } from "ethers";
-import { useWeb3 } from "../context/Web3Context";
 
-export default function MyDeposits({ vaultAddress }) {
-  const { vaultContract, account } = useWeb3();
+export default function MyDeposits({ vaultContract, account }) {
   const [deposits, setDeposits] = useState([]);
 
   useEffect(() => {
     const loadDeposits = async () => {
-      const depositsList = await vaultContract.getDepositsByUser(account);
-      setDeposits(depositsList);
+      const list = await vaultContract.getDepositsByUser(account);
+      setDeposits(list);
     };
 
     if (vaultContract && account) {
@@ -18,39 +16,27 @@ export default function MyDeposits({ vaultAddress }) {
   }, [vaultContract, account]);
 
   return (
-    <div className="bg-white shadow-md rounded p-4 mb-6">
-      <h2 className="text-xl font-semibold mb-4">Мои депозиты</h2>
-
+    <div className="mb-6">
+      <h4 className="font-semibold text-lg">Мои депозиты</h4>
       {deposits.length === 0 ? (
-        <p>Депозитов нет</p>
+        <p className="text-gray-500">Депозитов нет</p>
       ) : (
-        <table className="w-full table-auto">
-          <thead>
-            <tr className="bg-gray-100">
-              <th>ID</th>
-              <th>Токен</th>
-              <th>Количество</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {deposits.map((dep, i) => (
-              <tr key={i}>
-                <td>{i}</td>
-                <td>{dep.tokenAddress}</td>
-                <td>{ethers.utils.formatUnits(dep.amount.toString(), 18)}</td>
-                <td>
-                  <button
-                    onClick={() => vaultContract.withdraw(i)}
-                    className="text-red-500 hover:underline"
-                  >
-                    Вывести
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ul className="bg-white p-4 rounded shadow">
+          {deposits.map((dep, i) => (
+            <li key={i} className="flex justify-between items-center mb-2">
+              <span>{dep.tokenAddress}</span>
+              <span className="font-mono">
+                {ethers.utils.formatUnits(dep.amount.toString(), 18)}
+              </span>
+              <button
+                onClick={() => vaultContract.withdraw(i)}
+                className="text-red-500 hover:underline"
+              >
+                Вывести
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

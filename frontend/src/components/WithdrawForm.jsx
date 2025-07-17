@@ -1,41 +1,31 @@
 import React, { useState } from "react";
 
-export default function WithdrawForm({ vaultAddress }) {
+export default function WithdrawForm({ vaultContract }) {
   const [depositId, setDepositId] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const tx = await window.vaultContract.withdraw(depositId);
-      await tx.wait();
-      alert("Токены выведены");
+      await vaultContract.withdraw(depositId);
+      alert("Токены успешно выведены");
     } catch (err) {
-      alert("Ошибка при выводе токенов");
+      alert("Ошибка при выводе");
       console.error(err);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white shadow-md rounded p-4 mb-6">
-      <h2 className="text-xl font-semibold mb-4">Вывод из хранилища</h2>
-
-      <div className="mb-4">
-        <label>ID депозита</label>
-        <input
-          type="number"
-          value={depositId}
-          onChange={(e) => setDepositId(e.target.value)}
-          className="w-full p-2 border rounded"
-          placeholder="0"
-          required
-        />
-      </div>
-
-      <button
-        type="submit"
-        className="w-full bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700 transition"
-      >
-        Вывести токены
+    <form onSubmit={handleSubmit} className="mb-6">
+      <h4 className="font-semibold text-lg">Вывод из хранилища</h4>
+      <input
+        type="number"
+        placeholder="ID депозита"
+        value={depositId}
+        onChange={(e) => setDepositId(e.target.value)}
+        className="w-full p-2 border rounded mt-2"
+      />
+      <button type="submit" className="mt-2 w-full bg-green-600 text-white py-2 rounded hover:bg-green-700">
+        Вывести
       </button>
     </form>
   );
