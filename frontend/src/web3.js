@@ -10,10 +10,11 @@ export const connectWallet = async () => {
     await window.ethereum.request({ method: "eth_requestAccounts" });
     provider = new ethers.providers.Web3Provider(window.ethereum);
     signer = provider.getSigner();
-    return await signer.getAddress();
+    const address = await signer.getAddress();
+    return address;
   } else {
     alert("MetaMask не установлен");
-    throw new Error("MetaMask not found");
+    throw new Error("MetaMask не найден");
   }
 };
 

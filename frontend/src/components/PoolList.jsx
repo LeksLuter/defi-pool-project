@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ethers } from "ethers";
+
 
 export default function PoolList({ poolContract, account }) {
   const [pools, setPools] = useState([]);

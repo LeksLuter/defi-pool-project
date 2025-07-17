@@ -2,16 +2,22 @@ import React from "react";
 import { useWeb3 } from "../context/Web3Context";
 
 export default function ConnectWallet() {
-  const { connect } = useWeb3();
+  const { account, connect } = useWeb3();
 
   return (
-    <div className="flex justify-center mt-10">
-      <button
-        onClick={connect}
-        className="bg-white text-indigo-700 font-semibold px-8 py-3 rounded shadow hover:bg-gray-100 transition"
-      >
-        Подключить кошелёк
-      </button>
+    <div className="mb-6">
+      {!account ? (
+        <button
+          onClick={connect}
+          className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
+        >
+          Подключить MetaMask
+        </button>
+      ) : (
+        <p className="text-center">
+          Подключён: <strong>{account.slice(0, 6)}...{account.slice(-4)}</strong>
+        </p>
+      )}
     </div>
   );
 }

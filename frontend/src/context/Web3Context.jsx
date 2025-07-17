@@ -7,22 +7,15 @@ export const Web3Provider = ({ children }) => {
   const [account, setAccount] = useState(null);
 
   const connect = async () => {
-    try {
-      const address = await connectWallet();
-      setAccount(address);
-    } catch (e) {
-      console.error(e);
-    }
+    const address = await connectWallet();
+    setAccount(address);
   };
 
-  const getContracts = async (poolAddress, vaultAddress) => {
-    const pool = await getPoolContract(poolAddress);
-    const vault = await getVaultContract(vaultAddress);
-    return { pool, vault };
-  };
+  const poolContract = getPoolContract(process.env.POOL_ADDRESS);
+  const vaultContract = getVaultContract(process.env.VAULT_ADDRESS);
 
   return (
-    <Web3Context.Provider value={{ account, connect, getContracts }}>
+    <Web3Context.Provider value={{ account, connect, poolContract, vaultContract }}>
       {children}
     </Web3Context.Provider>
   );

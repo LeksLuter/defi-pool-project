@@ -5,7 +5,9 @@ import ConnectWallet from "./components/ConnectWallet";
 import { useWeb3 } from "./context/Web3Context";
 
 function App() {
-  const { account, connect, poolContract, vaultContract } = useWeb3();
+  const { account } = useWeb3(); // ✅ Убрали `connect`
+  const poolAddress = process.env.POOL_ADDRESS;
+  const vaultAddress = process.env.VAULT_ADDRESS;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -15,7 +17,7 @@ function App() {
           <ConnectWallet />
         </>
       ) : (
-        <Dashboard account={account} poolContract={poolContract} vaultContract={vaultContract} />
+        <Dashboard poolAddress={poolAddress} vaultAddress={vaultAddress} />
       )}
     </div>
   );
