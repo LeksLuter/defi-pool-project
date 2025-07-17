@@ -3,23 +3,19 @@ import { ethers } from "ethers"; // ✅ Добавлен импорт
 import { useWeb3 } from "../context/Web3Context";
 
 export default function MyDeposits({ vaultAddress }) {
-  const { vaultContract, account } = useWeb3(); // ✅ Получаем vaultContract и account из контекста
+  const { vaultContract, account } = useWeb3();
   const [deposits, setDeposits] = useState([]);
 
   useEffect(() => {
     const loadDeposits = async () => {
-      try {
-        const depositsList = await vaultContract.getDepositsByUser(account);
-        setDeposits(depositsList);
-      } catch (err) {
-        console.error("Не удалось загрузить депозиты", err);
-      }
+      const depositsList = await vaultContract.getDepositsByUser(account);
+      setDeposits(depositsList);
     };
 
     if (vaultContract && account) {
       loadDeposits();
     }
-  }, [vaultContract, account]); // ✅ Добавлены зависимости
+  }, [vaultContract, account]);
 
   return (
     <div className="bg-white shadow-md rounded p-4 mb-6">
@@ -42,10 +38,7 @@ export default function MyDeposits({ vaultAddress }) {
               <tr key={i}>
                 <td>{i}</td>
                 <td>{dep.tokenAddress}</td>
-                <td>
-                  {/* ✅ Используем ethers.utils.formatUnits */}
-                  {ethers.utils.formatUnits(dep.amount.toString(), 18)}
-                </td>
+                <td>{ethers.utils.formatUnits(dep.amount.toString(), 18)}</td>
                 <td>
                   <button
                     onClick={() => vaultContract.withdraw(i)}
