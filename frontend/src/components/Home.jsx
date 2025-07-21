@@ -1,6 +1,39 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { ethers } from "ethers";
+import { useWeb3 } from "../context/Web3Context";
 
 export default function Home() {
+  const { poolContract, vaultContract } = useWeb3();
+  const [totalPools, setTotalPools] = useState("Загрузка...");
+  const [totalLiquidity, setTotalLiquidity] = useState("Загрузка...");
+  const [lockedTokens, setLockedTokens] = useState("Загрузка...");
+
+  useEffect(() => {
+    const loadStats = async () => {
+      if (!poolContract || !vaultContract) return;
+
+      try {
+        // Загружаем количество пулов
+        const pools = await poolContract.getPools();
+        setTotalPools(pools.length);
+
+        // Загружаем резервы пула
+        const reserves = await poolContract.getReserves();
+        setTotalLiquidity(
+          `${ethers.utils.formatUnits(reserves[0], 18)} / ${ethers.utils.formatUnits(reserves[1], 18)}`
+        );
+
+        // Загружаем количество заблокированных токенов
+        const deposits = await vaultContract.getDepositsByUser(account);
+        setLockedTokens(deposits.length);
+      } catch (err) {
+        console.error("Ошибка загрузки статистики", err);
+      }
+    };
+
+    loadStats();
+  }, [poolContract, vaultContract]);
+
   return (
     <div className="space-y-12">
       {/* Hero section */}
@@ -26,9 +59,9 @@ export default function Home() {
             </p>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-              <StatCard title="Пулы" value="Загрузка..." />
-              <StatCard title="Общая ликвидность" value="Загрузка..." />
-              <StatCard title="Заблокировано токенов" value="Загрузка..." />
+              <StatCard title="Пулы" value={totalPools} />
+              <StatCard title="Общая ликвидность" value={totalLiquidity} />
+              <StatCard title="Заблокировано токенов" value={lockedTokens} />
             </div>
           </div>
         </div>
@@ -75,6 +108,7 @@ function FeatureCard({ icon, title, description }) {
       <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-600">
         {icon}
       </div>
+      
       <h3 className="text-xl font-semibold mb-2">{title}</h3>
       <p className="text-gray-600">{description}</p>
     </div>
