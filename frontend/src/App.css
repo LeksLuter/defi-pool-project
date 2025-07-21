@@ -1,0 +1,104 @@
+/* Base styles */
+body {
+  font-family: 'Inter', sans-serif;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+/* Header styles */
+header {
+  background-color: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+header .container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+header nav a {
+  color: #3b82f6;
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  transition: color 0.3s ease;
+}
+
+header nav a:hover {
+  color: #1d4ed8;
+}
+
+/* Main content styles */
+main {
+  padding: 2rem 0;
+}
+
+/* Cards styles */
+.card {
+  background-color: #fff;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 1rem;
+  text-align: center;
+}
+
+.card h3 {
+  margin-bottom: 0.5rem;
+}
+
+.card p {
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+/* Feature cards styles */
+.feature-card {
+  background-color: #fff;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 1rem;
+  text-align: center;
+}
+
+.feature-card svg {
+  width: 4rem;
+  height: 4rem;
+  fill: currentColor;
+}
+
+.feature-card h3 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.feature-card p {
+  color: #6b7280;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .container {
+    padding: 0 1rem;
+  }
+
+  header nav {
+    display: none;
+  }
+
+  header button {
+    display: block;
+    margin-top: 1rem;
+  }
+
+  main {
+    padding: 1rem;
+  }
+}

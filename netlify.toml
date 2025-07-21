@@ -1,4 +1,4 @@
 [build]
-command = "cd frontend && npm install && npm run build"
+command = "cd frontend && npm install && npm run build && npm install react-router-dom"
 publish = "frontend/build"
 functions = "functions"
