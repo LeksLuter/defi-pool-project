@@ -11,20 +11,31 @@ export const Web3Provider = ({ children }) => {
       const address = await connectWallet();
       setAccount(address);
     } catch (err) {
-      console.error("Ошибка подключения", err);
+      console.error("Ошибка подключения кошелька", err);
+      alert("Не удалось подключить кошелёк");
     }
   };
 
-  const poolContract = process.env.REACT_APP_POOL_ADDRESS
-    ? getPoolContract(process.env.REACT_APP_POOL_ADDRESS)
+  const disconnect = () => {
+    setAccount(null);
+  };
+
+  const poolContract = process.env.POOL_ADDRESS
+    ? getPoolContract(process.env.POOL_ADDRESS)
     : null;
 
-  const vaultContract = process.env.REACT_APP_VAULT_ADDRESS
-    ? getVaultContract(process.env.REACT_APP_VAULT_ADDRESS)
+  const vaultContract = process.env.VAULT_ADDRESS
+    ? getVaultContract(process.env.VAULT_ADDRESS)
     : null;
 
   return (
-    <Web3Context.Provider value={{ account, connect, poolContract, vaultContract }}>
+    <Web3Context.Provider value={{ 
+      account, 
+      connect, 
+      disconnect,
+      poolContract, 
+      vaultContract 
+    }}>
       {children}
     </Web3Context.Provider>
   );
