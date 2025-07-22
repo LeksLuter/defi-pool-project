@@ -5,13 +5,16 @@ export default function WithdrawForm({ vaultContract }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!vaultContract) return;
+    if (!vaultContract) {
+      alert("Контракт хранилища не инициализирован");
+      return;
+    }
 
     try {
       await vaultContract.withdraw(depositId);
       alert("Токены успешно выведены");
     } catch (err) {
-      alert("Ошибка при выводе");
+      alert("Ошибка вывода токенов");
       console.error(err);
     }
   };
@@ -25,10 +28,12 @@ export default function WithdrawForm({ vaultContract }) {
         value={depositId}
         onChange={(e) => setDepositId(e.target.value)}
         className="w-full p-2 border rounded mt-2"
+        required
       />
-      <button
-        type="submit"
-        className="mt-2 w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
+      <button 
+        type="submit" 
+        className="mt-2 w-full bg-green-600 text-white py-2 rounded-lg font-medium hover:bg-green-700 transition"
+        disabled={!vaultContract}
       >
         Вывести
       </button>

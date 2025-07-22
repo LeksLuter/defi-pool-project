@@ -7,16 +7,17 @@ export default function DisconnectWallet() {
   const navigate = useNavigate();
 
   const handleDisconnect = () => {
-    disconnect();
-    navigate('/');
+    disconnect(); // ✅ Вызываем отключение
+    navigate('/'); // ✅ Переход на главную
   };
 
   return (
     <button
       onClick={handleDisconnect}
-      className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition text-sm font-medium"
+      className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition hover:bg-red-700"
+      aria-label="Отключить кошелёк"
     >
-      Отключить
+      Отключить кашелёк
     </button>
   );
 }

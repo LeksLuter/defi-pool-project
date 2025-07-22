@@ -11,10 +11,10 @@ export const connectWallet = async () => {
       await window.ethereum.request({ method: "eth_requestAccounts" });
       provider = new ethers.providers.Web3Provider(window.ethereum);
       signer = provider.getSigner();
-      const address = await signer.getAddress();
-      return address;
+      return await signer.getAddress();
     } catch (err) {
       console.error("Ошибка подключения MetaMask", err);
+      alert("Ошибка подключения MetaMask");
       throw err;
     }
   } else {

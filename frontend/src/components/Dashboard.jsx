@@ -17,28 +17,25 @@ export default function Dashboard() {
       if (!poolContract || !vaultContract || !account) return;
 
       try {
-        // Загружаем количество пулов
         const pools = await poolContract.getPools();
-        setTotalPools(pools.length);
-
-        // Загружаем резервы пула
         const reserves = await poolContract.getReserves();
+        const deposits = await vaultContract.getDepositsByUser(account);
+
+        setTotalPools(pools.length);
         setTotalLiquidity(
           `${ethers.utils.formatUnits(reserves[0], 18)} / ${ethers.utils.formatUnits(reserves[1], 18)}`
         );
-
-        // Загружаем количество заблокированных токенов
-        const deposits = await vaultContract.getDepositsByUser(account);
         setLockedTokens(deposits.length);
       } catch (err) {
         console.error("Ошибка загрузки статистики", err);
+        alert("Не удалось загрузить данные");
       }
     };
 
     loadStats();
-  }, [poolContract, vaultContract, account]);
+  }, [account, poolContract, vaultContract]);
 
-  if (!account) {
+  if (!account || !poolContract || !vaultContract) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-center">
         <h2 className="text-2xl font-bold mb-4">Подключите кошелёк</h2>
@@ -54,14 +51,12 @@ export default function Dashboard() {
         <p className="text-gray-600">Добро пожаловать, {account.slice(0, 6)}...{account.slice(-4)}</p>
       </div>
 
-      {/* Статистика */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
         <StatCard title="Всего пулов" value={totalPools} />
         <StatCard title="Ликвидность в пулах" value={totalLiquidity} />
         <StatCard title="Заблокировано токенов" value={lockedTokens} />
       </div>
 
-      {/* Основные функции */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="bg-white rounded-xl p-6 shadow-sm">
           <h2 className="text-xl font-semibold mb-4">Хранилище токенов</h2>
@@ -76,10 +71,10 @@ export default function Dashboard() {
           <h2 className="text-xl font-semibold mb-4">Пулы ликвидности</h2>
           <div className="space-y-4">
             <p className="text-gray-600">Добавьте ликвидность в пулы и получайте вознаграждение за комиссии.</p>
-            <button className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition">
+            <button className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition font-medium">
               Добавить ликвидность
             </button>
-            <button className="w-full bg-gray-100 text-gray-700 py-3 rounded-lg hover:bg-gray-200 transition">
+            <button className="w-full bg-gray-100 text-gray-700 py-3 rounded-lg hover:bg-gray-200 transition font-medium">
               Управление позициями
             </button>
           </div>
