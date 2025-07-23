@@ -17,7 +17,7 @@ export default function DisconnectWallet() {
       className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition hover:bg-red-700"
       aria-label="Отключить кошелёк"
     >
-      Отключить кашелёк
+      Отключить кошелёк
     </button>
   );
 }

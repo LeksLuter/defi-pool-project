@@ -14,12 +14,12 @@ export const Web3Provider = ({ children }) => {
       setAccount(address);
       
       // ✅ Исправлено: инициализация контрактов после подключения
-      if (process.env.POOL_ADDRESS) {
-        setPoolContract(getPoolContract(process.env.POOL_ADDRESS));
+      if (process.env.REACT_APP_POOL_ADDRESS) {
+        setPoolContract(getPoolContract(process.env.REACT_APP_POOL_ADDRESS));
       }
       
-      if (process.env.VAULT_ADDRESS) {
-        setVaultContract(getVaultContract(process.env.VAULT_ADDRESS));
+      if (process.env.REACT_APP_VAULT_ADDRESS) {
+        setVaultContract(getVaultContract(process.env.REACT_APP_VAULT_ADDRESS));
       }
     } catch (err) {
       console.error("Ошибка подключения кошелька", err);
