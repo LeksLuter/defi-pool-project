@@ -11,3 +11,4 @@
 
  function App() {
    const { account } = useWeb3();
+ }
