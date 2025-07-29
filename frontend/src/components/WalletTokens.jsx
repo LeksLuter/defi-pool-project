@@ -210,8 +210,9 @@ const WalletTokens = () => {
       const polygonChainId = 137;
 
       // Запрашиваем токены ERC-20 через Etherscan API v2
+      // Используем правильный endpoint для получения токенов аккаунта
       const response = await fetch(
-        `https://api.etherscan.io/v2/api?chainid=${polygonChainId}&module=account&action=tokentx&address=${account}&apikey=${etherscanApiKey}`
+        `https://api.etherscan.io/v2/api?chainid=${polygonChainId}&module=account&action=tokenbalance&address=${account}&apikey=${etherscanApiKey}`
       );
 
       if (!response.ok) {
@@ -224,7 +225,51 @@ const WalletTokens = () => {
         throw new Error(data.message || 'Ошибка при получении данных от Etherscan API');
       }
 
-      // Фильтруем и группируем токены по адресу контракта
+      // Обрабатываем данные токенов
+      const tokens = data.result.filter(token => {
+        try {
+          // Фильтруем токены с нулевым балансом
+          const balanceBN = ethers.BigNumber.from(token.balance || token.value);
+          return balanceBN.gt(0);
+        } catch (e) {
+          return false;
+        }
+      });
+
+      return tokens;
+    } catch (error) {
+      console.warn('Не удалось получить токены через Etherscan:', error);
+      throw error;
+    }
+  };
+
+  // Альтернативный метод получения токенов через tokentx
+  const fetchTokensFromEtherscanTx = async (account) => {
+    try {
+      const etherscanApiKey = import.meta.env.VITE_ETHERSCAN_API_KEY;
+      if (!etherscanApiKey) {
+        throw new Error('ETHERSCAN_API_KEY не задан в переменных окружения');
+      }
+
+      // Chain ID для Polygon Mainnet
+      const polygonChainId = 137;
+
+      // Запрашиваем транзакции токенов через Etherscan API v2
+      const response = await fetch(
+        `https://api.etherscan.io/v2/api?chainid=${polygonChainId}&module=account&action=tokentx&address=${account}&apikey=${etherscanApiKey}&page=1&offset=100&sort=desc`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Etherscan API error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.status !== "1") {
+        throw new Error(data.message || 'Ошибка при получении данных от Etherscan API');
+      }
+
+      // Группируем транзакции по токенам и суммируем балансы
       const tokenMap = {};
 
       data.result.forEach(tx => {
@@ -232,6 +277,7 @@ const WalletTokens = () => {
 
         // Если токен уже есть в мапе, суммируем баланс
         if (tokenMap[contractAddress]) {
+          // Для токенов используем value, для нативных токенов используем value
           const currentBalance = ethers.BigNumber.from(tokenMap[contractAddress].balance);
           const txValue = ethers.BigNumber.from(tx.value);
           tokenMap[contractAddress].balance = currentBalance.add(txValue).toString();
@@ -259,71 +305,12 @@ const WalletTokens = () => {
 
       return tokens;
     } catch (error) {
-      console.warn('Не удалось получить токены через Etherscan:', error);
+      console.warn('Не удалось получить токены через Etherscan (tokentx):', error);
       throw error;
     }
   };
-
-  /*
-  // Закомментированные резервные методы
-  
-  // Функция для получения токенов через Blockscan API (резервный вариант)
-  const fetchTokensFromBlockscan = async (account) => {
-    try {
-      const response = await fetch(
-        `https://api.blockscan.com/api?module=account&action=tokenlist&address=${account}`
-      );
-
-      if (!response.ok) {
-        throw new Error(`Blockscan API error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      if (data.status !== "1") {
-        throw new Error(data.message || 'Ошибка при получении данных от Blockscan API');
-      }
-
-      return data.result;
-    } catch (error) {
-      console.warn('Не удалось получить токены через Blockscan:', error);
-      throw error;
-    }
-  };
-
-  // Функция для получения токенов через Alchemy API (резервный вариант)
-  const fetchTokensFromAlchemy = async (account, alchemyUrl) => {
-    try {
-      const response = await fetch(alchemyUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'alchemy_getTokenBalances',
-          params: [account, 'erc20']
-        })
-      });
-
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error.message);
-      }
-
-      return data.result.tokenBalances;
-    } catch (error) {
-      console.warn('Не удалось получить токены через Alchemy:', error);
-      throw error;
-    }
-  };
-  */
 
   useEffect(() => {
-  console.log("Проверка ETHERSCAN_API_KEY:", import.meta.env.ETHERSCAN_API_KEY);
-  console.log("Все переменные VITE:", import.meta.env); // Будет содержать только VITE_*
     const fetchTokenBalances = async () => {
       if (!provider || !account) {
         setTokens([]);
@@ -343,11 +330,11 @@ const WalletTokens = () => {
         let tokenList = [];
 
         try {
-          console.log('Попытка получения токенов через Etherscan API v2...');
-          tokenList = await fetchTokensFromEtherscan(account);
-          console.log('Токены получены через Etherscan:', tokenList);
+          console.log('Попытка получения токенов через Etherscan API v2 (tokentx)...');
+          tokenList = await fetchTokensFromEtherscanTx(account);
+          console.log('Токены получены через Etherscan (tokentx):', tokenList);
         } catch (etherscanError) {
-          console.error('Etherscan API недоступен:', etherscanError);
+          console.error('Etherscan API (tokentx) недоступен:', etherscanError);
           throw new Error(`Не удалось получить токены через Etherscan: ${etherscanError.message}`);
         }
 
