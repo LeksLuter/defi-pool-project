@@ -1,10 +1,10 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Web3Provider } from './context/Web3Context';
+import { Web3Provider, useWeb3 } from './context/Web3Context'; // <-- Импортируем useWeb3 отсюда
 import Header from './components/Header';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
-import AdminPanel from './components/AdminPanel'; // Новый компонент
+import AdminPanel from './components/AdminPanel'; // Убедитесь, что этот компонент создан
 import PoolList from './components/PoolList';
 import AddLiquidity from './components/AddLiquidity';
 import SwapTokens from './components/SwapTokens';
@@ -12,7 +12,7 @@ import Vault from './components/Vault';
 
 // Компонент для защищенных маршрутов
 const ProtectedRoute = ({ children }) => {
-  const { isConnected } = useWeb3();
+  const { isConnected } = useWeb3(); // <-- Теперь использует импортированный хук
   if (!isConnected) {
     // Если пользователь не подключен, перенаправляем на лендинг
     return <Navigate to="/" replace />;
@@ -22,7 +22,7 @@ const ProtectedRoute = ({ children }) => {
 
 // Компонент для админских маршрутов
 const AdminRoute = ({ children }) => {
-  const { isConnected, isAdmin } = useWeb3();
+  const { isConnected, isAdmin } = useWeb3(); // <-- Использует импортированный хук
   if (!isConnected || !isAdmin) {
     // Если пользователь не подключен или не является админом, перенаправляем на лендинг
     return <Navigate to="/" replace />;
@@ -30,16 +30,7 @@ const AdminRoute = ({ children }) => {
   return children;
 };
 
-// Вспомогательный хук для использования контекста
-const useWeb3 = () => {
-  // В дальнейшем это будет импортировано из Web3Context
-  // Пока используем внутренний доступ к контексту
-  const context = React.useContext(Web3Provider._context);
-  if (!context) {
-    throw new Error('useWeb3 must be used within a Web3Provider');
-  }
-  return context;
-};
+// УДАЛЯЕМ локальное определение useWeb3 отсюда
 
 function App() {
   return (
