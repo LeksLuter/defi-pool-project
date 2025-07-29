@@ -21,13 +21,6 @@ const AdminPanel = () => {
     setStatus('Хранилище успешно задеплоено!');
   };
 
-  const handleCreatePool = async () => {
-    setStatus('Создание пула...');
-    // Реализация создания пула
-    console.log("Создание пула");
-    setStatus('Пул успешно создан!');
-  };
-
   return (
     <div className="min-h-screen py-8 px-4 bg-gradient-to-br from-gray-900 to-indigo-900">
       <div className="container mx-auto">
@@ -37,7 +30,7 @@ const AdminPanel = () => {
         </div>
 
         <div className="bg-gray-800 bg-opacity-50 rounded-2xl p-6 backdrop-blur-sm border border-gray-700 shadow-xl">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-gray-700 bg-opacity-50 p-6 rounded-xl backdrop-blur-sm border border-gray-600">
               <h3 className="text-xl font-semibold text-white mb-4">Деплой фабрики</h3>
               <p className="text-gray-300 mb-4">Создать новый контракт фабрики пулов</p>
@@ -57,17 +50,6 @@ const AdminPanel = () => {
                 className="w-full px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-medium rounded-lg transition"
               >
                 Задеплоить хранилище
-              </button>
-            </div>
-
-            <div className="bg-gray-700 bg-opacity-50 p-6 rounded-xl backdrop-blur-sm border border-gray-600">
-              <h3 className="text-xl font-semibold text-white mb-4">Создать пул</h3>
-              <p className="text-gray-300 mb-4">Создать новый пул ликвидности</p>
-              <button
-                onClick={handleCreatePool}
-                className="w-full px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-medium rounded-lg transition"
-              >
-                Создать пул
               </button>
             </div>
           </div>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import PoolList from './PoolList';
 import AddLiquidity from './AddLiquidity';
-// import SwapTokens from './SwapTokens'; // Удаляем импорт
+import CreatePoolForm from './CreatePoolForm'; // Новый компонент
 import Vault from './Vault';
 
 const Dashboard = () => {
@@ -37,7 +37,6 @@ const Dashboard = () => {
             >
               Хранилище токенов
             </button>
-            {/* Удаляем вкладку обмена */}
           </div>
         </div>
 
@@ -45,12 +44,15 @@ const Dashboard = () => {
         <div className="bg-gray-800 bg-opacity-50 rounded-2xl p-6 backdrop-blur-sm border border-gray-700 shadow-xl">
           {activeTab === 'pools' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <PoolList />
+              <div className="space-y-8">
+                <PoolList />
+                {/* Блок создания пула теперь здесь */}
+                <CreatePoolForm />
+              </div>
               <AddLiquidity />
             </div>
           )}
           {activeTab === 'vault' && <Vault />}
-          {/* Удаляем содержимое вкладки обмена */}
         </div>
       </div>
     </div>
