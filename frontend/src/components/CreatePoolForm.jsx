@@ -2,20 +2,16 @@ import React, { useState } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 
 const CreatePoolForm = () => {
-  const { signer, account, isAdmin } = useWeb3();
+  const { signer, account } = useWeb3();
   const [token0, setToken0] = useState('');
   const [token1, setToken1] = useState('');
-  const [feeRate, setFeeRate] = useState('30'); // 0.3% по умолчанию
+  const [feeRate, setFeeRate] = useState('30'); // 0.3% по умолчанию (вместо 5)
   const [status, setStatus] = useState('');
 
   const handleCreatePool = async (e) => {
     e.preventDefault();
     if (!account) {
       setStatus('Пожалуйста, подключите кошелек');
-      return;
-    }
-    if (!isAdmin) {
-      setStatus('Только администратор может создавать пулы');
       return;
     }
     if (!token0 || !token1) {
@@ -40,11 +36,7 @@ const CreatePoolForm = () => {
     setToken1('');
   };
 
-  // Отображаем форму только для администратора
-  if (!isAdmin) {
-    return null;
-  }
-
+  // Отображаем форму всем пользователям
   return (
     <div className="bg-gray-700 bg-opacity-50 p-6 rounded-xl backdrop-blur-sm border border-gray-600">
       <h3 className="text-xl font-semibold text-white mb-4">Создать новый пул</h3>
@@ -82,7 +74,7 @@ const CreatePoolForm = () => {
             onChange={(e) => setFeeRate(e.target.value)}
             className="w-full px-3 py-2 bg-gray-600 bg-opacity-50 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
           >
-            <option className="bg-gray-800" value="5">0.05% (5)</option>
+            {/* Убираем опцию 0.05% (value="5") */}
             <option className="bg-gray-800" value="30">0.3% (30)</option>
             <option className="bg-gray-800" value="100">1% (100)</option>
           </select>

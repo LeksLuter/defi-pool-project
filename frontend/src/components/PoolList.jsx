@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useWeb3 } from '../context/Web3Context';
+import AddLiquidityModal from './AddLiquidityModal'; // Новый компонент
 
 const PoolList = () => {
   const { provider } = useWeb3();
   const [pools, setPools] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedPool, setSelectedPool] = useState(null);
 
   // Здесь будет логика получения списка пулов
   // Пока что показываем заглушку
@@ -17,6 +20,16 @@ const PoolList = () => {
       ]);
     }
   }, [provider]);
+
+  const openModal = (pool) => {
+    setSelectedPool(pool);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setSelectedPool(null);
+  };
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
@@ -52,7 +65,10 @@ const PoolList = () => {
                   <div className="text-sm text-gray-900">{pool.fee}</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  <button className="text-indigo-600 hover:text-indigo-900 mr-3">
+                  <button
+                    onClick={() => openModal(pool)}
+                    className="text-indigo-600 hover:text-indigo-900 mr-3"
+                  >
                     Добавить ликвидность
                   </button>
                   <button className="text-green-600 hover:text-green-900">
@@ -64,6 +80,14 @@ const PoolList = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Модальное окно добавления ликвидности */}
+      {isModalOpen && selectedPool && (
+        <AddLiquidityModal
+          pool={selectedPool}
+          onClose={closeModal}
+        />
+      )}
     </div>
   );
 };
