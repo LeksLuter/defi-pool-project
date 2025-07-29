@@ -10,12 +10,15 @@ const ERC20_ABI = [
 ];
 
 // Карта адресов токенов Polygon в CoinGecko ID
-// В реальном приложении эту карту можно получать динамически или расширить
 const TOKEN_ADDRESS_TO_COINGECKO_ID = {
-  '0x0000000000000000000000000000000000000000': 'matic-network', // MATIC
-  '0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0': 'matic-network', // MATIC (если в другом формате)
+  '0x0000000000000000000000000000000000000000': 'matic-network', // POL (ранее MATIC)
   // Добавьте сюда другие токены по необходимости
-  // 'адрес_токена': 'coingecko_id',
+};
+
+// Карта адресов токенов Polygon в CoinMarketCap ID
+const TOKEN_ADDRESS_TO_CMC_ID = {
+  '0x0000000000000000000000000000000000000000': 3890, // POL (ранее MATIC)
+  // Добавьте сюда другие токены по необходимости
 };
 
 const WalletTokens = () => {
@@ -25,26 +28,57 @@ const WalletTokens = () => {
   const [error, setError] = useState(null);
 
   // Функция для получения цены токена через CoinGecko API
-  const fetchTokenPrice = async (tokenId) => {
+  const fetchTokenPriceFromCoinGecko = async (tokenId) => {
     try {
       const response = await fetch(
         `https://api.coingecko.com/api/v3/simple/price?ids=${tokenId}&vs_currencies=usd`
       );
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`CoinGecko HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
       return data[tokenId]?.usd || 0;
     } catch (error) {
-      console.warn(`Не удалось получить цену для токена ${tokenId}:`, error);
-      return 0;
+      console.warn(`Не удалось получить цену для токена ${tokenId} через CoinGecko:`, error);
+      return null; // Возвращаем null для обозначения ошибки
     }
   };
 
-  // Функция для получения цен нескольких токенов
-  const fetchMultipleTokenPrices = async (tokenIds) => {
+  // Функция для получения цены токена через CoinMarketCap API
+  const fetchTokenPriceFromCoinMarketCap = async (tokenId) => {
+    try {
+      const cmcApiKey = import.meta.env.VITE_COINMARKETCAP_API_KEY;
+      if (!cmcApiKey) {
+        console.warn('CoinMarketCap API ключ не задан в переменных окружения');
+        return null;
+      }
+
+      const response = await fetch(
+        `https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?convert=USD&id=${tokenId}`,
+        {
+          headers: {
+            'X-CMC_PRO_API_KEY': cmcApiKey,
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`CoinMarketCap HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const tokenData = data.data[tokenId];
+      return tokenData?.quote?.USD?.price || 0;
+    } catch (error) {
+      console.warn(`Не удалось получить цену для токена ${tokenId} через CoinMarketCap:`, error);
+      return null; // Возвращаем null для обозначения ошибки
+    }
+  };
+
+  // Функция для получения цен нескольких токенов через CoinGecko
+  const fetchMultipleTokenPricesFromCoinGecko = async (tokenIds) => {
     if (tokenIds.length === 0) return {};
 
     try {
@@ -54,7 +88,7 @@ const WalletTokens = () => {
       );
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`CoinGecko HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
@@ -66,9 +100,96 @@ const WalletTokens = () => {
 
       return prices;
     } catch (error) {
-      console.warn('Не удалось получить цены для токенов:', error);
-      return tokenIds.reduce((acc, id) => ({ ...acc, [id]: 0 }), {});
+      console.warn('Не удалось получить цены для токенов через CoinGecko:', error);
+      return null; // Возвращаем null для обозначения ошибки
     }
+  };
+
+  // Функция для получения цен нескольких токенов через CoinMarketCap
+  const fetchMultipleTokenPricesFromCoinMarketCap = async (tokenIds) => {
+    if (tokenIds.length === 0) return {};
+
+    try {
+      const cmcApiKey = import.meta.env.VITE_COINMARKETCAP_API_KEY;
+      if (!cmcApiKey) {
+        console.warn('CoinMarketCap API ключ не задан в переменных окружения');
+        return null;
+      }
+
+      const idsString = tokenIds.join(',');
+      const response = await fetch(
+        `https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?convert=USD&id=${idsString}`,
+        {
+          headers: {
+            'X-CMC_PRO_API_KEY': cmcApiKey,
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`CoinMarketCap HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const prices = {};
+
+      tokenIds.forEach(id => {
+        const tokenData = data.data[id];
+        prices[id] = tokenData?.quote?.USD?.price || 0;
+      });
+
+      return prices;
+    } catch (error) {
+      console.warn('Не удалось получить цены для токенов через CoinMarketCap:', error);
+      return null; // Возвращаем null для обозначения ошибки
+    }
+  };
+
+  // Функция для получения цены токена с резервными вариантами
+  const fetchTokenPriceWithFallback = async (tokenId, cmcId) => {
+    // Сначала пробуем CoinGecko
+    let price = await fetchTokenPriceFromCoinGecko(tokenId);
+
+    // Если CoinGecko не сработал, пробуем CoinMarketCap
+    if (price === null && cmcId) {
+      price = await fetchTokenPriceFromCoinMarketCap(cmcId);
+    }
+
+    return price || 0;
+  };
+
+  // Функция для получения цен нескольких токенов с резервными вариантами
+  const fetchMultipleTokenPricesWithFallback = async (tokenMap) => {
+    const tokenIds = Object.keys(tokenMap);
+    const coingeckoIds = tokenIds.map(id => tokenMap[id].coingeckoId).filter(id => id);
+    const cmcIds = tokenIds.map(id => tokenMap[id].cmcId).filter(id => id);
+
+    // Сначала пробуем получить все цены через CoinGecko
+    let prices = await fetchMultipleTokenPricesFromCoinGecko(coingeckoIds);
+
+    // Если CoinGecko не сработал, пробуем CoinMarketCap
+    if (prices === null) {
+      const cmcPrices = await fetchMultipleTokenPricesFromCoinMarketCap(cmcIds);
+      prices = cmcPrices || {};
+    } else {
+      // Если CoinGecko частично сработал, получаем недостающие цены через CoinMarketCap
+      const missingIds = coingeckoIds.filter(id => prices[id] === undefined);
+      if (missingIds.length > 0) {
+        const cmcPrices = await fetchMultipleTokenPricesFromCoinMarketCap(cmcIds);
+        if (cmcPrices) {
+          prices = { ...prices, ...cmcPrices };
+        }
+      }
+    }
+
+    // Создаем карту адресов токенов к ценам
+    const addressToPrice = {};
+    tokenIds.forEach(address => {
+      const { coingeckoId, cmcId } = tokenMap[address];
+      addressToPrice[address] = prices[coingeckoId] || prices[cmcId] || 0;
+    });
+
+    return addressToPrice;
   };
 
   useEffect(() => {
@@ -83,12 +204,11 @@ const WalletTokens = () => {
       setError(null);
 
       try {
-        // Получаем баланс MATIC напрямую через провайдер
-        const maticBalance = await provider.getBalance(account);
-        const formattedMaticBalance = ethers.utils.formatEther(maticBalance);
+        // Получаем баланс POL напрямую через провайдер
+        const polBalance = await provider.getBalance(account);
+        const formattedPolBalance = ethers.utils.formatEther(polBalance);
 
         // Используем Alchemy API для получения балансов токенов
-        // Получаем URL Alchemy из переменных окружения
         const alchemyUrl = import.meta.env.VITE_ALCHEMY_POLYGON_MAINNET_URL;
 
         if (!alchemyUrl) {
@@ -115,29 +235,32 @@ const WalletTokens = () => {
           throw new Error(data.error.message);
         }
 
-        // Начинаем с MATIC
+        // Начинаем с POL
         let tokenBalances = [{
           address: '0x0000000000000000000000000000000000000000', // Адрес для нативного токена
-          symbol: 'MATIC',
-          name: 'Matic Token',
-          balance: formattedMaticBalance,
-          rawBalance: maticBalance,
+          symbol: 'POL',
+          name: 'Polygon Ecosystem Token',
+          balance: formattedPolBalance,
+          rawBalance: polBalance,
           decimals: 18
         }];
 
-        // Фильтруем токены с нулевым балансом
+        // Тщательно фильтруем токены с нулевым балансом
         const nonZeroTokens = data.result.tokenBalances.filter(token => {
-          // Проверяем, что баланс не нулевой
-          if (token.tokenBalance === '0x0' ||
-            token.tokenBalance === '0x0000000000000000000000000000000000000000000000000000000000000000') {
-            return false;
-          }
-
-          // Дополнительная проверка на больше 0
           try {
+            // Проверяем, что баланс существует и не является нулевой строкой
+            if (!token.tokenBalance || token.tokenBalance === '0x0') {
+              return false;
+            }
+
+            // Конвертируем hex баланс в BigNumber для точной проверки
             const balanceBN = ethers.BigNumber.from(token.tokenBalance);
-            return balanceBN.gt(0);
-          } catch {
+
+            // Возвращаем true только если баланс строго больше 0
+            return balanceBN.gt(ethers.BigNumber.from(0));
+          } catch (e) {
+            // Если не удалось преобразовать баланс, исключаем токен
+            console.warn(`Не удалось обработать баланс токена ${token.contractAddress}:`, e);
             return false;
           }
         });
@@ -159,6 +282,11 @@ const WalletTokens = () => {
             const balanceBN = ethers.BigNumber.from(tokenInfo.tokenBalance);
             const formattedBalance = ethers.utils.formatUnits(balanceBN, decimals);
 
+            // Дополнительная проверка: если после форматирования баланс равен 0, исключаем токен
+            if (parseFloat(formattedBalance) <= 0) {
+              return null;
+            }
+
             return {
               address: tokenInfo.contractAddress,
               symbol: symbol,
@@ -176,30 +304,29 @@ const WalletTokens = () => {
         // Ждем завершения всех запросов метаданных
         const tokenResults = await Promise.all(tokenPromises);
 
-        // Фильтруем успешные результаты
-        const validTokens = tokenResults.filter(token => token !== null);
+        // Фильтруем успешные результаты и исключаем токены с нулевым балансом
+        const validTokens = tokenResults.filter(token =>
+          token !== null && parseFloat(token.balance) > 0
+        );
 
         // Добавляем валидные токены к общему списку
         tokenBalances = [...tokenBalances, ...validTokens];
 
-        // Собираем CoinGecko ID для всех токенов
-        const tokenIds = tokenBalances
-          .map(token => TOKEN_ADDRESS_TO_COINGECKO_ID[token.address.toLowerCase()] || token.symbol.toLowerCase())
-          .filter(id => id); // Фильтруем пустые значения
+        // Подготавливаем карту токенов для получения цен
+        const tokenPriceMap = {};
+        tokenBalances.forEach(token => {
+          tokenPriceMap[token.address.toLowerCase()] = {
+            coingeckoId: TOKEN_ADDRESS_TO_COINGECKO_ID[token.address.toLowerCase()],
+            cmcId: TOKEN_ADDRESS_TO_CMC_ID[token.address.toLowerCase()]
+          };
+        });
 
-        // Получаем цены для всех токенов
-        const prices = await fetchMultipleTokenPrices(tokenIds);
+        // Получаем цены для всех токенов с резервными вариантами
+        const addressToPrice = await fetchMultipleTokenPricesWithFallback(tokenPriceMap);
 
         // Добавляем цены и стоимость к токенам
         const tokensWithPrices = tokenBalances.map(token => {
-          // Определяем CoinGecko ID для токена
-          const tokenId = TOKEN_ADDRESS_TO_COINGECKO_ID[token.address.toLowerCase()] ||
-            token.symbol.toLowerCase();
-
-          // Получаем цену (0 если не найдена)
-          const price = prices[tokenId] || 0;
-
-          // Рассчитываем стоимость
+          const price = addressToPrice[token.address.toLowerCase()] || 0;
           const value = parseFloat(token.balance) * price;
 
           return {
