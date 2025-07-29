@@ -39,7 +39,6 @@ const Header = () => {
                 >
                   Дашборд
                 </Link>
-                {/* Новый пункт меню "Обмен" */}
                 <Link
                   to="/swap"
                   className={`px-3 py-2 rounded-md text-sm font-medium ${location.pathname === '/swap'
@@ -49,7 +48,16 @@ const Header = () => {
                 >
                   Обмен
                 </Link>
-                {/* Пункт меню админки отображается только для администратора */}
+                {/* Новый пункт меню "Бурн и минт" */}
+                <Link
+                  to="/burn-mint"
+                  className={`px-3 py-2 rounded-md text-sm font-medium ${location.pathname === '/burn-mint'
+                    ? 'bg-gray-800 text-white'
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                    }`}
+                >
+                  Бурн и минт
+                </Link>
                 {isAdmin && (
                   <Link
                     to="/admin"
