@@ -6,7 +6,8 @@ import { ethers } from 'ethers';
 const ERC20_ABI = [
   "function decimals() view returns (uint8)",
   "function symbol() view returns (string)",
-  "function name() view returns (string)"
+  "function name() view returns (string)",
+  "function balanceOf(address owner) view returns (uint256)"
 ];
 
 // Карта адресов токенов Polygon в CoinGecko ID
@@ -210,8 +211,9 @@ const WalletTokens = () => {
       const polygonChainId = 137;
 
       // Запрашиваем транзакции токенов ERC-20 через Etherscan V2 API
+      // Используем page=1, offset=1000 для получения большего количества транзакций за один запрос
       const response = await fetch(
-        `https://api.etherscan.io/v2/api?chainid=${polygonChainId}&module=account&action=tokentx&address=${account}&apikey=${etherscanApiKey}&page=1&offset=100&sort=desc`
+        `https://api.etherscan.io/v2/api?chainid=${polygonChainId}&module=account&action=tokentx&address=${account}&apikey=${etherscanApiKey}&page=1&offset=1000&sort=desc`
       );
 
       if (!response.ok) {
@@ -224,74 +226,83 @@ const WalletTokens = () => {
         throw new Error(data.message || 'Ошибка при получении данных от Etherscan V2 API');
       }
 
-      // Группируем транзакции по токенам и суммируем балансы
-      const tokenMap = {};
+      // Получаем уникальные адреса токенов из транзакций
+      const uniqueTokens = new Set();
+      const tokenSampleData = {}; // Для хранения примера данных токена
 
       data.result.forEach(tx => {
         const contractAddress = tx.contractAddress.toLowerCase();
+        uniqueTokens.add(contractAddress);
 
-        // Если токен уже есть в мапе, суммируем баланс
-        if (tokenMap[contractAddress]) {
-          // Проверяем направление транзакции
-          if (tx.to.toLowerCase() === account.toLowerCase()) {
-            // Получение токенов
-            const currentBalance = ethers.BigNumber.from(tokenMap[contractAddress].balance);
-            const txValue = ethers.BigNumber.from(tx.value);
-            tokenMap[contractAddress].balance = currentBalance.add(txValue).toString();
-          } else if (tx.from.toLowerCase() === account.toLowerCase()) {
-            // Отправка токенов
-            const currentBalance = ethers.BigNumber.from(tokenMap[contractAddress].balance);
-            const txValue = ethers.BigNumber.from(tx.value);
-            tokenMap[contractAddress].balance = currentBalance.sub(txValue).toString();
-          }
-        } else {
-          // Добавляем новый токен
-          let balance = ethers.BigNumber.from(0);
-          if (tx.to.toLowerCase() === account.toLowerCase()) {
-            // Получение токенов
-            balance = ethers.BigNumber.from(tx.value);
-          } else if (tx.from.toLowerCase() === account.toLowerCase()) {
-            // Отправка токенов (баланс будет отрицательным, но мы его скорректируем позже)
-            balance = ethers.BigNumber.from(tx.value).mul(-1);
-          }
-
-          tokenMap[contractAddress] = {
-            contractAddress: contractAddress,
+        // Сохраняем пример данных для fallback при получении метаданных
+        if (!tokenSampleData[contractAddress]) {
+          tokenSampleData[contractAddress] = {
             tokenName: tx.tokenName,
             tokenSymbol: tx.tokenSymbol,
-            tokenDecimal: parseInt(tx.tokenDecimal),
-            balance: balance.toString()
+            tokenDecimal: parseInt(tx.tokenDecimal)
           };
         }
       });
 
-      // Корректируем балансы (получаем текущие балансы напрямую)
-      const correctedTokens = [];
-      for (const tokenAddress in tokenMap) {
+      console.log(`Найдено ${uniqueTokens.size} уникальных токенов через Etherscan`);
+
+      // Для каждого уникального токена получаем актуальный баланс и метаданные
+      const tokenDetails = [];
+
+      // Обрабатываем нативный токен POL отдельно
+      try {
+        const polBalance = await provider.getBalance(account);
+        if (polBalance.gt(0)) {
+          tokenDetails.push({
+            contractAddress: '0x0000000000000000000000000000000000000000',
+            tokenName: 'Polygon Ecosystem Token',
+            tokenSymbol: 'POL',
+            tokenDecimal: 18,
+            balance: polBalance.toString()
+          });
+        }
+      } catch (error) {
+        console.warn('Ошибка при получении баланса POL:', error);
+      }
+
+      // Обрабатываем каждый ERC-20 токен
+      for (const tokenAddress of uniqueTokens) {
         try {
+          // Создаем контракт токена
           const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+
+          // Получаем баланс токена напрямую
           const balance = await tokenContract.balanceOf(account);
 
+          // Если баланс больше 0, получаем метаданные
           if (balance.gt(0)) {
-            correctedTokens.push({
+            // Получаем символ, имя и десятичные знаки параллельно
+            const [symbol, name, decimals] = await Promise.allSettled([
+              tokenContract.symbol(),
+              tokenContract.name(),
+              tokenContract.decimals()
+            ]);
+
+            // Обрабатываем результаты Promise.allSettled
+            const symbolValue = symbol.status === 'fulfilled' ? symbol.value : tokenSampleData[tokenAddress]?.tokenSymbol || 'UNKNOWN';
+            const nameValue = name.status === 'fulfilled' ? name.value : tokenSampleData[tokenAddress]?.tokenName || 'Unknown Token';
+            const decimalsValue = decimals.status === 'fulfilled' ? decimals.value : tokenSampleData[tokenAddress]?.tokenDecimal || 18;
+
+            tokenDetails.push({
               contractAddress: tokenAddress,
-              tokenName: tokenMap[tokenAddress].tokenName,
-              tokenSymbol: tokenMap[tokenAddress].tokenSymbol,
-              tokenDecimal: tokenMap[tokenAddress].tokenDecimal,
+              tokenName: nameValue,
+              tokenSymbol: symbolValue,
+              tokenDecimal: decimalsValue,
               balance: balance.toString()
             });
           }
         } catch (error) {
-          console.warn(`Ошибка при получении баланса токена ${tokenAddress}:`, error);
-          // Используем баланс из транзакций, если не удалось получить напрямую
-          const balance = ethers.BigNumber.from(tokenMap[tokenAddress].balance);
-          if (balance.gt(0)) {
-            correctedTokens.push(tokenMap[tokenAddress]);
-          }
+          console.warn(`Ошибка при обработке токена ${tokenAddress}:`, error);
+          // Пропускаем токен с ошибкой
         }
       }
 
-      return correctedTokens;
+      return tokenDetails;
     } catch (error) {
       console.warn('Не удалось получить токены через Etherscan V2:', error);
       throw error;
@@ -301,20 +312,32 @@ const WalletTokens = () => {
   // Функция для получения токенов через прямой вызов balanceOf (резервный метод)
   const fetchTokensDirectBalance = async (account) => {
     try {
-      // Получаем баланс POL напрямую через провайдер
-      const polBalance = await provider.getBalance(account);
+      console.log('Используется резервный метод получения токенов');
 
-      const tokens = [{
-        contractAddress: '0x0000000000000000000000000000000000000000',
-        tokenName: 'Polygon Ecosystem Token',
-        tokenSymbol: 'POL',
-        tokenDecimal: 18,
-        balance: polBalance.toString()
-      }];
+      const tokens = [];
+
+      // Получаем баланс POL
+      try {
+        const polBalance = await provider.getBalance(account);
+        if (polBalance.gt(0)) {
+          tokens.push({
+            contractAddress: '0x0000000000000000000000000000000000000000',
+            tokenName: 'Polygon Ecosystem Token',
+            tokenSymbol: 'POL',
+            tokenDecimal: 18,
+            balance: polBalance.toString()
+          });
+        }
+      } catch (error) {
+        console.warn('Ошибка при получении баланса POL в резервном методе:', error);
+      }
+
+      // Здесь можно добавить запросы балансов для известных токенов из переменных окружения
+      // Но в данном случае ограничимся только нативным токеном как минимальный fallback
 
       return tokens;
     } catch (error) {
-      console.warn('Не удалось получить токены через прямой вызов:', error);
+      console.warn('Не удалось получить токены через резервный метод:', error);
       throw error;
     }
   };
@@ -351,8 +374,8 @@ const WalletTokens = () => {
           }
         }
 
-        // Получаем метаданные и форматируем балансы для токенов
-        const tokenPromises = tokenList
+        // Преобразуем данные токенов в формат для отображения
+        const processedTokens = tokenList
           .filter(token => {
             try {
               const balanceBN = ethers.BigNumber.from(token.balance);
@@ -361,70 +384,30 @@ const WalletTokens = () => {
               return false;
             }
           })
-          .map(async (tokenInfo) => {
+          .map(tokenInfo => {
             try {
-              // Для нативного токена POL
-              if (tokenInfo.contractAddress === '0x0000000000000000000000000000000000000000') {
-                const formattedBalance = ethers.utils.formatEther(tokenInfo.balance);
-                return {
-                  address: tokenInfo.contractAddress,
-                  symbol: 'POL',
-                  name: 'Polygon Ecosystem Token',
-                  balance: formattedBalance,
-                  rawBalance: tokenInfo.balance,
-                  decimals: 18
-                };
-              }
-
-              // Создаем контракт токена для уточнения метаданных
-              const tokenContract = new ethers.Contract(tokenInfo.contractAddress, ERC20_ABI, provider);
-
-              // Получаем символ, имя и десятичные знаки параллельно
-              const [symbol, name, decimals] = await Promise.allSettled([
-                tokenContract.symbol(),
-                tokenContract.name(),
-                tokenContract.decimals()
-              ]);
-
-              // Обрабатываем результаты Promise.allSettled
-              const symbolValue = symbol.status === 'fulfilled' ? symbol.value : tokenInfo.tokenSymbol || 'UNKNOWN';
-              const nameValue = name.status === 'fulfilled' ? name.value : tokenInfo.tokenName || 'Unknown Token';
-              const decimalsValue = decimals.status === 'fulfilled' ? decimals.value : tokenInfo.tokenDecimal || 18;
-
               // Конвертируем баланс из smallest unit в десятичный формат
               const balanceBN = ethers.BigNumber.from(tokenInfo.balance);
-              const formattedBalance = ethers.utils.formatUnits(balanceBN, decimalsValue);
-
-              // Дополнительная проверка: если после форматирования баланс равен 0, исключаем токен
-              if (parseFloat(formattedBalance) <= 0) {
-                return null;
-              }
+              const formattedBalance = ethers.utils.formatUnits(balanceBN, tokenInfo.tokenDecimal);
 
               return {
                 address: tokenInfo.contractAddress,
-                symbol: symbolValue,
-                name: nameValue,
+                symbol: tokenInfo.tokenSymbol,
+                name: tokenInfo.tokenName,
                 balance: formattedBalance,
                 rawBalance: balanceBN.toString(),
-                decimals: decimalsValue
+                decimals: tokenInfo.tokenDecimal
               };
-            } catch (tokenError) {
-              console.warn(`Ошибка при обработке данных токена ${tokenInfo.contractAddress}:`, tokenError);
+            } catch (formatError) {
+              console.warn(`Ошибка при форматировании баланса токена ${tokenInfo.contractAddress}:`, formatError);
               return null;
             }
-          });
-
-        // Ждем завершения всех запросов метаданных
-        const tokenResults = await Promise.all(tokenPromises);
-
-        // Фильтруем успешные результаты и исключаем токены с нулевым балансом
-        const validTokens = tokenResults.filter(token =>
-          token !== null && parseFloat(token.balance) > 0
-        );
+          })
+          .filter(token => token !== null && parseFloat(token.balance) > 0);
 
         // Подготавливаем карту токенов для получения цен
         const tokenPriceMap = {};
-        validTokens.forEach(token => {
+        processedTokens.forEach(token => {
           tokenPriceMap[token.address.toLowerCase()] = {
             coingeckoId: TOKEN_ADDRESS_TO_COINGECKO_ID[token.address.toLowerCase()] || token.symbol.toLowerCase(),
             cmcId: TOKEN_ADDRESS_TO_CMC_ID[token.address.toLowerCase()]
@@ -435,7 +418,7 @@ const WalletTokens = () => {
         const addressToPrice = await fetchMultipleTokenPricesWithFallback(tokenPriceMap);
 
         // Добавляем цены и стоимость к токенам
-        const tokensWithPrices = validTokens.map(token => {
+        const tokensWithPrices = processedTokens.map(token => {
           const price = addressToPrice[token.address.toLowerCase()] || 0;
           const value = parseFloat(token.balance) * price;
 
