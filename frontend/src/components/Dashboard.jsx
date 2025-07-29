@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import PoolList from './PoolList';
 import CreatePoolModal from './CreatePoolModal';
+import PoolList from './PoolList';
 import Vault from './Vault';
-import WalletTokens from './WalletTokens';
+import WalletTokens from './WalletTokens'; // Убедимся, что компонент импортирован
 
 const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState('pools');
+  // Устанавливаем 'wallet' как активную вкладку по умолчанию
+  const [activeTab, setActiveTab] = useState('wallet');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const openCreatePoolModal = () => {
@@ -19,9 +20,19 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-black text-white">
       <div className="container mx-auto py-8 px-4">
-        {/* Навигация по вкладкам */}
+        {/* Навигация по вкладкам - меняем порядок, "Кошелёк" теперь первая */}
         <div className="mb-8">
           <div className="flex flex-wrap gap-2 border-b border-gray-700">
+            {/* Вкладка "Кошелёк" теперь первая */}
+            <button
+              onClick={() => setActiveTab('wallet')}
+              className={`px-4 py-2 font-medium rounded-t-lg ${activeTab === 'wallet'
+                  ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400'
+                  : 'text-gray-400 hover:text-white'
+                }`}
+            >
+              Кошелёк
+            </button>
             <button
               onClick={() => setActiveTab('pools')}
               className={`px-4 py-2 font-medium rounded-t-lg ${activeTab === 'pools'
@@ -40,19 +51,12 @@ const Dashboard = () => {
             >
               Хранилище токенов
             </button>
-            <button
-              onClick={() => setActiveTab('wallet')}
-              className={`px-4 py-2 font-medium rounded-t-lg ${activeTab === 'wallet'
-                  ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400'
-                  : 'text-gray-400 hover:text-white'
-                }`}
-            >
-              Кошелёк
-            </button>
           </div>
         </div>
 
-        {/* Контент вкладок */}
+        {/* Контент вкладок - меняем порядок отображения */}
+        {/* Теперь вкладка "Кошелёк" отображается первой */}
+        {activeTab === 'wallet' && <WalletTokens />}
         {activeTab === 'pools' && (
           <div>
             <div className="flex justify-between items-center mb-6">
@@ -68,13 +72,10 @@ const Dashboard = () => {
           </div>
         )}
         {activeTab === 'vault' && <Vault />}
-        {activeTab === 'wallet' && <WalletTokens />}
-      </div>
 
-      {/* Модальное окно создания пула */}
-      {isModalOpen && (
-        <CreatePoolModal onClose={closeCreatePoolModal} />
-      )}
+        {/* Модальное окно создания пула */}
+        {isModalOpen && <CreatePoolModal onClose={closeCreatePoolModal} />}
+      </div>
     </div>
   );
 };
