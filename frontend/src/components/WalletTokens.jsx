@@ -2,9 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
 
-// ABI для ERC20 токенов (минимальный набор функций для получения баланса)
+// ABI для ERC20 токенов (минимальный набор функций для получения метаданных)
 const ERC20_ABI = [
-  "function balanceOf(address owner) view returns (uint256)",
   "function decimals() view returns (uint8)",
   "function symbol() view returns (string)",
   "function name() view returns (string)"
@@ -15,22 +14,6 @@ const WalletTokens = () => {
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // Список токенов для отображения (в реальном приложении можно получать динамически)
-  // Используем адреса из переменных окружения
-  const tokenList = [
-    {
-      address: import.meta.env.VITE_TOKEN_A_ADDRESS || '0x0000000000000000000000000000000000000000',
-      name: 'Token A',
-      symbol: 'TKA'
-    },
-    {
-      address: import.meta.env.VITE_TOKEN_B_ADDRESS || '0x0000000000000000000000000000000000000000',
-      name: 'Token B',
-      symbol: 'TKB'
-    },
-    // Можно добавить больше токенов по необходимости
-  ];
 
   useEffect(() => {
     const fetchTokenBalances = async () => {
@@ -48,6 +31,34 @@ const WalletTokens = () => {
         const maticBalance = await provider.getBalance(account);
         const formattedMaticBalance = ethers.utils.formatEther(maticBalance);
 
+        // Используем Alchemy API для получения балансов токенов
+        // Получаем URL Alchemy из провайдера
+        const alchemyUrl = import.meta.env.VITE_ALCHEMY_POLYGON_MAINNET_URL;
+
+        if (!alchemyUrl) {
+          throw new Error('ALCHEMY_POLYGON_MAINNET_URL не задан в переменных окружения');
+        }
+
+        // Запрашиваем балансы токенов через Alchemy API
+        const response = await fetch(alchemyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'alchemy_getTokenBalances',
+            params: [account, 'erc20']
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data.error.message);
+        }
+
         const tokenBalances = [{
           address: '0x0000000000000000000000000000000000000000', // Адрес для нативного токена
           symbol: 'MATIC',
@@ -57,53 +68,45 @@ const WalletTokens = () => {
           decimals: 18
         }];
 
-        // Проходим по всем токенам и получаем баланс
-        for (const tokenInfo of tokenList) {
-          // Пропускаем токены без адреса
-          if (!tokenInfo.address || tokenInfo.address === '0x0000000000000000000000000000000000000000' || tokenInfo.address === 'Не задан') {
-            continue;
-          }
+        // Фильтруем токены с нулевым балансом
+        const nonZeroTokens = data.result.tokenBalances.filter(token =>
+          token.tokenBalance !== '0x0' && token.tokenBalance !== '0x0000000000000000000000000000000000000000000000000000000000000000'
+        );
 
+        // Получаем метаданные для каждого токена
+        for (const tokenInfo of nonZeroTokens) {
           try {
-            const tokenContract = new ethers.Contract(tokenInfo.address, ERC20_ABI, provider);
+            // Создаем контракт токена
+            const tokenContract = new ethers.Contract(tokenInfo.contractAddress, ERC20_ABI, provider);
 
-            // Получаем символ, имя, десятичные знаки и баланс параллельно
-            const [symbol, name, decimals, balance] = await Promise.all([
-              tokenContract.symbol().catch(() => tokenInfo.symbol || 'UNKNOWN'),
-              tokenContract.name().catch(() => tokenInfo.name || 'Unknown Token'),
-              tokenContract.decimals().catch(() => 18),
-              tokenContract.balanceOf(account).catch(() => ethers.BigNumber.from(0))
+            // Получаем символ, имя и десятичные знаки параллельно
+            const [symbol, name, decimals] = await Promise.all([
+              tokenContract.symbol().catch(() => 'UNKNOWN'),
+              tokenContract.name().catch(() => 'Unknown Token'),
+              tokenContract.decimals().catch(() => 18)
             ]);
 
-            // Форматируем баланс с учетом десятичных знаков
-            const formattedBalance = ethers.utils.formatUnits(balance, decimals);
+            // Конвертируем баланс из hex в десятичный формат
+            const balanceBN = ethers.BigNumber.from(tokenInfo.tokenBalance);
+            const formattedBalance = ethers.utils.formatUnits(balanceBN, decimals);
 
             tokenBalances.push({
-              address: tokenInfo.address,
-              symbol: symbol || tokenInfo.symbol,
-              name: name || tokenInfo.name,
+              address: tokenInfo.contractAddress,
+              symbol: symbol,
+              name: name,
               balance: formattedBalance,
-              rawBalance: balance,
+              rawBalance: balanceBN.toString(),
               decimals: decimals
             });
           } catch (tokenError) {
-            console.warn(`Ошибка при получении данных токена ${tokenInfo.address}:`, tokenError);
-            // Добавляем токен с нулевым балансом, если не удалось получить данные
-            tokenBalances.push({
-              address: tokenInfo.address,
-              symbol: tokenInfo.symbol || 'UNKNOWN',
-              name: tokenInfo.name || 'Unknown Token',
-              balance: "0",
-              rawBalance: "0",
-              decimals: 18
-            });
+            console.warn(`Ошибка при получении данных токена ${tokenInfo.contractAddress}:`, tokenError);
           }
         }
 
         setTokens(tokenBalances);
       } catch (err) {
         console.error("Ошибка при получении балансов токенов:", err);
-        setError("Не удалось получить балансы токенов");
+        setError(`Не удалось получить балансы токенов: ${err.message}`);
       } finally {
         setLoading(false);
       }
@@ -166,7 +169,7 @@ const WalletTokens = () => {
                 )}
               </div>
               <div className="mt-3">
-                <p className="text-2xl font-bold text-cyan-400">{token.balance}</p>
+                <p className="text-2xl font-bold text-cyan-400">{parseFloat(token.balance).toFixed(4)}</p>
                 <p className="text-gray-500 text-xs mt-1 truncate">
                   {token.address === '0x0000000000000000000000000000000000000000'
                     ? 'Нативный токен сети'
