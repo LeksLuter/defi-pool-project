@@ -322,6 +322,8 @@ const WalletTokens = () => {
   */
 
   useEffect(() => {
+  console.log("Проверка ETHERSCAN_API_KEY:", import.meta.env.ETHERSCAN_API_KEY);
+  console.log("Все переменные VITE:", import.meta.env); // Будет содержать только VITE_*
     const fetchTokenBalances = async () => {
       if (!provider || !account) {
         setTokens([]);
