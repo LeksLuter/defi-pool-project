@@ -8,19 +8,15 @@ const LandingPage = () => {
 
   const handleConnect = async () => {
     await connectWallet();
+    // После подключения перенаправляем на дашборд
     if (isConnected) {
       navigate('/dashboard');
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
-      {/* Анимированный фон (упрощенный) */}
-      <div className="absolute inset-0 z-0">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxkZWZzPjxwYXR0ZXJuIGlkPSJncmlkIiB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiIHBhdHRlcm5UcmFuc2Zvcm09InJvdGF0ZSg0NSkiPjxjaXJjbGUgY3g9IjIwIiBjeT0iMjAiIHI9IjAuNSIgZmlsbD0iI2ZmZiIgZmlsbC1vcGFjaXR5PSIwLjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-20"></div>
-      </div>
-
-      <div className="relative z-10 max-w-3xl w-full text-center">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12 sm:px-6 lg:px-8 bg-gradient-to-br from-gray-900 to-indigo-900 text-white">
+      <div className="max-w-3xl w-full text-center">
         <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6">
           <span className="block">DeFi</span>
           <span className="block bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">

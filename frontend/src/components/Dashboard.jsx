@@ -1,37 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { useWeb3 } from '../context/Web3Context';
+import React, { useState } from 'react';
 import PoolList from './PoolList';
 import AddLiquidity from './AddLiquidity';
 import SwapTokens from './SwapTokens';
 import Vault from './Vault';
 
 const Dashboard = () => {
-  const { account, isConnected } = useWeb3();
   const [activeTab, setActiveTab] = useState('pools');
-
-  if (!isConnected) {
-    return (
-      <div className="container mx-auto py-12 text-center">
-        <h2 className="text-2xl font-bold">Ошибка доступа</h2>
-        <p className="mt-2 text-gray-400">Пожалуйста, подключите кошелек для доступа к дашборду.</p>
-      </div>
-    );
-  }
-
-  const getShortAddress = (address) => {
-    if (!address) return '';
-    return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
-  };
 
   return (
     <div className="container mx-auto py-8 px-4">
-      {/* Приветствие и навигация */}
+      {/* Навигация по вкладкам */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">
-          Добро пожаловать, <span className="text-cyan-400">{getShortAddress(account)}</span>
-        </h1>
-        <p className="text-gray-400 mb-6">Управляйте своими активами и ликвидностью.</p>
-
         <div className="flex flex-wrap gap-2 border-b border-gray-700">
           <button
             onClick={() => setActiveTab('pools')}
