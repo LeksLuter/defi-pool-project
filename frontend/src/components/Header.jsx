@@ -1,34 +1,76 @@
 import React from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useWeb3 } from '../context/Web3Context';
 
 const Header = () => {
-  const { account, isConnected, connectWallet, disconnectWallet } = useWeb3();
+  const { account, isConnected, connectWallet, disconnectWallet, error } = useWeb3();
+  const location = useLocation();
+
+  const getShortAddress = (address) => {
+    if (!address) return '';
+    return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+  };
 
   return (
-    <header className="bg-indigo-600 text-white p-4">
-      <div className="container mx-auto flex justify-between items-center">
-        <h1 className="text-2xl font-bold">DeFi Pool System</h1>
-        <div>
-          {isConnected ? (
-            <div className="flex items-center space-x-4">
-              <span className="bg-indigo-800 px-3 py-1 rounded">
-                {account.substring(0, 6)}...{account.substring(account.length - 4)}
-              </span>
+    <header className="bg-gray-900 bg-opacity-80 backdrop-blur-sm border-b border-gray-800">
+      <div className="container mx-auto px-4">
+        <div className="flex justify-between items-center h-16">
+          <div className="flex items-center space-x-8">
+            <Link to="/" className="text-xl font-bold text-cyan-400">
+              DeFi Pool
+            </Link>
+            {isConnected && (
+              <nav className="hidden md:flex space-x-4">
+                <Link
+                  to="/"
+                  className={`px-3 py-2 rounded-md text-sm font-medium ${location.pathname === '/'
+                      ? 'bg-gray-800 text-white'
+                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                    }`}
+                >
+                  Главная
+                </Link>
+                <Link
+                  to="/dashboard"
+                  className={`px-3 py-2 rounded-md text-sm font-medium ${location.pathname === '/dashboard'
+                      ? 'bg-gray-800 text-white'
+                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                    }`}
+                >
+                  Дашборд
+                </Link>
+              </nav>
+            )}
+          </div>
+
+          <div className="flex items-center">
+            {error && (
+              <div className="hidden md:block mr-4 text-sm text-red-400 bg-red-900 bg-opacity-50 px-3 py-1 rounded">
+                Ошибка: {error}
+              </div>
+            )}
+
+            {isConnected ? (
+              <div className="flex items-center space-x-4">
+                <span className="hidden sm:inline-block text-sm font-medium text-gray-300">
+                  {getShortAddress(account)}
+                </span>
+                <button
+                  onClick={disconnectWallet}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition"
+                >
+                  Отключить
+                </button>
+              </div>
+            ) : (
               <button
-                onClick={disconnectWallet}
-                className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded transition"
+                onClick={connectWallet}
+                className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white text-sm font-medium rounded-lg transition"
               >
-                Отключить
+                Подключить кошелек
               </button>
-            </div>
-          ) : (
-            <button
-              onClick={connectWallet}
-              className="bg-white text-indigo-600 hover:bg-indigo-100 px-4 py-2 rounded font-medium transition"
-            >
-              Подключить кошелек
-            </button>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </header>

@@ -1,7 +1,4 @@
 [build]
-# Команда для сборки фронтенда
 command = "npm run build:frontend"
-# Директория, которая будет публиковаться (относительно корня репозитория)
 publish = "frontend/dist"
-# Директория для функций (если бы у вас были Netlify Functions)
-# functions = "functions"
+# functions = "functions" # Раскомментируйте, если добавите Netlify Functions
