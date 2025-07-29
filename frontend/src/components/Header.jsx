@@ -39,6 +39,16 @@ const Header = () => {
                 >
                   Дашборд
                 </Link>
+                {/* Новый пункт меню "Обмен" */}
+                <Link
+                  to="/swap"
+                  className={`px-3 py-2 rounded-md text-sm font-medium ${location.pathname === '/swap'
+                    ? 'bg-gray-800 text-white'
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                    }`}
+                >
+                  Обмен
+                </Link>
                 {/* Пункт меню админки отображается только для администратора */}
                 {isAdmin && (
                   <Link

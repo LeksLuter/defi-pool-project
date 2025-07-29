@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import PoolList from './PoolList';
 import AddLiquidity from './AddLiquidity';
-import SwapTokens from './SwapTokens';
+// import SwapTokens from './SwapTokens'; // Удаляем импорт
 import Vault from './Vault';
 
 const Dashboard = () => {
@@ -37,15 +37,7 @@ const Dashboard = () => {
             >
               Хранилище токенов
             </button>
-            <button
-              onClick={() => setActiveTab('swap')}
-              className={`px-4 py-2 font-medium rounded-lg transition-colors ${activeTab === 'swap'
-                ? 'bg-gray-700 text-cyan-400 shadow'
-                : 'text-gray-300 hover:text-white hover:bg-gray-700 hover:bg-opacity-30'
-                }`}
-            >
-              Обмен токенов
-            </button>
+            {/* Удаляем вкладку обмена */}
           </div>
         </div>
 
@@ -58,7 +50,7 @@ const Dashboard = () => {
             </div>
           )}
           {activeTab === 'vault' && <Vault />}
-          {activeTab === 'swap' && <SwapTokens />}
+          {/* Удаляем содержимое вкладки обмена */}
         </div>
       </div>
     </div>
