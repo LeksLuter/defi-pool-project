@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import PoolList from './PoolList';
 import Vault from './Vault';
+import WalletTokens from './WalletTokens'; // Новый компонент
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('pools');
@@ -28,7 +29,16 @@ const Dashboard = () => {
           >
             Хранилище токенов
           </button>
-          {/* Убираем вкладку обмена токенов */}
+          {/* Новая вкладка "Кошелёк" */}
+          <button
+            onClick={() => setActiveTab('wallet')}
+            className={`px-4 py-2 font-medium rounded-t-lg ${activeTab === 'wallet'
+              ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400'
+              : 'text-gray-400 hover:text-white'
+              }`}
+          >
+            Кошелёк
+          </button>
         </div>
       </div>
       {/* Контент вкладок */}
@@ -39,7 +49,8 @@ const Dashboard = () => {
           </div>
         )}
         {activeTab === 'vault' && <Vault />}
-        {/* Убираем содержимое вкладки обмена */}
+        {/* Новый контент вкладки "Кошелёк" */}
+        {activeTab === 'wallet' && <WalletTokens />}
       </div>
     </div>
   );
