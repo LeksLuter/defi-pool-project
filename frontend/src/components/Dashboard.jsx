@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
 import PoolList from './PoolList';
-// import AddLiquidity from './AddLiquidity'; // Убираем импорт
-import SwapTokens from './SwapTokens';
 import Vault from './Vault';
 
 const Dashboard = () => {
@@ -30,27 +28,18 @@ const Dashboard = () => {
           >
             Хранилище токенов
           </button>
-          <button
-            onClick={() => setActiveTab('swap')}
-            className={`px-4 py-2 font-medium rounded-t-lg ${activeTab === 'swap'
-              ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400'
-              : 'text-gray-400 hover:text-white'
-              }`}
-          >
-            Обмен токенов
-          </button>
+          {/* Убираем вкладку обмена токенов */}
         </div>
       </div>
       {/* Контент вкладок */}
       <div className="bg-gray-800 bg-opacity-50 rounded-xl p-6 backdrop-blur-sm border border-gray-700">
         {activeTab === 'pools' && (
-          <div className="grid grid-cols-1"> {/* Убираем lg:grid-cols-2 и AddLiquidity */}
+          <div className="grid grid-cols-1">
             <PoolList />
-            {/* <AddLiquidity /> */} {/* Убираем блок добавления ликвидности */}
           </div>
         )}
         {activeTab === 'vault' && <Vault />}
-        {activeTab === 'swap' && <SwapTokens />}
+        {/* Убираем содержимое вкладки обмена */}
       </div>
     </div>
   );

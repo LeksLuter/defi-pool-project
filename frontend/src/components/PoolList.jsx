@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; // Импортируем useNavigate
 import { useWeb3 } from '../context/Web3Context';
-import AddLiquidityModal from './AddLiquidityModal'; // Новый компонент
 
 const PoolList = () => {
   const { provider } = useWeb3();
+  const navigate = useNavigate(); // Хук для навигации
   const [pools, setPools] = useState([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedPool, setSelectedPool] = useState(null);
 
   // Здесь будет логика получения списка пулов
   // Пока что показываем заглушку
@@ -21,14 +20,9 @@ const PoolList = () => {
     }
   }, [provider]);
 
-  const openModal = (pool) => {
-    setSelectedPool(pool);
-    setIsModalOpen(true);
-  };
-
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setSelectedPool(null);
+  // Функция для перехода на страницу обмена
+  const handleSwapClick = () => {
+    navigate('/swap'); // Переход на маршрут обмена
   };
 
   return (
@@ -65,13 +59,14 @@ const PoolList = () => {
                   <div className="text-sm text-gray-900">{pool.fee}</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  <button
-                    onClick={() => openModal(pool)}
-                    className="text-indigo-600 hover:text-indigo-900 mr-3"
-                  >
+                  <button className="text-indigo-600 hover:text-indigo-900 mr-3">
                     Добавить ликвидность
                   </button>
-                  <button className="text-green-600 hover:text-green-900">
+                  {/* Кнопка обмена теперь ведет на отдельную страницу */}
+                  <button
+                    onClick={handleSwapClick}
+                    className="text-green-600 hover:text-green-900"
+                  >
                     Обменять
                   </button>
                 </td>
@@ -80,14 +75,6 @@ const PoolList = () => {
           </tbody>
         </table>
       </div>
-
-      {/* Модальное окно добавления ликвидности */}
-      {isModalOpen && selectedPool && (
-        <AddLiquidityModal
-          pool={selectedPool}
-          onClose={closeModal}
-        />
-      )}
     </div>
   );
 };
