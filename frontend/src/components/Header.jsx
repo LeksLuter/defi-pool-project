@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useWeb3 } from '../context/Web3Context';
 
 const Header = () => {
-  const { account, isConnected, connectWallet, disconnectWallet, error } = useWeb3();
+  const { account, isConnected, isAdmin, connectWallet, disconnectWallet, error } = useWeb3();
   const location = useLocation();
 
   const getShortAddress = (address) => {
@@ -24,8 +24,8 @@ const Header = () => {
                 <Link
                   to="/"
                   className={`px-3 py-2 rounded-md text-sm font-medium ${location.pathname === '/'
-                      ? 'bg-gray-800 text-white'
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                    ? 'bg-gray-800 text-white'
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                     }`}
                 >
                   Главная
@@ -33,25 +33,40 @@ const Header = () => {
                 <Link
                   to="/dashboard"
                   className={`px-3 py-2 rounded-md text-sm font-medium ${location.pathname === '/dashboard'
-                      ? 'bg-gray-800 text-white'
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                    ? 'bg-gray-800 text-white'
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                     }`}
                 >
                   Дашборд
                 </Link>
+                {/* Пункт меню админки отображается только для администратора */}
+                {isAdmin && (
+                  <Link
+                    to="/admin"
+                    className={`px-3 py-2 rounded-md text-sm font-medium ${location.pathname === '/admin'
+                      ? 'bg-gray-800 text-white'
+                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                      }`}
+                  >
+                    Админка
+                  </Link>
+                )}
               </nav>
             )}
           </div>
-
           <div className="flex items-center">
             {error && (
               <div className="hidden md:block mr-4 text-sm text-red-400 bg-red-900 bg-opacity-50 px-3 py-1 rounded">
                 Ошибка: {error}
               </div>
             )}
-
             {isConnected ? (
               <div className="flex items-center space-x-4">
+                {isAdmin && (
+                  <span className="hidden sm:inline-block text-xs font-medium bg-amber-900 text-amber-300 px-2 py-1 rounded">
+                    Админ
+                  </span>
+                )}
                 <span className="hidden sm:inline-block text-sm font-medium text-gray-300">
                   {getShortAddress(account)}
                 </span>

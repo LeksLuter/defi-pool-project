@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 
+// Адрес администратора
+const ADMIN_ADDRESS = "0xe00Fb1e7E860C089503D2c842C683a7A3E57b614";
+
 const Web3Context = createContext();
 
 // Экспортируем хук для удобства использования
@@ -19,6 +22,7 @@ export const Web3Provider = ({ children }) => {
   const [chainId, setChainId] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false); // Новое состояние для проверки админа
 
   const connectWallet = async () => {
     setError(null);
@@ -37,6 +41,8 @@ export const Web3Provider = ({ children }) => {
         setChainId(network.chainId);
         setIsConnected(true);
 
+        // Проверяем, является ли пользователь администратором
+        setIsAdmin(accounts[0].toLowerCase() === ADMIN_ADDRESS.toLowerCase());
       } catch (err) {
         console.error("Ошибка подключения к кошельку:", err);
         setError("Не удалось подключиться к кошельку. Пожалуйста, попробуйте еще раз.");
@@ -53,6 +59,7 @@ export const Web3Provider = ({ children }) => {
     setChainId(null);
     setIsConnected(false);
     setError(null);
+    setIsAdmin(false); // Сбрасываем состояние администратора
   };
 
   useEffect(() => {
@@ -61,6 +68,8 @@ export const Web3Provider = ({ children }) => {
         disconnectWallet();
       } else {
         setAccount(accounts[0]);
+        // Проверяем, является ли пользователь администратором при смене аккаунта
+        setIsAdmin(accounts[0].toLowerCase() === ADMIN_ADDRESS.toLowerCase());
       }
     };
 
@@ -88,6 +97,7 @@ export const Web3Provider = ({ children }) => {
       account,
       chainId,
       isConnected,
+      isAdmin, // Экспортируем состояние администратора
       connectWallet,
       disconnectWallet,
       error
