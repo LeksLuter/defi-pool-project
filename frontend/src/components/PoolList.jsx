@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom'; // Импортируем useNavigate
+import { useNavigate } from 'react-router-dom';
 import { useWeb3 } from '../context/Web3Context';
+import AddLiquidityModal from './AddLiquidityModal'; // Импортируем модальное окно
 
 const PoolList = () => {
   const { provider } = useWeb3();
-  const navigate = useNavigate(); // Хук для навигации
+  const navigate = useNavigate();
   const [pools, setPools] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false); // Состояние для модального окна
+  const [selectedPool, setSelectedPool] = useState(null); // Выбранный пул
 
   // Здесь будет логика получения списка пулов
   // Пока что показываем заглушку
@@ -20,9 +23,21 @@ const PoolList = () => {
     }
   }, [provider]);
 
+  // Функция для открытия модального окна
+  const openAddLiquidityModal = (pool) => {
+    setSelectedPool(pool);
+    setIsModalOpen(true);
+  };
+
+  // Функция для закрытия модального окна
+  const closeAddLiquidityModal = () => {
+    setIsModalOpen(false);
+    setSelectedPool(null);
+  };
+
   // Функция для перехода на страницу обмена
   const handleSwapClick = () => {
-    navigate('/swap'); // Переход на маршрут обмена
+    navigate('/swap');
   };
 
   return (
@@ -59,10 +74,13 @@ const PoolList = () => {
                   <div className="text-sm text-gray-900">{pool.fee}</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  <button className="text-indigo-600 hover:text-indigo-900 mr-3">
+                  {/* Кнопка "Добавить ликвидность" теперь открывает модальное окно */}
+                  <button
+                    onClick={() => openAddLiquidityModal(pool)}
+                    className="text-indigo-600 hover:text-indigo-900 mr-3"
+                  >
                     Добавить ликвидность
                   </button>
-                  {/* Кнопка обмена теперь ведет на отдельную страницу */}
                   <button
                     onClick={handleSwapClick}
                     className="text-green-600 hover:text-green-900"
@@ -75,6 +93,14 @@ const PoolList = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Модальное окно добавления ликвидности */}
+      {isModalOpen && selectedPool && (
+        <AddLiquidityModal
+          pool={selectedPool}
+          onClose={closeAddLiquidityModal}
+        />
+      )}
     </div>
   );
 };
