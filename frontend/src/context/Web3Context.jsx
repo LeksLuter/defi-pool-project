@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 
-// Адрес администратора
-const ADMIN_ADDRESS = "0xe00Fb1e7E860C089503D2c842C683a7A3E57b614";
+// Адреса администраторов
+const ADMIN_ADDRESSES = [
+  "0xe00Fb1e7E860C089503D2c842C683a7A3E57b614",
+  "0x40A7e95F9DaEcDeEA9Ae823aC234af2C616C2D10"
+];
 
 const Web3Context = createContext();
 
@@ -28,9 +31,7 @@ export const Web3Provider = ({ children }) => {
     setError(null);
     if (typeof window.ethereum !== 'undefined') {
       try {
-        const accounts = await window.ethereum.request({
-          method: 'eth_requestAccounts'
-        });
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
         const web3Provider = new ethers.providers.Web3Provider(window.ethereum);
         const web3Signer = web3Provider.getSigner();
         const network = await web3Provider.getNetwork();
@@ -40,9 +41,8 @@ export const Web3Provider = ({ children }) => {
         setAccount(accounts[0]);
         setChainId(network.chainId);
         setIsConnected(true);
-
         // Проверяем, является ли пользователь администратором
-        setIsAdmin(accounts[0].toLowerCase() === ADMIN_ADDRESS.toLowerCase());
+        setIsAdmin(ADMIN_ADDRESSES.some(addr => addr.toLowerCase() === accounts[0].toLowerCase()));
       } catch (err) {
         console.error("Ошибка подключения к кошельку:", err);
         setError("Не удалось подключиться к кошельку. Пожалуйста, попробуйте еще раз.");
@@ -69,7 +69,7 @@ export const Web3Provider = ({ children }) => {
       } else {
         setAccount(accounts[0]);
         // Проверяем, является ли пользователь администратором при смене аккаунта
-        setIsAdmin(accounts[0].toLowerCase() === ADMIN_ADDRESS.toLowerCase());
+        setIsAdmin(ADMIN_ADDRESSES.some(addr => addr.toLowerCase() === accounts[0].toLowerCase()));
       }
     };
 
@@ -82,6 +82,7 @@ export const Web3Provider = ({ children }) => {
       window.ethereum.on('chainChanged', handleChainChanged);
     }
 
+    // Очистка слушателей при размонтировании компонента
     return () => {
       if (window.ethereum) {
         window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
