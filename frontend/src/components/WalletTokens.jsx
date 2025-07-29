@@ -198,6 +198,129 @@ const WalletTokens = () => {
     return addressToPrice;
   };
 
+  // Функция для получения токенов через Etherscan API v2
+  const fetchTokensFromEtherscan = async (account) => {
+    try {
+      const etherscanApiKey = import.meta.env.VITE_ETHERSCAN_API_KEY;
+      if (!etherscanApiKey) {
+        throw new Error('ETHERSCAN_API_KEY не задан в переменных окружения');
+      }
+
+      // Chain ID для Polygon Mainnet
+      const polygonChainId = 137;
+
+      // Запрашиваем токены ERC-20 через Etherscan API v2
+      const response = await fetch(
+        `https://api.etherscan.io/v2/api?chainid=${polygonChainId}&module=account&action=tokentx&address=${account}&apikey=${etherscanApiKey}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Etherscan API error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.status !== "1") {
+        throw new Error(data.message || 'Ошибка при получении данных от Etherscan API');
+      }
+
+      // Фильтруем и группируем токены по адресу контракта
+      const tokenMap = {};
+
+      data.result.forEach(tx => {
+        const contractAddress = tx.contractAddress.toLowerCase();
+
+        // Если токен уже есть в мапе, суммируем баланс
+        if (tokenMap[contractAddress]) {
+          const currentBalance = ethers.BigNumber.from(tokenMap[contractAddress].balance);
+          const txValue = ethers.BigNumber.from(tx.value);
+          tokenMap[contractAddress].balance = currentBalance.add(txValue).toString();
+        } else {
+          // Добавляем новый токен
+          tokenMap[contractAddress] = {
+            contractAddress: contractAddress,
+            tokenName: tx.tokenName,
+            tokenSymbol: tx.tokenSymbol,
+            tokenDecimal: parseInt(tx.tokenDecimal),
+            balance: tx.value
+          };
+        }
+      });
+
+      // Конвертируем в массив и фильтруем токены с нулевым балансом
+      const tokens = Object.values(tokenMap).filter(token => {
+        try {
+          const balanceBN = ethers.BigNumber.from(token.balance);
+          return balanceBN.gt(0);
+        } catch (e) {
+          return false;
+        }
+      });
+
+      return tokens;
+    } catch (error) {
+      console.warn('Не удалось получить токены через Etherscan:', error);
+      throw error;
+    }
+  };
+
+  /*
+  // Закомментированные резервные методы
+  
+  // Функция для получения токенов через Blockscan API (резервный вариант)
+  const fetchTokensFromBlockscan = async (account) => {
+    try {
+      const response = await fetch(
+        `https://api.blockscan.com/api?module=account&action=tokenlist&address=${account}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Blockscan API error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.status !== "1") {
+        throw new Error(data.message || 'Ошибка при получении данных от Blockscan API');
+      }
+
+      return data.result;
+    } catch (error) {
+      console.warn('Не удалось получить токены через Blockscan:', error);
+      throw error;
+    }
+  };
+
+  // Функция для получения токенов через Alchemy API (резервный вариант)
+  const fetchTokensFromAlchemy = async (account, alchemyUrl) => {
+    try {
+      const response = await fetch(alchemyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'alchemy_getTokenBalances',
+          params: [account, 'erc20']
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error.message);
+      }
+
+      return data.result.tokenBalances;
+    } catch (error) {
+      console.warn('Не удалось получить токены через Alchemy:', error);
+      throw error;
+    }
+  };
+  */
+
   useEffect(() => {
     const fetchTokenBalances = async () => {
       if (!provider || !account) {
@@ -214,52 +337,17 @@ const WalletTokens = () => {
         const polBalance = await provider.getBalance(account);
         const formattedPolBalance = ethers.utils.formatEther(polBalance);
 
-        // Используем Alchemy API для получения балансов токенов
-        const alchemyUrl = import.meta.env.VITE_ALCHEMY_POLYGON_MAINNET_URL;
+        // Используем Etherscan API v2 для получения токенов
+        let tokenList = [];
 
-        if (!alchemyUrl) {
-          throw new Error('ALCHEMY_POLYGON_MAINNET_URL не задан в переменных окружения');
+        try {
+          console.log('Попытка получения токенов через Etherscan API v2...');
+          tokenList = await fetchTokensFromEtherscan(account);
+          console.log('Токены получены через Etherscan:', tokenList);
+        } catch (etherscanError) {
+          console.error('Etherscan API недоступен:', etherscanError);
+          throw new Error(`Не удалось получить токены через Etherscan: ${etherscanError.message}`);
         }
-
-        // Запрашиваем балансы токенов через Alchemy API
-        const response = await fetch(alchemyUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'alchemy_getTokenBalances',
-            params: [account, 'erc20']
-          })
-        });
-
-        const data = await response.json();
-
-        if (data.error) {
-          throw new Error(data.error.message);
-        }
-
-        // Фильтруем токены с нулевым балансом сразу после получения от Alchemy
-        const nonZeroTokens = data.result.tokenBalances.filter(token => {
-          try {
-            // Проверяем, что баланс существует и не является нулевой строкой
-            if (!token.tokenBalance || token.tokenBalance === '0x0') {
-              return false;
-            }
-
-            // Конвертируем hex баланс в BigNumber для точной проверки
-            const balanceBN = ethers.BigNumber.from(token.tokenBalance);
-
-            // Возвращаем true только если баланс строго больше 0
-            return balanceBN.gt(ethers.BigNumber.from(0));
-          } catch (e) {
-            // Если не удалось преобразовать баланс, исключаем токен
-            console.warn(`Не удалось обработать баланс токена ${token.contractAddress}:`, e);
-            return false;
-          }
-        });
 
         // Начинаем с POL если баланс больше 0
         let tokenBalances = [];
@@ -274,46 +362,76 @@ const WalletTokens = () => {
           });
         }
 
-        // Получаем метаданные только для токенов с ненулевым балансом
-        const tokenPromises = nonZeroTokens.map(async (tokenInfo) => {
-          try {
-            // Создаем контракт токена
-            const tokenContract = new ethers.Contract(tokenInfo.contractAddress, ERC20_ABI, provider);
-
-            // Получаем символ, имя и десятичные знаки параллельно
-            const [symbol, name, decimals] = await Promise.allSettled([
-              tokenContract.symbol(),
-              tokenContract.name(),
-              tokenContract.decimals()
-            ]);
-
-            // Обрабатываем результаты Promise.allSettled
-            const symbolValue = symbol.status === 'fulfilled' ? symbol.value : 'UNKNOWN';
-            const nameValue = name.status === 'fulfilled' ? name.value : 'Unknown Token';
-            const decimalsValue = decimals.status === 'fulfilled' ? decimals.value : 18;
-
-            // Конвертируем баланс из hex в десятичный формат
-            const balanceBN = ethers.BigNumber.from(tokenInfo.tokenBalance);
-            const formattedBalance = ethers.utils.formatUnits(balanceBN, decimalsValue);
-
-            // Дополнительная проверка: если после форматирования баланс равен 0, исключаем токен
-            if (parseFloat(formattedBalance) <= 0) {
-              return null;
+        // Получаем метаданные и форматируем балансы для токенов из Etherscan
+        const tokenPromises = tokenList
+          .filter(token => {
+            try {
+              const balanceBN = ethers.BigNumber.from(token.balance);
+              return balanceBN.gt(0);
+            } catch (e) {
+              return false;
             }
+          })
+          .map(async (tokenInfo) => {
+            try {
+              // Создаем контракт токена для уточнения метаданных
+              const tokenContract = new ethers.Contract(tokenInfo.contractAddress, ERC20_ABI, provider);
 
-            return {
-              address: tokenInfo.contractAddress,
-              symbol: symbolValue,
-              name: nameValue,
-              balance: formattedBalance,
-              rawBalance: balanceBN.toString(),
-              decimals: decimalsValue
-            };
-          } catch (tokenError) {
-            console.warn(`Ошибка при получении данных токена ${tokenInfo.contractAddress}:`, tokenError);
-            return null;
-          }
-        });
+              // Получаем символ, имя и десятичные знаки параллельно
+              const [symbol, name, decimals] = await Promise.allSettled([
+                tokenContract.symbol(),
+                tokenContract.name(),
+                tokenContract.decimals()
+              ]);
+
+              // Обрабатываем результаты Promise.allSettled
+              const symbolValue = symbol.status === 'fulfilled' ? symbol.value : tokenInfo.tokenSymbol || 'UNKNOWN';
+              const nameValue = name.status === 'fulfilled' ? name.value : tokenInfo.tokenName || 'Unknown Token';
+              const decimalsValue = decimals.status === 'fulfilled' ? decimals.value : tokenInfo.tokenDecimal || 18;
+
+              // Конвертируем баланс из smallest unit в десятичный формат
+              const balanceBN = ethers.BigNumber.from(tokenInfo.balance);
+              const formattedBalance = ethers.utils.formatUnits(balanceBN, decimalsValue);
+
+              // Дополнительная проверка: если после форматирования баланс равен 0, исключаем токен
+              if (parseFloat(formattedBalance) <= 0) {
+                return null;
+              }
+
+              return {
+                address: tokenInfo.contractAddress,
+                symbol: symbolValue,
+                name: nameValue,
+                balance: formattedBalance,
+                rawBalance: balanceBN.toString(),
+                decimals: decimalsValue
+              };
+            } catch (tokenError) {
+              console.warn(`Ошибка при обработке данных токена ${tokenInfo.contractAddress}:`, tokenError);
+
+              // Даже в случае ошибки пытаемся использовать данные из Etherscan
+              try {
+                const balanceBN = ethers.BigNumber.from(tokenInfo.balance);
+                const formattedBalance = ethers.utils.formatUnits(balanceBN, tokenInfo.tokenDecimal || 18);
+
+                if (parseFloat(formattedBalance) <= 0) {
+                  return null;
+                }
+
+                return {
+                  address: tokenInfo.contractAddress,
+                  symbol: tokenInfo.tokenSymbol || 'UNKNOWN',
+                  name: tokenInfo.tokenName || 'Unknown Token',
+                  balance: formattedBalance,
+                  rawBalance: balanceBN.toString(),
+                  decimals: tokenInfo.tokenDecimal || 18
+                };
+              } catch (formatError) {
+                console.warn(`Ошибка при форматировании баланса токена ${tokenInfo.contractAddress}:`, formatError);
+                return null;
+              }
+            }
+          });
 
         // Ждем завершения всех запросов метаданных
         const tokenResults = await Promise.all(tokenPromises);
