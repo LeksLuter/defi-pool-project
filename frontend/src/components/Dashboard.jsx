@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import PoolList from './PoolList';
-import AddLiquidity from './AddLiquidity';
 import SwapTokens from './SwapTokens';
 import Vault from './Vault';
-import CreatePoolForm from './CreatePoolForm'; // Импортируем компонент создания пула
+import CreatePoolForm from './CreatePoolForm'; // Оставляем создание пула
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('pools');
@@ -45,13 +44,13 @@ const Dashboard = () => {
       {/* Контент вкладок */}
       <div className="bg-gray-800 bg-opacity-50 rounded-xl p-6 backdrop-blur-sm border border-gray-700">
         {activeTab === 'pools' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1"> {/* Убираем lg:grid-cols-2 */}
             <div className="space-y-8">
               <PoolList />
-              {/* Возвращаем блок создания пула */}
+              {/* Оставляем только список пулов и создание пула */}
               <CreatePoolForm />
             </div>
-            <AddLiquidity />
+            {/* Убираем отдельный блок AddLiquidity */}
           </div>
         )}
         {activeTab === 'vault' && <Vault />}
