@@ -12,13 +12,19 @@ const ERC20_ABI = [
 // Карта адресов токенов Polygon в CoinGecko ID
 const TOKEN_ADDRESS_TO_COINGECKO_ID = {
   '0x0000000000000000000000000000000000000000': 'matic-network', // POL (ранее MATIC)
-  // Добавьте сюда другие токены по необходимости
+  // Примеры популярных токенов на Polygon - добавьте по необходимости
+  // '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619': 'weth', // WETH
+  // '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 'usd-coin', // USDC
+  // '0xc2132d05d31c914a87c6611c10748aeb04b58e8f': 'tether', // USDT
 };
 
 // Карта адресов токенов Polygon в CoinMarketCap ID
 const TOKEN_ADDRESS_TO_CMC_ID = {
   '0x0000000000000000000000000000000000000000': 3890, // POL (ранее MATIC)
-  // Добавьте сюда другие токены по необходимости
+  // Примеры популярных токенов на Polygon - добавьте по необходимости
+  // '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619': 2396, // WETH
+  // '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 3408, // USDC
+  // '0xc2132d05d31c914a87c6611c10748aeb04b58e8f': 825, // USDT
 };
 
 const WalletTokens = () => {
@@ -192,59 +198,6 @@ const WalletTokens = () => {
     return addressToPrice;
   };
 
-  // Функция для получения токенов через Blockscan API
-  const fetchTokensFromBlockscan = async (account) => {
-    try {
-      const response = await fetch(
-        `https://api.blockscan.com/api?module=account&action=tokenlist&address=${account}`
-      );
-
-      if (!response.ok) {
-        throw new Error(`Blockscan API error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.status !== "1") {
-        throw new Error(data.message || 'Ошибка при получении данных от Blockscan API');
-      }
-
-      return data.result;
-    } catch (error) {
-      console.warn('Не удалось получить токены через Blockscan:', error);
-      throw error;
-    }
-  };
-
-  // Функция для получения токенов через Alchemy API (резервный вариант)
-  const fetchTokensFromAlchemy = async (account, alchemyUrl) => {
-    try {
-      const response = await fetch(alchemyUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'alchemy_getTokenBalances',
-          params: [account, 'erc20']
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.error) {
-        throw new Error(data.error.message);
-      }
-
-      return data.result.tokenBalances;
-    } catch (error) {
-      console.warn('Не удалось получить токены через Alchemy:', error);
-      throw error;
-    }
-  };
-
   useEffect(() => {
     const fetchTokenBalances = async () => {
       if (!provider || !account) {
@@ -261,37 +214,52 @@ const WalletTokens = () => {
         const polBalance = await provider.getBalance(account);
         const formattedPolBalance = ethers.utils.formatEther(polBalance);
 
-        let tokenList = [];
+        // Используем Alchemy API для получения балансов токенов
+        const alchemyUrl = import.meta.env.VITE_ALCHEMY_POLYGON_MAINNET_URL;
 
-        // Сначала пробуем получить токены через Blockscan
-        try {
-          console.log('Попытка получения токенов через Blockscan...');
-          tokenList = await fetchTokensFromBlockscan(account);
-          console.log('Токены получены через Blockscan:', tokenList);
-        } catch (blockscanError) {
-          console.warn('Blockscan API недоступен, пробуем Alchemy...', blockscanError);
+        if (!alchemyUrl) {
+          throw new Error('ALCHEMY_POLYGON_MAINNET_URL не задан в переменных окружения');
+        }
 
-          // Если Blockscan не сработал, пробуем Alchemy
+        // Запрашиваем балансы токенов через Alchemy API
+        const response = await fetch(alchemyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'alchemy_getTokenBalances',
+            params: [account, 'erc20']
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data.error.message);
+        }
+
+        // Фильтруем токены с нулевым балансом сразу после получения от Alchemy
+        const nonZeroTokens = data.result.tokenBalances.filter(token => {
           try {
-            const alchemyUrl = import.meta.env.VITE_ALCHEMY_POLYGON_MAINNET_URL;
-            if (!alchemyUrl) {
-              throw new Error('ALCHEMY_POLYGON_MAINNET_URL не задан в переменных окружения');
+            // Проверяем, что баланс существует и не является нулевой строкой
+            if (!token.tokenBalance || token.tokenBalance === '0x0') {
+              return false;
             }
 
-            console.log('Попытка получения токенов через Alchemy...');
-            const alchemyTokens = await fetchTokensFromAlchemy(account, alchemyUrl);
-            console.log('Токены получены через Alchemy:', alchemyTokens);
+            // Конвертируем hex баланс в BigNumber для точной проверки
+            const balanceBN = ethers.BigNumber.from(token.tokenBalance);
 
-            // Преобразуем формат данных Alchemy в формат Blockscan
-            tokenList = alchemyTokens.map(token => ({
-              contractAddress: token.contractAddress,
-              balance: token.tokenBalance,
-              // Другие поля будут получены позже через контракт
-            }));
-          } catch (alchemyError) {
-            throw new Error(`Не удалось получить токены ни через Blockscan, ни через Alchemy: ${alchemyError.message}`);
+            // Возвращаем true только если баланс строго больше 0
+            return balanceBN.gt(ethers.BigNumber.from(0));
+          } catch (e) {
+            // Если не удалось преобразовать баланс, исключаем токен
+            console.warn(`Не удалось обработать баланс токена ${token.contractAddress}:`, e);
+            return false;
           }
-        }
+        });
 
         // Начинаем с POL если баланс больше 0
         let tokenBalances = [];
@@ -306,77 +274,46 @@ const WalletTokens = () => {
           });
         }
 
-        // Фильтруем токены с нулевым балансом и получаем метаданные
-        const tokenPromises = tokenList
-          .filter(token => {
-            // Для Blockscan
-            if (token.hasOwnProperty('balance')) {
-              return parseFloat(token.balance) > 0;
-            }
-            // Для Alchemy
-            if (token.hasOwnProperty('tokenBalance')) {
-              try {
-                if (!token.tokenBalance || token.tokenBalance === '0x0') {
-                  return false;
-                }
-                const balanceBN = ethers.BigNumber.from(token.tokenBalance);
-                return balanceBN.gt(ethers.BigNumber.from(0));
-              } catch (e) {
-                return false;
-              }
-            }
-            return false;
-          })
-          .map(async (tokenInfo) => {
-            try {
-              // Создаем контракт токена для получения дополнительных данных
-              const tokenContract = new ethers.Contract(tokenInfo.contractAddress, ERC20_ABI, provider);
+        // Получаем метаданные только для токенов с ненулевым балансом
+        const tokenPromises = nonZeroTokens.map(async (tokenInfo) => {
+          try {
+            // Создаем контракт токена
+            const tokenContract = new ethers.Contract(tokenInfo.contractAddress, ERC20_ABI, provider);
 
-              // Получаем символ, имя и десятичные знаки параллельно
-              const [symbol, name, decimals] = await Promise.all([
-                tokenContract.symbol().catch(() => tokenInfo.symbol || 'UNKNOWN'),
-                tokenContract.name().catch(() => tokenInfo.name || 'Unknown Token'),
-                tokenContract.decimals().catch(() => {
-                  // Для Blockscan пытаемся получить decimals из данных
-                  if (tokenInfo.decimals) {
-                    return parseInt(tokenInfo.decimals);
-                  }
-                  return 18; // По умолчанию
-                })
-              ]);
+            // Получаем символ, имя и десятичные знаки параллельно
+            const [symbol, name, decimals] = await Promise.allSettled([
+              tokenContract.symbol(),
+              tokenContract.name(),
+              tokenContract.decimals()
+            ]);
 
-              // Обрабатываем баланс в зависимости от источника данных
-              let formattedBalance, balanceBN;
-              if (tokenInfo.balance) {
-                // Формат данных от Blockscan
-                balanceBN = ethers.BigNumber.from(tokenInfo.balance);
-                formattedBalance = ethers.utils.formatUnits(balanceBN, decimals);
-              } else if (tokenInfo.tokenBalance) {
-                // Формат данных от Alchemy
-                balanceBN = ethers.BigNumber.from(tokenInfo.tokenBalance);
-                formattedBalance = ethers.utils.formatUnits(balanceBN, decimals);
-              } else {
-                return null;
-              }
+            // Обрабатываем результаты Promise.allSettled
+            const symbolValue = symbol.status === 'fulfilled' ? symbol.value : 'UNKNOWN';
+            const nameValue = name.status === 'fulfilled' ? name.value : 'Unknown Token';
+            const decimalsValue = decimals.status === 'fulfilled' ? decimals.value : 18;
 
-              // Дополнительная проверка: если после форматирования баланс равен 0, исключаем токен
-              if (parseFloat(formattedBalance) <= 0) {
-                return null;
-              }
+            // Конвертируем баланс из hex в десятичный формат
+            const balanceBN = ethers.BigNumber.from(tokenInfo.tokenBalance);
+            const formattedBalance = ethers.utils.formatUnits(balanceBN, decimalsValue);
 
-              return {
-                address: tokenInfo.contractAddress,
-                symbol: symbol,
-                name: name,
-                balance: formattedBalance,
-                rawBalance: balanceBN.toString(),
-                decimals: decimals
-              };
-            } catch (tokenError) {
-              console.warn(`Ошибка при обработке данных токена ${tokenInfo.contractAddress}:`, tokenError);
+            // Дополнительная проверка: если после форматирования баланс равен 0, исключаем токен
+            if (parseFloat(formattedBalance) <= 0) {
               return null;
             }
-          });
+
+            return {
+              address: tokenInfo.contractAddress,
+              symbol: symbolValue,
+              name: nameValue,
+              balance: formattedBalance,
+              rawBalance: balanceBN.toString(),
+              decimals: decimalsValue
+            };
+          } catch (tokenError) {
+            console.warn(`Ошибка при получении данных токена ${tokenInfo.contractAddress}:`, tokenError);
+            return null;
+          }
+        });
 
         // Ждем завершения всех запросов метаданных
         const tokenResults = await Promise.all(tokenPromises);
@@ -393,7 +330,7 @@ const WalletTokens = () => {
         const tokenPriceMap = {};
         tokenBalances.forEach(token => {
           tokenPriceMap[token.address.toLowerCase()] = {
-            coingeckoId: TOKEN_ADDRESS_TO_COINGECKO_ID[token.address.toLowerCase()],
+            coingeckoId: TOKEN_ADDRESS_TO_COINGECKO_ID[token.address.toLowerCase()] || token.symbol.toLowerCase(),
             cmcId: TOKEN_ADDRESS_TO_CMC_ID[token.address.toLowerCase()]
           };
         });
