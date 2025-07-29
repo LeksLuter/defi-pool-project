@@ -9,11 +9,67 @@ const ERC20_ABI = [
   "function name() view returns (string)"
 ];
 
+// Карта адресов токенов Polygon в CoinGecko ID
+// В реальном приложении эту карту можно получать динамически или расширить
+const TOKEN_ADDRESS_TO_COINGECKO_ID = {
+  '0x0000000000000000000000000000000000000000': 'matic-network', // MATIC
+  '0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0': 'matic-network', // MATIC (если в другом формате)
+  // Добавьте сюда другие токены по необходимости
+  // 'адрес_токена': 'coingecko_id',
+};
+
 const WalletTokens = () => {
   const { provider, account } = useWeb3();
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Функция для получения цены токена через CoinGecko API
+  const fetchTokenPrice = async (tokenId) => {
+    try {
+      const response = await fetch(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${tokenId}&vs_currencies=usd`
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data[tokenId]?.usd || 0;
+    } catch (error) {
+      console.warn(`Не удалось получить цену для токена ${tokenId}:`, error);
+      return 0;
+    }
+  };
+
+  // Функция для получения цен нескольких токенов
+  const fetchMultipleTokenPrices = async (tokenIds) => {
+    if (tokenIds.length === 0) return {};
+
+    try {
+      const idsString = tokenIds.join(',');
+      const response = await fetch(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${idsString}&vs_currencies=usd`
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const prices = {};
+
+      tokenIds.forEach(id => {
+        prices[id] = data[id]?.usd || 0;
+      });
+
+      return prices;
+    } catch (error) {
+      console.warn('Не удалось получить цены для токенов:', error);
+      return tokenIds.reduce((acc, id) => ({ ...acc, [id]: 0 }), {});
+    }
+  };
 
   useEffect(() => {
     const fetchTokenBalances = async () => {
@@ -59,26 +115,35 @@ const WalletTokens = () => {
           throw new Error(data.error.message);
         }
 
-        const tokenBalances = [{
+        // Начинаем с MATIC
+        let tokenBalances = [{
           address: '0x0000000000000000000000000000000000000000', // Адрес для нативного токена
           symbol: 'MATIC',
           name: 'Matic Token',
           balance: formattedMaticBalance,
           rawBalance: maticBalance,
-          decimals: 18,
-          price: 0, // Будем заполнять позже
-          value: 0  // Будем заполнять позже
+          decimals: 18
         }];
 
         // Фильтруем токены с нулевым балансом
-        const nonZeroTokens = data.result.tokenBalances.filter(token =>
-          token.tokenBalance !== '0x0' &&
-          token.tokenBalance !== '0x0000000000000000000000000000000000000000000000000000000000000000' &&
-          parseInt(token.tokenBalance, 16) > 0 // Дополнительная проверка на больше 0
-        );
+        const nonZeroTokens = data.result.tokenBalances.filter(token => {
+          // Проверяем, что баланс не нулевой
+          if (token.tokenBalance === '0x0' ||
+            token.tokenBalance === '0x0000000000000000000000000000000000000000000000000000000000000000') {
+            return false;
+          }
+
+          // Дополнительная проверка на больше 0
+          try {
+            const balanceBN = ethers.BigNumber.from(token.tokenBalance);
+            return balanceBN.gt(0);
+          } catch {
+            return false;
+          }
+        });
 
         // Получаем метаданные для каждого токена
-        for (const tokenInfo of nonZeroTokens) {
+        const tokenPromises = nonZeroTokens.map(async (tokenInfo) => {
           try {
             // Создаем контракт токена
             const tokenContract = new ethers.Contract(tokenInfo.contractAddress, ERC20_ABI, provider);
@@ -94,38 +159,47 @@ const WalletTokens = () => {
             const balanceBN = ethers.BigNumber.from(tokenInfo.tokenBalance);
             const formattedBalance = ethers.utils.formatUnits(balanceBN, decimals);
 
-            tokenBalances.push({
+            return {
               address: tokenInfo.contractAddress,
               symbol: symbol,
               name: name,
               balance: formattedBalance,
               rawBalance: balanceBN.toString(),
-              decimals: decimals,
-              price: 0, // Будем заполнять позже
-              value: 0  // Будем заполнять позже
-            });
+              decimals: decimals
+            };
           } catch (tokenError) {
             console.warn(`Ошибка при получении данных токена ${tokenInfo.contractAddress}:`, tokenError);
+            return null;
           }
-        }
+        });
 
-        // Получаем цены токенов (в реальном приложении можно использовать CoinGecko API)
-        // Для демонстрации используем фиктивные цены
-        const tokensWithPrices = await Promise.all(tokenBalances.map(async (token) => {
-          let price = 0;
+        // Ждем завершения всех запросов метаданных
+        const tokenResults = await Promise.all(tokenPromises);
 
-          // Для MATIC используем реальную цену (если есть API)
-          if (token.symbol === 'MATIC') {
-            // В реальном приложении здесь будет запрос к API для получения цены MATIC
-            price = 0.75; // Пример цены
-          }
-          // Для других токенов можно использовать различные методы получения цены
-          else {
-            // В реальном приложении здесь будет логика получения цены для ERC20 токенов
-            // Например, через CoinGecko API или другие источники
-            price = Math.random() * 10; // Временная фиктивная цена для демонстрации
-          }
+        // Фильтруем успешные результаты
+        const validTokens = tokenResults.filter(token => token !== null);
 
+        // Добавляем валидные токены к общему списку
+        tokenBalances = [...tokenBalances, ...validTokens];
+
+        // Собираем CoinGecko ID для всех токенов
+        const tokenIds = tokenBalances
+          .map(token => TOKEN_ADDRESS_TO_COINGECKO_ID[token.address.toLowerCase()] || token.symbol.toLowerCase())
+          .filter(id => id); // Фильтруем пустые значения
+
+        // Получаем цены для всех токенов
+        const prices = await fetchMultipleTokenPrices(tokenIds);
+
+        // Добавляем цены и стоимость к токенам
+        const tokensWithPrices = tokenBalances.map(token => {
+          // Определяем CoinGecko ID для токена
+          const tokenId = TOKEN_ADDRESS_TO_COINGECKO_ID[token.address.toLowerCase()] ||
+            token.symbol.toLowerCase();
+
+          // Получаем цену (0 если не найдена)
+          const price = prices[tokenId] || 0;
+
+          // Рассчитываем стоимость
           const value = parseFloat(token.balance) * price;
 
           return {
@@ -133,7 +207,7 @@ const WalletTokens = () => {
             price: price.toFixed(4),
             value: value.toFixed(2)
           };
-        }));
+        });
 
         setTokens(tokensWithPrices);
       } catch (err) {
@@ -187,9 +261,25 @@ const WalletTokens = () => {
     );
   }
 
+  // Рассчитываем общую стоимость портфеля
+  const totalValue = tokens.reduce((sum, token) => {
+    return sum + parseFloat(token.value || 0);
+  }, 0);
+
   return (
     <div>
       <h2 className="text-2xl font-bold text-white mb-6">Токены кошелька</h2>
+
+      {/* Отображение общей стоимости */}
+      {tokens.length > 0 && (
+        <div className="mb-6 p-4 bg-gradient-to-r from-gray-800 to-gray-900 rounded-xl border border-gray-700">
+          <div className="flex justify-between items-center">
+            <span className="text-gray-400">Общая стоимость портфеля:</span>
+            <span className="text-2xl font-bold text-cyan-400">${totalValue.toFixed(2)}</span>
+          </div>
+        </div>
+      )}
+
       {tokens.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-gray-400 mb-4">
@@ -253,10 +343,10 @@ const WalletTokens = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-cyan-400">
-                      ${token.price}
+                      ${parseFloat(token.price).toFixed(4)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-400">
-                      ${token.value}
+                      ${parseFloat(token.value).toFixed(2)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
