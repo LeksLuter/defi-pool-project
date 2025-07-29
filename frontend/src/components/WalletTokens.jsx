@@ -42,7 +42,7 @@ const WalletTokens = () => {
       return data[tokenId]?.usd || 0;
     } catch (error) {
       console.warn(`Не удалось получить цену для токена ${tokenId} через CoinGecko:`, error);
-      return null; // Возвращаем null для обозначения ошибки
+      return null;
     }
   };
 
@@ -73,7 +73,7 @@ const WalletTokens = () => {
       return tokenData?.quote?.USD?.price || 0;
     } catch (error) {
       console.warn(`Не удалось получить цену для токена ${tokenId} через CoinMarketCap:`, error);
-      return null; // Возвращаем null для обозначения ошибки
+      return null;
     }
   };
 
@@ -101,7 +101,7 @@ const WalletTokens = () => {
       return prices;
     } catch (error) {
       console.warn('Не удалось получить цены для токенов через CoinGecko:', error);
-      return null; // Возвращаем null для обозначения ошибки
+      return null;
     }
   };
 
@@ -141,7 +141,7 @@ const WalletTokens = () => {
       return prices;
     } catch (error) {
       console.warn('Не удалось получить цены для токенов через CoinMarketCap:', error);
-      return null; // Возвращаем null для обозначения ошибки
+      return null;
     }
   };
 
@@ -235,17 +235,7 @@ const WalletTokens = () => {
           throw new Error(data.error.message);
         }
 
-        // Начинаем с POL
-        let tokenBalances = [{
-          address: '0x0000000000000000000000000000000000000000', // Адрес для нативного токена
-          symbol: 'POL',
-          name: 'Polygon Ecosystem Token',
-          balance: formattedPolBalance,
-          rawBalance: polBalance,
-          decimals: 18
-        }];
-
-        // Тщательно фильтруем токены с нулевым балансом
+        // Фильтруем токены с нулевым балансом сразу после получения от Alchemy
         const nonZeroTokens = data.result.tokenBalances.filter(token => {
           try {
             // Проверяем, что баланс существует и не является нулевой строкой
@@ -265,7 +255,20 @@ const WalletTokens = () => {
           }
         });
 
-        // Получаем метаданные для каждого токена
+        // Начинаем с POL если баланс больше 0
+        let tokenBalances = [];
+        if (parseFloat(formattedPolBalance) > 0) {
+          tokenBalances.push({
+            address: '0x0000000000000000000000000000000000000000', // Адрес для нативного токена
+            symbol: 'POL',
+            name: 'Polygon Ecosystem Token',
+            balance: formattedPolBalance,
+            rawBalance: polBalance,
+            decimals: 18
+          });
+        }
+
+        // Получаем метаданные только для токенов с ненулевым балансом
         const tokenPromises = nonZeroTokens.map(async (tokenInfo) => {
           try {
             // Создаем контракт токена
