@@ -369,6 +369,12 @@ const WalletTokens = () => {
     }
   };
 
+  // Функция для форматирования адреса кошелька
+  const formatAddress = (address) => {
+    if (!address) return '';
+    return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -398,7 +404,23 @@ const WalletTokens = () => {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-white mb-6">Токены кошелька</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+        <h2 className="text-2xl font-bold text-white">Токены кошелька</h2>
+        {account && (
+          <div className="mt-2 sm:mt-0 flex items-center">
+            <span className="text-gray-400 text-sm mr-2">{formatAddress(account)}</span>
+            <button
+              onClick={() => copyToClipboard(account, 'Адрес кошелька')}
+              className="p-1 rounded hover:bg-gray-700 transition"
+              title="Скопировать адрес"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Отображение общей стоимости */}
       {tokens.length > 0 && (
