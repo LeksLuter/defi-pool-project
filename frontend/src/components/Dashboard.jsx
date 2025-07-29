@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import PoolList from './PoolList';
+import AddLiquidity from './AddLiquidity';
+import SwapTokens from './SwapTokens';
 import Vault from './Vault';
-import WalletTokens from './WalletTokens'; // Новый компонент
+import CreatePoolForm from './CreatePoolForm'; // Импортируем компонент создания пула
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('pools');
@@ -29,28 +31,31 @@ const Dashboard = () => {
           >
             Хранилище токенов
           </button>
-          {/* Новая вкладка "Кошелёк" */}
           <button
-            onClick={() => setActiveTab('wallet')}
-            className={`px-4 py-2 font-medium rounded-t-lg ${activeTab === 'wallet'
+            onClick={() => setActiveTab('swap')}
+            className={`px-4 py-2 font-medium rounded-t-lg ${activeTab === 'swap'
               ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400'
               : 'text-gray-400 hover:text-white'
               }`}
           >
-            Кошелёк
+            Обмен токенов
           </button>
         </div>
       </div>
       {/* Контент вкладок */}
       <div className="bg-gray-800 bg-opacity-50 rounded-xl p-6 backdrop-blur-sm border border-gray-700">
         {activeTab === 'pools' && (
-          <div className="grid grid-cols-1">
-            <PoolList />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="space-y-8">
+              <PoolList />
+              {/* Возвращаем блок создания пула */}
+              <CreatePoolForm />
+            </div>
+            <AddLiquidity />
           </div>
         )}
         {activeTab === 'vault' && <Vault />}
-        {/* Новый контент вкладки "Кошелёк" */}
-        {activeTab === 'wallet' && <WalletTokens />}
+        {activeTab === 'swap' && <SwapTokens />}
       </div>
     </div>
   );
