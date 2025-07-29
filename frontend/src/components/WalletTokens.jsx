@@ -9,22 +9,23 @@ const ERC20_ABI = [
   "function name() view returns (string)"
 ];
 
+// Адреса токенов из контекста (из файла CreatePoolForm.jsx)
+const TOKEN_ADDRESSES = [
+  { address: "0xTokenA", name: "TokenA", symbol: "TKA" },
+  { address: "0xTokenB", name: "TokenB", symbol: "TKB" },
+  { address: "0xTokenC", name: "TokenC", symbol: "TKC" }
+];
+
 // Карта адресов токенов Polygon в CoinGecko ID
 const TOKEN_ADDRESS_TO_COINGECKO_ID = {
   '0x0000000000000000000000000000000000000000': 'matic-network', // POL (ранее MATIC)
-  // Примеры популярных токенов на Polygon - добавьте по необходимости
-  // '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619': 'weth', // WETH
-  // '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 'usd-coin', // USDC
-  // '0xc2132d05d31c914a87c6611c10748aeb04b58e8f': 'tether', // USDT
+  // Добавьте сюда другие токены по необходимости
 };
 
 // Карта адресов токенов Polygon в CoinMarketCap ID
 const TOKEN_ADDRESS_TO_CMC_ID = {
   '0x0000000000000000000000000000000000000000': 3890, // POL (ранее MATIC)
-  // Примеры популярных токенов на Polygon - добавьте по необходимости
-  // '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619': 2396, // WETH
-  // '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 3408, // USDC
-  // '0xc2132d05d31c914a87c6611c10748aeb04b58e8f': 825, // USDT
+  // Добавьте сюда другие токены по необходимости
 };
 
 const WalletTokens = () => {
@@ -288,9 +289,21 @@ const WalletTokens = () => {
             ]);
 
             // Обрабатываем результаты Promise.allSettled
-            const symbolValue = symbol.status === 'fulfilled' ? symbol.value : 'UNKNOWN';
-            const nameValue = name.status === 'fulfilled' ? name.value : 'Unknown Token';
+            let symbolValue = symbol.status === 'fulfilled' ? symbol.value : 'UNKNOWN';
+            let nameValue = name.status === 'fulfilled' ? name.value : 'Unknown Token';
             const decimalsValue = decimals.status === 'fulfilled' ? decimals.value : 18;
+
+            // Если не удалось получить символ или имя, ищем в TOKEN_ADDRESSES
+            if (symbolValue === 'UNKNOWN' || nameValue === 'Unknown Token') {
+              const tokenData = TOKEN_ADDRESSES.find(
+                t => t.address.toLowerCase() === tokenInfo.contractAddress.toLowerCase()
+              );
+
+              if (tokenData) {
+                if (symbolValue === 'UNKNOWN') symbolValue = tokenData.symbol;
+                if (nameValue === 'Unknown Token') nameValue = tokenData.name;
+              }
+            }
 
             // Конвертируем баланс из hex в десятичный формат
             const balanceBN = ethers.BigNumber.from(tokenInfo.tokenBalance);
@@ -311,6 +324,37 @@ const WalletTokens = () => {
             };
           } catch (tokenError) {
             console.warn(`Ошибка при получении данных токена ${tokenInfo.contractAddress}:`, tokenError);
+
+            // Даже в случае ошибки пытаемся получить данные из TOKEN_ADDRESSES
+            const tokenData = TOKEN_ADDRESSES.find(
+              t => t.address.toLowerCase() === tokenInfo.contractAddress.toLowerCase()
+            );
+
+            if (tokenData) {
+              try {
+                // Конвертируем баланс из hex в десятичный формат
+                const balanceBN = ethers.BigNumber.from(tokenInfo.tokenBalance);
+                const formattedBalance = ethers.utils.formatUnits(balanceBN, 18); // Используем 18 как дефолтные decimals
+
+                // Дополнительная проверка: если после форматирования баланс равен 0, исключаем токен
+                if (parseFloat(formattedBalance) <= 0) {
+                  return null;
+                }
+
+                return {
+                  address: tokenInfo.contractAddress,
+                  symbol: tokenData.symbol,
+                  name: tokenData.name,
+                  balance: formattedBalance,
+                  rawBalance: balanceBN.toString(),
+                  decimals: 18
+                };
+              } catch (formatError) {
+                console.warn(`Ошибка при форматировании баланса токена ${tokenInfo.contractAddress}:`, formatError);
+                return null;
+              }
+            }
+
             return null;
           }
         });
