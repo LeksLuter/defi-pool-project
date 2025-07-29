@@ -1,4 +1,9 @@
 [build]
-command = "npm run build:frontend"
+command = "cd frontend && npm install --legacy-peer-deps && npm run build"
 publish = "frontend/dist"
-# functions = "functions" # Раскомментируйте, если добавите Netlify Functions
+
+# Настройка перенаправления для клиентского роутинга
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

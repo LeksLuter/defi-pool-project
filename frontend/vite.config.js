@@ -12,5 +12,7 @@ export default defineConfig({
   build: {
     outDir: 'dist', // Сборка будет в frontend/dist
     emptyOutDir: true
-  }
+  },
+  // Добавим базовый путь, если деплоим не в корень (обычно не нужно для Netlify)
+  // base: '/', 
 })
