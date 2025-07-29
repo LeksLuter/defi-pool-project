@@ -4,8 +4,7 @@
   "description": "DeFi пул ликвидности + хранилище токенов",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "dev": "vite",
+    "dev": "vite", // Исправлено: был дубликат
     "build": "vite build",
     "preview": "vite preview",
     "test": "npx hardhat test",
