@@ -1,15 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
 
-// Пример адресов токенов (в реальном приложении их можно получить из контракта фабрики или другого источника)
-const TOKEN_ADDRESSES = [
-  { address: "0xTokenA", name: "TokenA", symbol: "TKA" },
-  { address: "0xTokenB", name: "TokenB", symbol: "TKB" },
-  { address: "0xTokenC", name: "TokenC", symbol: "TKC" }
-];
-
-// ABI для ERC20 токенов (минимальный набор функций)
+// ABI для ERC20 токенов (минимальный набор функций для получения баланса)
 const ERC20_ABI = [
   "function balanceOf(address owner) view returns (uint256)",
   "function decimals() view returns (uint8)",
@@ -23,6 +16,22 @@ const WalletTokens = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Список токенов для отображения (в реальном приложении можно получать динамически)
+  // Используем адреса из переменных окружения
+  const tokenList = [
+    {
+      address: import.meta.env.VITE_TOKEN_A_ADDRESS || '0x0000000000000000000000000000000000000000',
+      name: 'Token A',
+      symbol: 'TKA'
+    },
+    {
+      address: import.meta.env.VITE_TOKEN_B_ADDRESS || '0x0000000000000000000000000000000000000000',
+      name: 'Token B',
+      symbol: 'TKB'
+    },
+    // Можно добавить больше токенов по необходимости
+  ];
+
   useEffect(() => {
     const fetchTokenBalances = async () => {
       if (!provider || !account) {
@@ -35,23 +44,35 @@ const WalletTokens = () => {
       setError(null);
 
       try {
-        const tokenBalances = [];
+        // Получаем баланс MATIC напрямую через провайдер
+        const maticBalance = await provider.getBalance(account);
+        const formattedMaticBalance = ethers.utils.formatEther(maticBalance);
+
+        const tokenBalances = [{
+          address: '0x0000000000000000000000000000000000000000', // Адрес для нативного токена
+          symbol: 'MATIC',
+          name: 'Matic Token',
+          balance: formattedMaticBalance,
+          rawBalance: maticBalance,
+          decimals: 18
+        }];
 
         // Проходим по всем токенам и получаем баланс
-        for (const tokenInfo of TOKEN_ADDRESSES) {
-          try {
-            const tokenContract = new ethers.Contract(
-              tokenInfo.address,
-              ERC20_ABI,
-              provider
-            );
+        for (const tokenInfo of tokenList) {
+          // Пропускаем токены без адреса
+          if (!tokenInfo.address || tokenInfo.address === '0x0000000000000000000000000000000000000000' || tokenInfo.address === 'Не задан') {
+            continue;
+          }
 
-            // Получаем символ, имя и количество знаков после запятой
+          try {
+            const tokenContract = new ethers.Contract(tokenInfo.address, ERC20_ABI, provider);
+
+            // Получаем символ, имя, десятичные знаки и баланс параллельно
             const [symbol, name, decimals, balance] = await Promise.all([
-              tokenContract.symbol(),
-              tokenContract.name(),
-              tokenContract.decimals(),
-              tokenContract.balanceOf(account)
+              tokenContract.symbol().catch(() => tokenInfo.symbol || 'UNKNOWN'),
+              tokenContract.name().catch(() => tokenInfo.name || 'Unknown Token'),
+              tokenContract.decimals().catch(() => 18),
+              tokenContract.balanceOf(account).catch(() => ethers.BigNumber.from(0))
             ]);
 
             // Форматируем баланс с учетом десятичных знаков
@@ -70,8 +91,8 @@ const WalletTokens = () => {
             // Добавляем токен с нулевым балансом, если не удалось получить данные
             tokenBalances.push({
               address: tokenInfo.address,
-              symbol: tokenInfo.symbol,
-              name: tokenInfo.name,
+              symbol: tokenInfo.symbol || 'UNKNOWN',
+              name: tokenInfo.name || 'Unknown Token',
               balance: "0",
               rawBalance: "0",
               decimals: 18
@@ -116,7 +137,6 @@ const WalletTokens = () => {
   return (
     <div>
       <h2 className="text-2xl font-bold text-white mb-6">Токены кошелька</h2>
-
       {tokens.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-gray-400 mb-4">
@@ -132,27 +152,26 @@ const WalletTokens = () => {
           {tokens.map((token, index) => (
             <div
               key={`${token.address}-${index}`}
-              className="bg-gray-700 bg-opacity-50 rounded-xl p-4 backdrop-blur-sm border border-gray-600 hover:border-cyan-500 transition-all"
+              className="bg-gray-800 bg-opacity-50 p-4 rounded-xl backdrop-blur-sm border border-gray-700 hover:border-cyan-500 transition"
             >
-              <div className="flex items-start">
-                <div className="flex-shrink-0 h-12 w-12 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center text-white font-bold">
-                  {token.symbol.charAt(0)}
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">{token.symbol}</h3>
+                  <p className="text-gray-400 text-sm">{token.name}</p>
                 </div>
-                <div className="ml-4 flex-1">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-medium text-white">{token.name}</h3>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-cyan-900 text-cyan-300">
-                      {token.symbol}
-                    </span>
+                {token.address !== '0x0000000000000000000000000000000000000000' && (
+                  <div className="bg-gray-700 px-2 py-1 rounded text-xs text-gray-300">
+                    ERC-20
                   </div>
-                  <p className="text-sm text-gray-400 mt-1 truncate">{token.address}</p>
-                  <div className="mt-2">
-                    <p className="text-xl font-semibold text-white">
-                      {parseFloat(token.balance).toFixed(4)}
-                    </p>
-                    <p className="text-xs text-gray-500">Баланс</p>
-                  </div>
-                </div>
+                )}
+              </div>
+              <div className="mt-3">
+                <p className="text-2xl font-bold text-cyan-400">{token.balance}</p>
+                <p className="text-gray-500 text-xs mt-1 truncate">
+                  {token.address === '0x0000000000000000000000000000000000000000'
+                    ? 'Нативный токен сети'
+                    : token.address}
+                </p>
               </div>
             </div>
           ))}
