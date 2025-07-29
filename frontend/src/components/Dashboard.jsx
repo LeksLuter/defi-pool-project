@@ -1,59 +1,56 @@
 import React, { useState } from 'react';
 import PoolList from './PoolList';
-import AddLiquidity from './AddLiquidity';
-import CreatePoolForm from './CreatePoolForm'; // Новый компонент
+// import AddLiquidity from './AddLiquidity'; // Убираем импорт
+import SwapTokens from './SwapTokens';
 import Vault from './Vault';
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('pools');
 
   return (
-    <div className="min-h-screen py-8 px-4 bg-gradient-to-br from-gray-900 to-indigo-900">
-      <div className="container mx-auto">
-        {/* Заголовок дашборда */}
-        <div className="text-center mb-10">
-          <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">Дашборд</h1>
-          <p className="text-lg text-gray-300">Управляйте своими активами и ликвидностью</p>
+    <div className="container mx-auto py-8 px-4">
+      {/* Навигация по вкладкам */}
+      <div className="mb-8">
+        <div className="flex flex-wrap gap-2 border-b border-gray-700">
+          <button
+            onClick={() => setActiveTab('pools')}
+            className={`px-4 py-2 font-medium rounded-t-lg ${activeTab === 'pools'
+              ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400'
+              : 'text-gray-400 hover:text-white'
+              }`}
+          >
+            Пулы ликвидности
+          </button>
+          <button
+            onClick={() => setActiveTab('vault')}
+            className={`px-4 py-2 font-medium rounded-t-lg ${activeTab === 'vault'
+              ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400'
+              : 'text-gray-400 hover:text-white'
+              }`}
+          >
+            Хранилище токенов
+          </button>
+          <button
+            onClick={() => setActiveTab('swap')}
+            className={`px-4 py-2 font-medium rounded-t-lg ${activeTab === 'swap'
+              ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400'
+              : 'text-gray-400 hover:text-white'
+              }`}
+          >
+            Обмен токенов
+          </button>
         </div>
-
-        {/* Навигация по вкладкам */}
-        <div className="mb-8">
-          <div className="flex flex-wrap gap-2 p-1 bg-gray-800 bg-opacity-50 rounded-xl backdrop-blur-sm border border-gray-700 inline-flex">
-            <button
-              onClick={() => setActiveTab('pools')}
-              className={`px-4 py-2 font-medium rounded-lg transition-colors ${activeTab === 'pools'
-                ? 'bg-gray-700 text-cyan-400 shadow'
-                : 'text-gray-300 hover:text-white hover:bg-gray-700 hover:bg-opacity-30'
-                }`}
-            >
-              Пулы ликвидности
-            </button>
-            <button
-              onClick={() => setActiveTab('vault')}
-              className={`px-4 py-2 font-medium rounded-lg transition-colors ${activeTab === 'vault'
-                ? 'bg-gray-700 text-cyan-400 shadow'
-                : 'text-gray-300 hover:text-white hover:bg-gray-700 hover:bg-opacity-30'
-                }`}
-            >
-              Хранилище токенов
-            </button>
+      </div>
+      {/* Контент вкладок */}
+      <div className="bg-gray-800 bg-opacity-50 rounded-xl p-6 backdrop-blur-sm border border-gray-700">
+        {activeTab === 'pools' && (
+          <div className="grid grid-cols-1"> {/* Убираем lg:grid-cols-2 и AddLiquidity */}
+            <PoolList />
+            {/* <AddLiquidity /> */} {/* Убираем блок добавления ликвидности */}
           </div>
-        </div>
-
-        {/* Контент вкладок */}
-        <div className="bg-gray-800 bg-opacity-50 rounded-2xl p-6 backdrop-blur-sm border border-gray-700 shadow-xl">
-          {activeTab === 'pools' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="space-y-8">
-                <PoolList />
-                {/* Блок создания пула теперь здесь */}
-                <CreatePoolForm />
-              </div>
-              <AddLiquidity />
-            </div>
-          )}
-          {activeTab === 'vault' && <Vault />}
-        </div>
+        )}
+        {activeTab === 'vault' && <Vault />}
+        {activeTab === 'swap' && <SwapTokens />}
       </div>
     </div>
   );
