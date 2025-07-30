@@ -5,12 +5,19 @@ import './index.css';
 import { Web3Provider } from './context/Web3Context';
 import { TokenProvider } from './context/TokenContext'; // Импортируем новый провайдер
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <Web3Provider>
-      <TokenProvider> {/* Оборачиваем в TokenProvider */}
-        <App />
-      </TokenProvider>
-    </Web3Provider>
-  </React.StrictMode>,
-);
+// Проверим, что корневой элемент существует
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  console.error("Критическая ошибка: Элемент с id 'root' не найден в DOM.");
+} else {
+  ReactDOM.createRoot(rootElement).render(
+    <React.StrictMode>
+      <Web3Provider>
+        {/* TokenProvider должен быть внутри Web3Provider */}
+        <TokenProvider>
+          <App />
+        </TokenProvider>
+      </Web3Provider>
+    </React.StrictMode>,
+  );
+}

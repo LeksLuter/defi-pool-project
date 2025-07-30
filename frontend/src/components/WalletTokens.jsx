@@ -34,6 +34,7 @@ const AddressDisplay = ({ address }) => {
           onClick={copyToClipboard}
           className="p-1 rounded hover:bg-gray-600 transition text-gray-400 hover:text-white"
           title="Копировать адрес"
+          aria-label="Копировать адрес"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -43,6 +44,8 @@ const AddressDisplay = ({ address }) => {
           onClick={openInPolygonscan}
           className="p-1 rounded hover:bg-gray-600 transition text-gray-400 hover:text-white"
           title="Посмотреть на Polygonscan"
+          aria-label="Посмотреть на Polygonscan"
+          disabled={!address || address === '0x0000000000000000000000000000000000000000'}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -55,16 +58,19 @@ const AddressDisplay = ({ address }) => {
 // --- Конец локального AddressDisplay ---
 
 const WalletTokens = () => { // Теперь это Portfolio
-  const { tokens, loading, error, refreshTokens } = useTokens(); // Используем хук из контекста
+  // Используем хук из контекста
+  const { tokens, loading, error, refreshTokens } = useTokens();
 
   const formatUSD = (value) => {
-    if (isNaN(value) || value === null || value === undefined) return '$0.00';
+    if (value === null || value === undefined || isNaN(value)) return '$0.00';
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) return '$0.00';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
-    }).format(value);
+    }).format(numValue);
   };
 
   return (
@@ -99,6 +105,7 @@ const WalletTokens = () => { // Теперь это Portfolio
         </div>
       )}
 
+      {/* Показываем спиннер только при первой загрузке, когда токенов ещё нет */}
       {loading && tokens.length === 0 ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
@@ -108,8 +115,12 @@ const WalletTokens = () => { // Теперь это Portfolio
           <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
           </svg>
-          <p className="mt-4 text-xl text-gray-400">Токены не найдены</p>
-          <p className="mt-2 text-gray-500">Убедитесь, что ваш кошелек подключен и содержит токены.</p>
+          <p className="mt-4 text-xl text-gray-400">
+            {error ? 'Не удалось загрузить токены' : 'Токены не найдены'}
+          </p>
+          <p className="mt-2 text-gray-500">
+            {error ? 'Проверьте подключение к интернету и попробуйте обновить.' : 'Убедитесь, что ваш кошелек подключен и содержит токены.'}
+          </p>
         </div>
       ) : (
         <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl shadow-lg overflow-hidden">
@@ -129,12 +140,12 @@ const WalletTokens = () => { // Теперь это Portfolio
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10 rounded-full bg-gradient-to-br from-cyan-700 to-blue-700 flex items-center justify-center text-white font-bold">
-                          {token.symbol.charAt(0)}
+                          {token.symbol ? token.symbol.charAt(0) : '?'}
                         </div>
                         <div className="ml-4">
-                          <div className="text-sm font-medium text-white">{token.symbol}</div>
-                          <div className="text-sm text-gray-400">{token.name}</div>
-                          <AddressDisplay address={token.address} /> {/* Используем локальный компонент */}
+                          <div className="text-sm font-medium text-white">{token.symbol || 'Неизвестный токен'}</div>
+                          <div className="text-sm text-gray-400">{token.name || 'Название не найдено'}</div>
+                          <AddressDisplay address={token.address} />
                         </div>
                       </div>
                     </td>
@@ -142,10 +153,10 @@ const WalletTokens = () => { // Теперь это Portfolio
                       {parseFloat(token.balance).toFixed(4)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                      {token.price > 0 ? formatUSD(token.price) : '-'}
+                      {token.price !== undefined && token.price > 0 ? formatUSD(token.price) : '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-cyan-400">
-                      {token.price > 0 ? formatUSD(parseFloat(token.value)) : '-'}
+                      {token.value !== undefined && token.value !== '0.00' ? formatUSD(token.value) : '-'}
                     </td>
                   </tr>
                 ))}

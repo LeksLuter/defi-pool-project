@@ -1,34 +1,32 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
+// Импортируем ethers напрямую из установленного пакета
+import { ethers } from 'ethers'; // Убедитесь, что ethers установлен: npm install ethers
 import { useWeb3 } from './Web3Context';
-import { ethers } from 'ethers';
 
-// Карта адресов токенов Polygon в CoinGecko ID (скопировано из WalletTokens)
+// --- Конфигурация токенов (оставляем как есть) ---
 const TOKEN_ADDRESS_TO_COINGECKO_ID = {
-  '0x0000000000000000000000000000000000000000': 'matic-network', // POL (ранее MATIC)
-  // Добавьте сюда другие токены по необходимости
-  '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619': 'weth', // WETH
-  '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 'usd-coin', // USDC
-  '0xc2132d05d31c914a87c6611c10748aeb04b58e8f': 'tether', // USDT
+  '0x0000000000000000000000000000000000000000': 'matic-network',
+  '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619': 'weth',
+  '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 'usd-coin',
+  '0xc2132d05d31c914a87c6611c10748aeb04b58e8f': 'tether',
 };
 
-// Карта адресов токенов Polygon в CoinMarketCap ID (скопировано из WalletTokens)
 const TOKEN_ADDRESS_TO_CMC_ID = {
-  '0x0000000000000000000000000000000000000000': 3890, // POL (ранее MATIC)
-  // Добавьте сюда другие токены по необходимости
-  '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619': 2396, // WETH
-  '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 3408, // USDC
-  '0xc2132d05d31c914a87c6611c10748aeb04b58e8f': 825, // USDT
+  '0x0000000000000000000000000000000000000000': 3890,
+  '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619': 2396,
+  '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 3408,
+  '0xc2132d05d31c914a87c6611c10748aeb04b58e8f': 825,
 };
 
-// ABI для ERC20 токенов (минимальный набор функций для получения метаданных)
 const ERC20_ABI = [
   "function decimals() view returns (uint8)",
   "function symbol() view returns (string)",
   "function name() view returns (string)",
   "function balanceOf(address owner) view returns (uint256)"
 ];
+// --- Конец конфигурации ---
 
-// --- Функции для получения цен ---
+// --- Функции для получения цен (оставляем как есть, кроме импорта ethers) ---
 const fetchTokenPriceFromCoinGecko = async (tokenId) => {
   try {
     const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${tokenId}&vs_currencies=usd`);
@@ -44,10 +42,9 @@ const fetchTokenPriceFromCoinGecko = async (tokenId) => {
 };
 
 const fetchTokenPriceFromCoinMarketCap = async (tokenId) => {
-  // Предполагается, что CMC API ключ хранится в переменных окружения VITE_CMC_API_KEY
-  const cmcApiKey = import.meta.env.VITE_CMC_API_KEY;
+  const cmcApiKey = import.meta.env.VITE_CMC_API_KEY || import.meta.env.VITE_COINMARKETCAP_API_KEY; // Поддержка обоих ключей
   if (!cmcApiKey) {
-    console.warn('VITE_CMC_API_KEY не задан в переменных окружения для CoinMarketCap');
+    console.warn('API ключ CoinMarketCap не задан в переменных окружения (VITE_CMC_API_KEY или VITE_COINMARKETCAP_API_KEY)');
     return null;
   }
   try {
@@ -82,6 +79,7 @@ const fetchTokenPriceWithFallback = async (tokenId, cmcId) => {
 const fetchMultipleTokenPricesWithFallback = async (tokenMap) => {
   const tokenIds = Object.keys(tokenMap);
   const prices = {};
+  // Последовательно, чтобы не перегружать API
   for (const address of tokenIds) {
     const { coingeckoId, cmcId } = tokenMap[address];
     prices[address] = await fetchTokenPriceWithFallback(coingeckoId, cmcId);
@@ -90,14 +88,14 @@ const fetchMultipleTokenPricesWithFallback = async (tokenMap) => {
 };
 // --- Конец функций для получения цен ---
 
-// --- Функции для получения токенов ---
+// --- Функции для получения токенов (оставляем как есть) ---
 const fetchTokensFromEtherscanV2 = async (account, provider) => {
   try {
     const etherscanApiKey = import.meta.env.VITE_ETHERSCAN_API_KEY;
     if (!etherscanApiKey) {
       throw new Error('VITE_ETHERSCAN_API_KEY не задан в переменных окружения');
     }
-    const polygonChainId = 137; // Chain ID для Polygon Mainnet
+    const polygonChainId = 137;
 
     const response = await fetch(
       `https://api.etherscan.io/v2/api?chainid=${polygonChainId}&module=account&action=tokentx&address=${account}&apikey=${etherscanApiKey}&page=1&offset=1000&sort=desc`
@@ -128,7 +126,6 @@ const fetchTokensFromEtherscanV2 = async (account, provider) => {
 
     const tokenDetails = [];
 
-    // Обрабатываем нативный токен POL отдельно
     try {
       const polBalance = await provider.getBalance(account);
       if (polBalance.gt(0)) {
@@ -144,14 +141,12 @@ const fetchTokensFromEtherscanV2 = async (account, provider) => {
       console.warn('Ошибка при получении баланса POL:', error);
     }
 
-    // Обрабатываем каждый ERC-20 токен
     for (const tokenAddress of uniqueTokens) {
       try {
         let tokenInfo = tokenSampleData[tokenAddress];
         let contract;
 
         if (!tokenInfo) {
-          // Fallback: если данные не получены из транзакций, запрашиваем напрямую
           contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
           const [name, symbol, decimals] = await Promise.all([
             contract.name().catch(() => 'Unknown Token'),
@@ -188,7 +183,6 @@ const fetchTokensDirectBalance = async (account, provider) => {
   try {
     console.log('Используется резервный метод получения токенов');
     const tokens = [];
-    // Получаем баланс POL
     try {
       const polBalance = await provider.getBalance(account);
       if (polBalance.gt(0)) {
@@ -203,7 +197,6 @@ const fetchTokensDirectBalance = async (account, provider) => {
     } catch (error) {
       console.warn('Ошибка при получении баланса POL в резервном методе:', error);
     }
-    // Здесь можно добавить запросы балансов для известных токенов из переменных окружения
     return tokens;
   } catch (error) {
     console.warn('Не удалось получить токены через резервный метод:', error);
@@ -212,7 +205,7 @@ const fetchTokensDirectBalance = async (account, provider) => {
 };
 // --- Конец функций для получения токенов ---
 
-// --- Reducer для управления состоянием токенов ---
+// --- Reducer (оставляем как есть) ---
 const tokenReducer = (state, action) => {
   switch (action.type) {
     case 'FETCH_START':
@@ -222,11 +215,14 @@ const tokenReducer = (state, action) => {
     case 'FETCH_ERROR':
       return { ...state, loading: false, error: action.payload };
     case 'UPDATE_PRICES':
-      // Предполагаем, что action.payload - это объект { адрес_токена: цена }
       const updatedTokens = state.tokens.map(token => {
         const newPrice = action.payload[token.address.toLowerCase()];
         if (newPrice !== undefined) {
-          return { ...token, price: newPrice, value: (parseFloat(token.balance) * newPrice).toFixed(2) };
+          // Убедимся, что баланс - число
+          const balanceFloat = parseFloat(token.balance);
+          if (!isNaN(balanceFloat) && balanceFloat > 0) {
+            return { ...token, price: newPrice, value: (balanceFloat * newPrice).toFixed(2) };
+          }
         }
         return token;
       });
@@ -250,7 +246,7 @@ export const useTokens = () => {
 };
 
 export const TokenProvider = ({ children }) => {
-  const { provider, account } = useWeb3();
+  const { provider, account } = useWeb3(); // Получаем провайдер и аккаунт из Web3Context
   const [state, dispatch] = useReducer(tokenReducer, {
     loading: false,
     error: null,
@@ -259,15 +255,16 @@ export const TokenProvider = ({ children }) => {
   });
 
   const fetchTokens = async (forceRefresh = false) => {
-    // Не обновляем, если нет аккаунта или провайдера
+    // Критическая проверка: если нет аккаунта или провайдера, сбрасываем состояние
     if (!provider || !account) {
-      if (state.tokens.length > 0) { // Если токены были, сбросим их
+      console.log("Нет провайдера или аккаунта, сброс токенов.");
+      if (state.tokens.length > 0 || state.error || state.loading) {
         dispatch({ type: 'RESET' });
       }
-      return;
+      return; // Выходим, если нет данных для работы
     }
 
-    // Не обновляем слишком часто (например, если прошло менее 30 секунд)
+    // Логика ограничения частоты обновления
     const now = Date.now();
     const timeSinceLastUpdate = now - state.lastUpdated;
     const refreshInterval = 30000; // 30 секунд
@@ -284,12 +281,12 @@ export const TokenProvider = ({ children }) => {
       try {
         console.log('Попытка получения токенов через Etherscan V2 API...');
         tokenList = await fetchTokensFromEtherscanV2(account, provider);
-        console.log('Токены получены через Etherscan V2:', tokenList);
+        console.log('Токены получены через Etherscan V2:', tokenList.length);
       } catch (etherscanError) {
         console.error('Etherscan V2 API недоступен, пробуем резервный метод...', etherscanError);
         try {
           tokenList = await fetchTokensDirectBalance(account, provider);
-          console.log('Токены получены через резервный метод:', tokenList);
+          console.log('Токены получены через резервный метод:', tokenList.length);
         } catch (directError) {
           console.error('Резервный метод также недоступен:', directError);
           throw new Error(`Не удалось получить токены ни через Etherscan V2, ни через резервный метод: ${directError.message}`);
@@ -303,6 +300,7 @@ export const TokenProvider = ({ children }) => {
             const balanceBN = ethers.BigNumber.from(token.balance);
             return balanceBN.gt(0);
           } catch (e) {
+            console.warn("Ошибка при проверке баланса BN:", e);
             return false;
           }
         })
@@ -317,8 +315,8 @@ export const TokenProvider = ({ children }) => {
               balance: formattedBalance,
               rawBalance: balanceBN.toString(),
               decimals: tokenInfo.tokenDecimal,
-              price: 0, // Цена будет добавлена позже
-              value: '0.00' // Стоимость будет добавлена позже
+              price: 0,
+              value: '0.00'
             };
           } catch (formatError) {
             console.warn(`Ошибка при форматировании баланса токена ${tokenInfo.contractAddress}:`, formatError);
@@ -334,8 +332,9 @@ export const TokenProvider = ({ children }) => {
         const tokenPriceMap = {};
         processedTokens.forEach(token => {
           const lowerAddress = token.address.toLowerCase();
+          // Используем символ как fallback для CoinGecko ID
           tokenPriceMap[lowerAddress] = {
-            coingeckoId: TOKEN_ADDRESS_TO_COINGECKO_ID[lowerAddress] || token.symbol.toLowerCase(),
+            coingeckoId: TOKEN_ADDRESS_TO_COINGECKO_ID[lowerAddress] || token.symbol?.toLowerCase(),
             cmcId: TOKEN_ADDRESS_TO_CMC_ID[lowerAddress]
           };
         });
@@ -345,21 +344,23 @@ export const TokenProvider = ({ children }) => {
       }
 
     } catch (err) {
-      console.error("Ошибка при получении токенов:", err);
-      dispatch({ type: 'FETCH_ERROR', payload: err.message });
+      console.error("Критическая ошибка при получении токенов:", err);
+      dispatch({ type: 'FETCH_ERROR', payload: err.message || 'Неизвестная ошибка при загрузке токенов' });
     }
   };
 
-  // Вызываем fetchTokens при изменении account или provider
+  // useEffect теперь безопаснее
   useEffect(() => {
+    console.log("useEffect TokenProvider: provider =", !!provider, "account =", account);
+    // fetchTokens будет делать все необходимые проверки внутри
     fetchTokens();
   }, [provider, account]); // Зависимости: перезагружаем при смене аккаунта или провайдера
 
-  // Функция для ручного обновления
   const refreshTokens = () => {
     fetchTokens(true); // forceRefresh = true
   };
 
+  // Передаем все свойства state и refreshTokens
   return (
     <TokenContext.Provider value={{ ...state, refreshTokens }}>
       {children}
