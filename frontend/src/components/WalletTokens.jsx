@@ -1,4 +1,3 @@
-// frontend/src/components/WalletTokens.jsx
 import React, { useEffect, useState } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
@@ -483,6 +482,37 @@ const WalletTokens = () => {
 
   return (
     <div className="bg-gray-800 bg-opacity-50 rounded-xl shadow-lg overflow-hidden border border-gray-700">
+      {/* Заголовок с адресом кошелька */}
+      <div className="px-6 py-4 border-b border-gray-700 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-xl font-bold text-white mb-2 sm:mb-0">Токены кошелька</h2>
+        {account && (
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-400">{formatAddress(account)}</span>
+            <button
+              onClick={() => copyToClipboard(account)}
+              className="p-1 rounded hover:bg-gray-600 transition text-gray-400 hover:text-white"
+              title="Копировать адрес"
+              aria-label="Копировать адрес кошелька"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => openInPolygonscan(account)}
+              className="p-1 rounded hover:bg-gray-600 transition text-gray-400 hover:text-white"
+              title="Посмотреть на Polygonscan"
+              aria-label="Открыть кошелек в Polygonscan"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Таблица токенов */}
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-700">
           <thead className="bg-gray-700 bg-opacity-50">
@@ -521,7 +551,7 @@ const WalletTokens = () => {
                       title="Копировать адрес"
                       aria-label={`Копировать адрес ${token.symbol}`}
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                       </svg>
                     </button>
@@ -531,7 +561,7 @@ const WalletTokens = () => {
                       title="Посмотреть на Polygonscan"
                       aria-label={`Открыть ${token.symbol} в Polygonscan`}
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                       </svg>
                     </button>
@@ -541,7 +571,7 @@ const WalletTokens = () => {
                       title="Посмотреть на Blockscan"
                       aria-label={`Открыть ${token.symbol} в Blockscan`}
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                     </button>
