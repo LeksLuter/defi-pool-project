@@ -1,9 +1,61 @@
 import React from 'react';
-import { useTokens } from '../context/TokenContext';
-import AddressDisplay from './AddressDisplay';
+import { useTokens } from '../context/TokenContext'; // Используем обновлённый контекст
 
-const WalletTokens = () => {
-  const { tokens, loading, error, refreshTokens } = useTokens();
+// --- Компонент AddressDisplay определен локально ---
+const AddressDisplay = ({ address }) => {
+  if (!address) return null;
+
+  const getShortAddress = (addr) => {
+    if (!addr) return '';
+    return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
+  };
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(address);
+      // Оповещение можно добавить, если нужно
+    } catch (err) {
+      console.error('Ошибка при копировании адреса: ', err);
+    }
+  };
+
+  const openInPolygonscan = () => {
+    if (address && address !== '0x0000000000000000000000000000000000000000') {
+      const url = `https://polygonscan.com/address/${address}`;
+      window.open(url, '_blank');
+    }
+  };
+
+  return (
+    <div className="flex items-center mt-1">
+      <span className="text-xs text-gray-500 mr-2">{getShortAddress(address)}</span>
+      <div className="flex space-x-1">
+        <button
+          onClick={copyToClipboard}
+          className="p-1 rounded hover:bg-gray-600 transition text-gray-400 hover:text-white"
+          title="Копировать адрес"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+        </button>
+        <button
+          onClick={openInPolygonscan}
+          className="p-1 rounded hover:bg-gray-600 transition text-gray-400 hover:text-white"
+          title="Посмотреть на Polygonscan"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+};
+// --- Конец локального AddressDisplay ---
+
+const WalletTokens = () => { // Теперь это Portfolio
+  const { tokens, loading, error, refreshTokens } = useTokens(); // Используем хук из контекста
 
   const formatUSD = (value) => {
     if (isNaN(value) || value === null || value === undefined) return '$0.00';
@@ -47,7 +99,7 @@ const WalletTokens = () => {
         </div>
       )}
 
-      {loading && tokens.length === 0 ? ( // Показываем спиннер только при первой загрузке
+      {loading && tokens.length === 0 ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
         </div>
@@ -82,7 +134,7 @@ const WalletTokens = () => {
                         <div className="ml-4">
                           <div className="text-sm font-medium text-white">{token.symbol}</div>
                           <div className="text-sm text-gray-400">{token.name}</div>
-                          <AddressDisplay address={token.address} />
+                          <AddressDisplay address={token.address} /> {/* Используем локальный компонент */}
                         </div>
                       </div>
                     </td>
