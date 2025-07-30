@@ -1,8 +1,7 @@
-// frontend/src/components/WalletTokens.jsx
 import React, { useEffect, useState } from 'react';
 import { useWeb3 } from '../context/Web3Context';
-// Импортируем необходимые функции из ethers v6
-import { Contract, formatUnits, parseUnits } from 'ethers'; // Импорт из корня ethers для v6
+// Исправлен импорт для ethers v5
+import { ethers } from 'ethers';
 
 // ABI для ERC20 токенов (минимальный набор функций для получения метаданных)
 const ERC20_ABI = [
@@ -118,8 +117,8 @@ const WalletTokens = () => {
     const addressToPrice = {};
     // Последовательно для предотвращения перегрузки API
     for (const address of tokenIds) {
-        const { coingeckoId, cmcId } = tokenMap[address];
-        addressToPrice[address] = await fetchTokenPriceWithFallback(coingeckoId, cmcId);
+      const { coingeckoId, cmcId } = tokenMap[address];
+      addressToPrice[address] = await fetchTokenPriceWithFallback(coingeckoId, cmcId);
     }
     return addressToPrice;
   };
@@ -176,13 +175,14 @@ const WalletTokens = () => {
       // Обрабатываем нативный токен POL отдельно
       try {
         const polBalance = await ethProvider.getBalance(accountAddress);
-        if (polBalance > 0n) { // Используем BigInt для сравнения в v6
+        // Используем BigNumber из ethers v5 для сравнения
+        if (polBalance.gt(0)) {
           tokenDetails.push({
             contractAddress: '0x0000000000000000000000000000000000000000',
             tokenName: 'Polygon Ecosystem Token',
             tokenSymbol: 'POL',
             tokenDecimal: 18,
-            balance: polBalance.toString() // BigInt в строку
+            balance: polBalance.toString() // BigNumber в строку
           });
         }
       } catch (error) {
@@ -195,10 +195,12 @@ const WalletTokens = () => {
       for (const tokenAddress of uniqueTokens) {
         if (tokenCount >= MAX_TOKENS) break;
         try {
-          const tokenContract = new Contract(tokenAddress, ERC20_ABI, ethProvider);
+          // Используем Contract из ethers v5
+          const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, ethProvider);
           const balance = await tokenContract.balanceOf(accountAddress);
 
-          if (balance > 0n) { // Используем BigInt
+          // Используем BigNumber из ethers v5 для сравнения
+          if (balance.gt(0)) {
             let tokenInfo = tokenSampleData[tokenAddress];
             if (!tokenInfo) {
               // Используем Promise.allSettled корректно
@@ -229,7 +231,7 @@ const WalletTokens = () => {
               tokenName: tokenInfo.tokenName,
               tokenSymbol: tokenInfo.tokenSymbol,
               tokenDecimal: tokenInfo.tokenDecimal,
-              balance: balance.toString() // BigInt в строку
+              balance: balance.toString() // BigNumber в строку
             });
             tokenCount++;
           }
@@ -241,9 +243,9 @@ const WalletTokens = () => {
       return tokenDetails;
     } catch (error) {
       if (error.name !== 'AbortError') {
-         console.error('Критическая ошибка Etherscan V2:', error.message);
+        console.error('Критическая ошибка Etherscan V2:', error.message);
       } else {
-         console.warn('Таймаут Etherscan V2');
+        console.warn('Таймаут Etherscan V2');
       }
       return [];
     }
@@ -257,7 +259,8 @@ const WalletTokens = () => {
       const tokens = [];
       try {
         const polBalance = await ethProvider.getBalance(accountAddress);
-        if (polBalance > 0n) {
+        // Используем BigNumber из ethers v5 для сравнения
+        if (polBalance.gt(0)) {
           tokens.push({
             contractAddress: '0x0000000000000000000000000000000000000000',
             tokenName: 'Polygon Ecosystem Token',
@@ -309,8 +312,9 @@ const WalletTokens = () => {
         const processedTokens = tokenList
           .filter(token => {
             try {
-              const balanceBN = BigInt(token.balance); // Используем BigInt для v6
-              return balanceBN > 0n;
+              // Используем BigNumber из ethers v5 для проверки
+              const balanceBN = ethers.BigNumber.from(token.balance);
+              return balanceBN.gt(0);
             } catch (e) {
               console.warn("Ошибка при проверке баланса BN:", e.message);
               return false;
@@ -318,9 +322,9 @@ const WalletTokens = () => {
           })
           .map(tokenInfo => {
             try {
-              const balanceBN = BigInt(tokenInfo.balance);
-              // Используем formatUnits из ethers v6
-              const formattedBalance = formatUnits(balanceBN, tokenInfo.tokenDecimal);
+              const balanceBN = ethers.BigNumber.from(tokenInfo.balance);
+              // Используем formatUnits из ethers v5
+              const formattedBalance = ethers.utils.formatUnits(balanceBN, tokenInfo.tokenDecimal);
               return {
                 address: tokenInfo.contractAddress,
                 symbol: tokenInfo.tokenSymbol,
@@ -381,13 +385,13 @@ const WalletTokens = () => {
     // Используем флаг для предотвращения обновления состояния после размонтирования
     let isMounted = true;
     const fetchData = async () => {
-        await fetchTokenBalances();
-        if (!isMounted) return;
+      await fetchTokenBalances();
+      if (!isMounted) return;
     };
     fetchData();
 
     return () => {
-        isMounted = false;
+      isMounted = false;
     };
   }, [provider, account]);
 

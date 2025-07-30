@@ -1,9 +1,9 @@
-// frontend/src/main.jsx
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App'
-import './index.css'
-import { Web3Provider } from './context/Web3Context'
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './index.css';
+import { Web3Provider } from './context/Web3Context';
+// Удален импорт TokenProvider, так как он не используется в рабочей версии
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -11,4 +11,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <App />
     </Web3Provider>
   </React.StrictMode>,
-)
+);
