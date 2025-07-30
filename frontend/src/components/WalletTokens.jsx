@@ -3,7 +3,7 @@ import { useWeb3 } from '../context/Web3Context';
 // Исправлен импорт для ethers v5
 import { ethers } from 'ethers'; // Импортируем ethers как объект, но будем использовать подмодули
 import { BigNumber } from 'ethers'; // Импортируем BigNumber напрямую
-import { formatUnits } from 'ethers/lib/utils'; // Импортируем formatUnits напрямую
+import { formatUnits } from 'ethers/lib/utils'; // Исправлен импорт formatUnits
 
 // ABI для ERC20 токенов (минимальный набор функций для получения метаданных)
 const ERC20_ABI = [
@@ -249,11 +249,7 @@ const WalletTokens = () => {
         // Если Etherscan API недоступен, используем резервный метод
         tokenList = await fetchTokensDirectBalance(account, ethProvider);
         console.log('Токены получены через резервный метод:', tokenList.length);
-      } catch (directError) {
-        console.error('Резервный метод также недоступен:', directError.message);
-        // Не блокируем UI критической ошибкой, просто показываем пустой список
-        tokenList = [];
-      }
+      } // Удален лишний catch
 
       // Преобразуем данные токенов в формат для отображения
       const processedTokens = tokenList
