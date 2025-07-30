@@ -1,6 +1,6 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { Web3Provider, useWeb3 } from './context/Web3Context';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'; // Импортирован Navigate
+import { Web3Provider } from './context/Web3Context';
 import Header from './components/Header';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
@@ -23,8 +23,11 @@ const ProtectedRoute = ({ children }) => {
 // Компонент для админских маршрутов
 const AdminRoute = ({ children }) => {
   const { isConnected, isAdmin } = useWeb3();
-  if (!isConnected || !isAdmin) {
+  if (!isConnected) {
     return <Navigate to="/" replace />;
+  }
+  if (!isAdmin) {
+    return <Navigate to="/dashboard" replace />;
   }
   return children;
 };
@@ -32,47 +35,20 @@ const AdminRoute = ({ children }) => {
 function App() {
   return (
     <Web3Provider>
-      <div className="min-h-screen bg-gray-900 text-white">
-        <Header />
-        <main>
+      <Router>
+        <div className="App">
+          <Header />
           <Routes>
             <Route path="/" element={<LandingPage />} />
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/swap"
-              element={
-                <ProtectedRoute>
-                  <SwapPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/burn-mint"
-              element={
-                <ProtectedRoute>
-                  <BurnMintPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin"
-              element={
-                <AdminRoute>
-                  <AdminPanel />
-                </AdminRoute>
-              }
-            />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/swap" element={<ProtectedRoute><SwapPage /></ProtectedRoute>} />
+            <Route path="/burn-mint" element={<ProtectedRoute><BurnMintPage /></ProtectedRoute>} />
+            <Route path="/pools" element={<ProtectedRoute><PoolList /></ProtectedRoute>} />
+            <Route path="/vault" element={<ProtectedRoute><Vault /></ProtectedRoute>} />
+            <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
           </Routes>
-        </main>
-      </div>
+        </div>
+      </Router>
     </Web3Provider>
   );
 }
