@@ -469,6 +469,17 @@ const WalletTokens = () => {
     return isNaN(value) ? sum : sum + value;
   }, 0);
 
+  // Функции-заглушки для обмена и сжигания
+  const handleSwap = (token) => {
+    console.log("Обмен токена:", token);
+    alert(`Функция обмена для ${token.symbol} будет реализована`);
+  };
+
+  const handleBurn = (token) => {
+    console.log("Сжечь токен:", token);
+    alert(`Функция сжигания для ${token.symbol} будет реализована`);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -557,7 +568,23 @@ const WalletTokens = () => {
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${token.price}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-cyan-400">${token.value}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <div className="flex space-x-2">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => handleSwap(token)}
+                      className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded transition text-xs"
+                      title="Обменять"
+                      aria-label={`Обменять ${token.symbol}`}
+                    >
+                      Обмен
+                    </button>
+                    <button
+                      onClick={() => handleBurn(token)}
+                      className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded transition text-xs"
+                      title="Сжечь"
+                      aria-label={`Сжечь ${token.symbol}`}
+                    >
+                      Сжечь
+                    </button>
                     <button
                       onClick={() => copyToClipboard(token.address)}
                       className="p-1 rounded hover:bg-gray-600 transition text-gray-400 hover:text-white"
