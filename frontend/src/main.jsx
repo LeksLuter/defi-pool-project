@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 import { Web3Provider } from './context/Web3Context';
-import { TokenProvider } from './context/TokenContext'; // Импортируем новый провайдер
+import { TokenProvider } from './context/TokenContext'; // Импортируем
 
 // Проверим, что корневой элемент существует
 const rootElement = document.getElementById('root');
@@ -13,7 +13,7 @@ if (!rootElement) {
   ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
       <Web3Provider>
-        {/* TokenProvider должен быть внутри Web3Provider */}
+        {/* ВАЖНО: TokenProvider внутри Web3Provider */}
         <TokenProvider>
           <App />
         </TokenProvider>
