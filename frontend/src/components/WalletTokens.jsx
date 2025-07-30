@@ -1,3 +1,4 @@
+// frontend/src/components/WalletTokens.jsx
 import React, { useEffect, useState } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
@@ -26,6 +27,54 @@ const TOKEN_ADDRESS_TO_CMC_ID = {
   '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619': 2396, // WETH
   '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 3408, // USDC (CoinMarketCap ID)
   '0xc2132d05d31c914a87c6611c10748aeb04b58e8f': 825,  // USDT (CoinMarketCap ID)
+};
+
+// Вспомогательная функция для получения ключа кэша
+const getCacheKey = (account) => `walletTokens_${account}`;
+
+// Вспомогательная функция для проверки устаревания кэша (например, 5 минут)
+const isCacheExpired = (timestamp, maxAgeMinutes = 5) => {
+  const now = Date.now();
+  const maxAgeMs = maxAgeMinutes * 60 * 1000;
+  return (now - timestamp) > maxAgeMs;
+};
+
+// Функция для получения токенов из кэша
+const getCachedTokens = (account) => {
+  if (!account) return null;
+  try {
+    const cacheKey = getCacheKey(account);
+    const cachedData = localStorage.getItem(cacheKey);
+    if (cachedData) {
+      const { tokens, timestamp } = JSON.parse(cachedData);
+      // Проверяем, не устарели ли данные
+      if (!isCacheExpired(timestamp)) {
+        console.log('Загружены токены из кэша');
+        return tokens;
+      } else {
+        console.log('Кэш устарел, будет выполнен запрос к API');
+      }
+    }
+  } catch (error) {
+    console.error('Ошибка при чтении кэша токенов:', error);
+  }
+  return null;
+};
+
+// Функция для сохранения токенов в кэш
+const saveTokensToCache = (account, tokens) => {
+  if (!account || !tokens) return;
+  try {
+    const cacheKey = getCacheKey(account);
+    const dataToCache = {
+      tokens,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(cacheKey, JSON.stringify(dataToCache));
+    console.log('Токены сохранены в кэш');
+  } catch (error) {
+    console.error('Ошибка при сохранении токенов в кэш:', error);
+  }
 };
 
 const WalletTokens = () => {
@@ -68,7 +117,11 @@ const WalletTokens = () => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000); // Таймаут 5 секунд
-      const response = await fetch(`https://api.coincap.io/v2/assets/${cmcId}`, {
+      // Исправлен URL для CoinMarketCap
+      const response = await fetch(`https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?id=${cmcId}`, {
+        headers: {
+          'X-CMC_PRO_API_KEY': import.meta.env.VITE_CMC_API_KEY || '' // Используйте свой ключ CMC
+        },
         signal: controller.signal
       });
       clearTimeout(timeoutId);
@@ -79,7 +132,7 @@ const WalletTokens = () => {
       }
 
       const data = await response.json();
-      return parseFloat(data.data?.priceUsd) || 0;
+      return data.data?.[cmcId]?.quote?.USD?.price || 0;
     } catch (error) {
       if (error.name !== 'AbortError') {
         console.warn(`Ошибка при получении цены из CoinMarketCap для ${cmcId}:`, error.message);
@@ -306,9 +359,9 @@ const WalletTokens = () => {
     }
   };
 
-  // Функция для получения балансов токенов
-  const fetchTokenBalances = async () => {
-    if (!provider || !account) {
+  // Основная функция обновления токенов и кэширования
+  const updateTokensAndCache = async (accountAddress, ethProvider) => {
+    if (!ethProvider || !accountAddress) {
       setTokens([]);
       setLoading(false);
       return;
@@ -319,18 +372,15 @@ const WalletTokens = () => {
     let tokenList = [];
 
     try {
-      // Используем provider напрямую, как в контексте
-      const ethProvider = provider;
-
       // Попытка получить токены через Etherscan V2 API
       try {
         console.log('Попытка получения токенов через Etherscan V2 API...');
-        tokenList = await fetchTokensFromEtherscanV2(account, ethProvider);
+        tokenList = await fetchTokensFromEtherscanV2(accountAddress, ethProvider);
         console.log('Токены получены через Etherscan V2:', tokenList.length);
       } catch (etherscanError) {
         console.error('Etherscan V2 API недоступен, пробуем резервный метод...', etherscanError.message);
         try {
-          tokenList = await fetchTokensDirectBalance(account, ethProvider);
+          tokenList = await fetchTokensDirectBalance(accountAddress, ethProvider);
           console.log('Токены получены через резервный метод:', tokenList.length);
         } catch (directError) {
           console.error('Резервный метод также недоступен:', directError.message);
@@ -408,28 +458,50 @@ const WalletTokens = () => {
       });
 
       setTokens(tokensWithPrices);
+      // Сохраняем в кэш
+      saveTokensToCache(accountAddress, tokensWithPrices);
     } catch (err) {
       console.error("Критическая ошибка при получении балансов токенов:", err);
       setError(`Не удалось получить балансы токенов: ${err.message || 'Неизвестная ошибка'}`);
+      // В случае ошибки обновления, можно попробовать загрузить из кэша
+      const cachedTokens = getCachedTokens(accountAddress);
+      if (cachedTokens) {
+        setTokens(cachedTokens);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-
+  // Эффект для инициализации: сначала из кэша, потом обновление
   useEffect(() => {
     let isMounted = true;
-    const fetchData = async () => {
-      await fetchTokenBalances();
-      if (!isMounted) return;
+    
+    const initializeTokens = async () => {
+      if (!account || !provider) {
+        setTokens([]);
+        setLoading(false);
+        return;
+      }
+
+      // 1. Попробуем загрузить из кэша
+      const cachedTokens = getCachedTokens(account);
+      if (cachedTokens && isMounted) {
+        setTokens(cachedTokens);
+        setLoading(false); // Показываем кэшированные данные сразу
+      }
+
+      // 2. Запускаем обновление в фоне
+      await updateTokensAndCache(account, provider);
     };
 
-    fetchData();
+    initializeTokens();
 
     return () => {
       isMounted = false;
     };
   }, [provider, account]);
+
 
   // Функция для копирования адреса в буфер обмена
   const copyToClipboard = async (address) => {
@@ -480,7 +552,7 @@ const WalletTokens = () => {
     alert(`Функция сжигания для ${token.symbol} будет реализована`);
   };
 
-  if (loading) {
+  if (loading && tokens.length === 0) { // Показываем спиннер только если нет кэшированных данных
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
@@ -488,7 +560,7 @@ const WalletTokens = () => {
     );
   }
 
-  if (error) {
+  if (error && tokens.length === 0) { // Показываем ошибку только если нет кэшированных данных
     return (
       <div className="bg-red-900 bg-opacity-30 border border-red-700 text-red-300 px-4 py-3 rounded relative" role="alert">
         <strong className="font-bold">Ошибка! </strong>
