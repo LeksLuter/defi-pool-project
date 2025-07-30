@@ -8,7 +8,7 @@ import Dashboard from './components/Dashboard';
 import SwapPage from './components/SwapPage';
 import BurnMintPage from './components/BurnMintPage'; // Новый компонент
 import AdminPanel from './components/AdminPanel';
-import PoolList from './components/PoolList';
+import PoolsList from './components/PoolsList';
 import AddLiquidity from './components/AddLiquidity';
 import Vault from './components/Vault';
 
