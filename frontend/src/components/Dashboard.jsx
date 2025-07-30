@@ -1,41 +1,45 @@
 import React, { useState } from 'react';
-// Импортируем компоненты напрямую, как в исходном контексте
 import WalletTokens from './WalletTokens';
 import PoolsList from './PoolsList';
 import TokenVault from './TokenVault';
-// Убран CreatePoolModal, так как он не импортировался в исходном контексте
+import CreatePoolModal from './CreatePoolModal';
 
 const Dashboard = () => {
-  // Устанавливаем 'wallet' как активную вкладку по умолчанию
-  const [activeTab, setActiveTab] = useState('wallet');
-  // Убрано состояние isModalOpen, так как модальное окно не используется напрямую здесь
+  const [activeTab, setActiveTab] = useState('portfolio'); // Устанавливаем 'portfolio' как активную вкладку по умолчанию
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Убраны функции openCreatePoolModal и closeCreatePoolModal
+  const openCreatePoolModal = () => {
+    setIsModalOpen(true);
+  };
+
+  const closeCreatePoolModal = () => {
+    setIsModalOpen(false);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-indigo-900 text-white">
       <div className="container mx-auto py-8 px-4">
-        {/* Навигация по вкладкам - "Кошелёк" теперь первая */}
+        {/* Навигация по вкладкам */}
         <div className="mb-8">
           <div className="flex flex-wrap gap-2 border-b border-gray-700">
+            {/* Вкладка "Портфолио" */}
             <button
-              onClick={() => setActiveTab('wallet')}
-              className={`px-4 py-2 font-medium rounded-t-lg transition-colors duration-200 ${activeTab === 'wallet' ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white hover:bg-gray-800/30'
-                }`}
+              onClick={() => setActiveTab('portfolio')}
+              className={`px-4 py-2 font-medium rounded-t-lg transition-colors duration-200 ${activeTab === 'portfolio' ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white hover:bg-gray-800/30'}`}
             >
-              Кошелёк
+              Портфолио
             </button>
+            {/* Вкладка "Пулы ликвидности" */}
             <button
               onClick={() => setActiveTab('pools')}
-              className={`px-4 py-2 font-medium rounded-t-lg transition-colors duration-200 ${activeTab === 'pools' ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white hover:bg-gray-800/30'
-                }`}
+              className={`px-4 py-2 font-medium rounded-t-lg transition-colors duration-200 ${activeTab === 'pools' ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white hover:bg-gray-800/30'}`}
             >
               Пулы ликвидности
             </button>
+            {/* Вкладка "Хранилище токенов" */}
             <button
               onClick={() => setActiveTab('vault')}
-              className={`px-4 py-2 font-medium rounded-t-lg transition-colors duration-200 ${activeTab === 'vault' ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white hover:bg-gray-800/30'
-                }`}
+              className={`px-4 py-2 font-medium rounded-t-lg transition-colors duration-200 ${activeTab === 'vault' ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white hover:bg-gray-800/30'}`}
             >
               Хранилище токенов
             </button>
@@ -43,23 +47,15 @@ const Dashboard = () => {
         </div>
 
         {/* Контент вкладок */}
-        {activeTab === 'wallet' && <WalletTokens />}
+        {activeTab === 'portfolio' && <WalletTokens />}
         {activeTab === 'pools' && (
           <div>
-            {/* Заголовок секции пулов */}
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-              <div>
-                <h1 className="text-3xl md:text-4xl font-bold">Пулы ликвидности</h1>
-                <p className="mt-2 text-gray-400">Управляйте своими позициями в пулах ликвидности</p>
-              </div>
-              {/* Кнопка создания пула убрана, так как логика в PoolsList */}
-            </div>
-            <PoolsList />
+            <PoolsList openCreatePoolModal={openCreatePoolModal} />
           </div>
         )}
         {activeTab === 'vault' && <TokenVault />}
 
-        {/* Убран рендер CreatePoolModal */}
+        {isModalOpen && <CreatePoolModal onClose={closeCreatePoolModal} />}
       </div>
     </div>
   );
