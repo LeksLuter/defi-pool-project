@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import WalletTokens from './WalletTokens'; // Это теперь Portfolio
+import WalletTokens from './WalletTokens';
 import PoolsList from './PoolsList';
 import TokenVault from './TokenVault';
 import CreatePoolModal from './CreatePoolModal';
 
 const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState('portfolio'); // Устанавливаем 'portfolio' как активную вкладку по умолчанию
+  const [activeTab, setActiveTab] = useState('wallet'); // Устанавливаем 'wallet' как активную вкладку по умолчанию
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const openCreatePoolModal = () => {
@@ -22,12 +22,12 @@ const Dashboard = () => {
         {/* Навигация по вкладкам */}
         <div className="mb-8">
           <div className="flex flex-wrap gap-2 border-b border-gray-700">
-            {/* Вкладка "Портфолио" (ранее "Кошелёк") */}
+            {/* Вкладка "Кошелёк" */}
             <button
-              onClick={() => setActiveTab('portfolio')}
-              className={`px-4 py-2 font-medium rounded-t-lg transition-colors duration-200 ${activeTab === 'portfolio' ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white hover:bg-gray-800/30'}`}
+              onClick={() => setActiveTab('wallet')}
+              className={`px-4 py-2 font-medium rounded-t-lg transition-colors duration-200 ${activeTab === 'wallet' ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white hover:bg-gray-800/30'}`}
             >
-              Портфолио
+              Кошелёк
             </button>
             {/* Вкладка "Пулы ликвидности" */}
             <button
@@ -46,11 +46,21 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Контент вкладок */}
-        {activeTab === 'portfolio' && <WalletTokens />}
+        {/* Контент вкладок - меняем порядок отображения */}
+        {/* Теперь вкладка "Кошелёк" отображается первой */}
+        {activeTab === 'wallet' && <WalletTokens />}
         {activeTab === 'pools' && (
           <div>
-            <PoolsList openCreatePoolModal={openCreatePoolModal} />
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold">Пулы ликвидности</h2>
+              <button
+                onClick={openCreatePoolModal}
+                className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-medium rounded-lg transition"
+              >
+                Создать пул
+              </button>
+            </div>
+            <PoolsList />
           </div>
         )}
         {activeTab === 'vault' && <TokenVault />}

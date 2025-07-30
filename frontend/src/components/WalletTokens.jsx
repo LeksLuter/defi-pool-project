@@ -362,6 +362,12 @@ const WalletTokens = () => {
     }
   };
 
+  // Функция для форматирования адреса
+  const formatAddress = (address) => {
+    if (!address) return '';
+    return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+  };
+
   return (
     <div className="min-h-screen py-8 px-4 bg-gradient-to-br from-gray-900 to-indigo-900 text-white">
       <div className="container mx-auto">
@@ -413,7 +419,7 @@ const WalletTokens = () => {
                               <span className="text-xs text-gray-500 mr-2">
                                 {token.address === '0x0000000000000000000000000000000000000000'
                                   ? 'Native POL'
-                                  : `${token.address.substring(0, 6)}...${token.address.substring(token.address.length - 4)}`}
+                                  : formatAddress(token.address)}
                               </span>
                               <div className="flex space-x-1">
                                 <button
