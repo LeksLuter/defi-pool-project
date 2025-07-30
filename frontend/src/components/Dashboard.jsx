@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import WalletTokens from './WalletTokens';
+import WalletTokens from './WalletTokens'; // Это теперь Portfolio
 import PoolsList from './PoolsList';
 import TokenVault from './TokenVault';
 import CreatePoolModal from './CreatePoolModal';
@@ -22,7 +22,7 @@ const Dashboard = () => {
         {/* Навигация по вкладкам */}
         <div className="mb-8">
           <div className="flex flex-wrap gap-2 border-b border-gray-700">
-            {/* Вкладка "Портфолио" */}
+            {/* Вкладка "Портфолио" (ранее "Кошелёк") */}
             <button
               onClick={() => setActiveTab('portfolio')}
               className={`px-4 py-2 font-medium rounded-t-lg transition-colors duration-200 ${activeTab === 'portfolio' ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white hover:bg-gray-800/30'}`}
