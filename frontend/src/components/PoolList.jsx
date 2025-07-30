@@ -1,14 +1,17 @@
+// frontend/src/components/PoolList.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWeb3 } from '../context/Web3Context';
-import AddLiquidityModal from './AddLiquidityModal'; // Импортируем модальное окно
+import AddLiquidityModal from './AddLiquidityModal';
+import CreatePoolModal from './CreatePoolModal'; // Добавляем импорт модального окна создания пула
 
 const PoolList = () => {
   const { provider } = useWeb3();
   const navigate = useNavigate();
   const [pools, setPools] = useState([]);
-  const [isModalOpen, setIsModalOpen] = useState(false); // Состояние для модального окна
-  const [selectedPool, setSelectedPool] = useState(null); // Выбранный пул
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCreatePoolModalOpen, setIsCreatePoolModalOpen] = useState(false); // Состояние для модального окна создания пула
+  const [selectedPool, setSelectedPool] = useState(null);
 
   // Здесь будет логика получения списка пулов
   // Пока что показываем заглушку
@@ -23,16 +26,30 @@ const PoolList = () => {
     }
   }, [provider]);
 
-  // Функция для открытия модального окна
+  // Функция для открытия модального окна добавления ликвидности
   const openAddLiquidityModal = (pool) => {
     setSelectedPool(pool);
     setIsModalOpen(true);
   };
 
-  // Функция для закрытия модального окна
+  // Функция для закрытия модального окна добавления ликвидности
   const closeAddLiquidityModal = () => {
     setIsModalOpen(false);
     setSelectedPool(null);
+  };
+
+  // Функции для открытия/закрытия модального окна создания пула
+  const openCreatePoolModal = () => {
+    setIsCreatePoolModalOpen(true);
+  };
+
+  const closeCreatePoolModal = () => {
+    setIsCreatePoolModalOpen(false);
+  };
+
+  // Функция для перехода на страницу обмена
+  const handleSwapClick = () => {
+    navigate('/swap');
   };
 
   return (
@@ -45,7 +62,7 @@ const PoolList = () => {
           </div>
           {/* Кнопка "Создать пул" для всех пользователей */}
           <button
-            onClick={() => navigate('/create-pool')}
+            onClick={openCreatePoolModal} // Открываем модальное окно вместо перехода на страницу
             className="mt-4 md:mt-0 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-medium rounded-lg transition shadow-lg"
           >
             Создать пул
@@ -76,7 +93,7 @@ const PoolList = () => {
                       Добавить
                     </button>
                     <button
-                      onClick={() => console.log("Обменять в пуле:", pool)}
+                      onClick={() => handleSwapClick(pool)}
                       className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
                     >
                       Обменять
@@ -93,6 +110,13 @@ const PoolList = () => {
           <AddLiquidityModal
             pool={selectedPool}
             onClose={closeAddLiquidityModal}
+          />
+        )}
+
+        {/* Модальное окно создания пула */}
+        {isCreatePoolModalOpen && (
+          <CreatePoolModal
+            onClose={closeCreatePoolModal}
           />
         )}
       </div>
