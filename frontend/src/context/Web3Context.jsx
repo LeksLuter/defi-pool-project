@@ -2,7 +2,10 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 
 // Адреса администраторов
-const ADMIN_ADDRESSES = ["0xe00Fb1e7E860C089503D2c842C683a7A3E57b614", "0x40A7e95F9DaEcDeEA9Ae823aC234af2C616C2D10"];
+const ADMIN_ADDRESSES = [
+  "0xe00Fb1e7E860C089503D2c842C683a7A3E57b614",
+  "0x40A7e95F9DaEcDeEA9Ae823aC234af2C616C2D10"
+];
 
 const Web3Context = createContext();
 
@@ -21,105 +24,72 @@ export const Web3Provider = ({ children }) => {
   const [account, setAccount] = useState(null);
   const [chainId, setChainId] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false); // Состояние для проверки администратора
   const [error, setError] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false); // Новое состояние для проверки админа
 
-  // Функция для подключения кошелька
   const connectWallet = async () => {
     setError(null);
-    try {
-      if (!window.ethereum) {
-        throw new Error('MetaMask не установлен!');
+    if (typeof window.ethereum !== 'undefined') {
+      try {
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const web3Provider = new ethers.providers.Web3Provider(window.ethereum);
+        const web3Signer = web3Provider.getSigner();
+        const network = await web3Provider.getNetwork();
+
+        setProvider(web3Provider);
+        setSigner(web3Signer);
+        setAccount(accounts[0]);
+        setChainId(network.chainId);
+        setIsConnected(true);
+        // Проверяем, является ли пользователь администратором
+        setIsAdmin(ADMIN_ADDRESSES.some(addr => addr.toLowerCase() === accounts[0].toLowerCase()));
+      } catch (err) {
+        console.error("Ошибка подключения к кошельку:", err);
+        setError("Не удалось подключиться к кошельку. Пожалуйста, попробуйте еще раз.");
       }
-
-      // Запрашиваем доступ к аккаунтам
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      const chain = await window.ethereum.request({ method: 'eth_chainId' });
-
-      // Создаем провайдер ethers
-      const newProvider = new ethers.BrowserProvider(window.ethereum);
-      const newSigner = await newProvider.getSigner();
-
-      setProvider(newProvider);
-      setSigner(newSigner);
-      setAccount(accounts[0]);
-      setChainId(parseInt(chain, 16)); // Преобразуем hex в decimal
-      setIsConnected(true);
-
-      // Проверяем, является ли адрес администратором
-      const isUserAdmin = ADMIN_ADDRESSES.includes(accounts[0]);
-      setIsAdmin(isUserAdmin);
-
-    } catch (err) {
-      console.error("Ошибка подключения кошелька:", err);
-      setError(err.message);
-      // Сбрасываем состояние в случае ошибки
-      setProvider(null);
-      setSigner(null);
-      setAccount(null);
-      setChainId(null);
-      setIsConnected(false);
-      setIsAdmin(false);
+    } else {
+      setError("Пожалуйста, установите MetaMask!");
     }
   };
 
-  // Функция для отключения кошелька
   const disconnectWallet = () => {
     setProvider(null);
     setSigner(null);
     setAccount(null);
     setChainId(null);
     setIsConnected(false);
-    setIsAdmin(false);
     setError(null);
+    setIsAdmin(false); // Сбрасываем состояние администратора
   };
 
-  // Эффект для обработки событий MetaMask
   useEffect(() => {
-    if (window.ethereum) {
-      // Обработчик изменения аккаунта
-      const handleAccountsChanged = (accounts) => {
-        if (accounts.length > 0) {
-          setAccount(accounts[0]);
-          // Проверяем, является ли новый адрес администратором
-          const isUserAdmin = ADMIN_ADDRESSES.includes(accounts[0]);
-          setIsAdmin(isUserAdmin);
-          // Пересоздаем signer с новым аккаунтом
-          if (provider) {
-            provider.getSigner().then(setSigner);
-          }
-        } else {
-          // Если аккаунты отключены
-          disconnectWallet();
-        }
-      };
-
-      // Обработчик изменения сети
-      const handleChainChanged = (chainIdHex) => {
-        setChainId(parseInt(chainIdHex, 16));
-        // Перезагружаем страницу при смене сети для простоты
-        window.location.reload();
-      };
-
-      // Обработчик отключения (например, удаление доступа)
-      const handleDisconnect = () => {
+    const handleAccountsChanged = (accounts) => {
+      if (accounts.length === 0) {
         disconnectWallet();
-      };
+      } else {
+        setAccount(accounts[0]);
+        // Проверяем, является ли пользователь администратором при смене аккаунта
+        setIsAdmin(ADMIN_ADDRESSES.some(addr => addr.toLowerCase() === accounts[0].toLowerCase()));
+      }
+    };
 
+    const handleChainChanged = (_chainId) => {
+      window.location.reload();
+    };
+
+    if (window.ethereum) {
       window.ethereum.on('accountsChanged', handleAccountsChanged);
       window.ethereum.on('chainChanged', handleChainChanged);
-      window.ethereum.on('disconnect', handleDisconnect);
-
-      // Очистка слушателей при размонтировании
-      return () => {
-        if (window.ethereum.removeListener) {
-          window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-          window.ethereum.removeListener('chainChanged', handleChainChanged);
-          window.ethereum.removeListener('disconnect', handleDisconnect);
-        }
-      };
     }
-  }, [provider]);
+
+    // Очистка слушателей при размонтировании компонента
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+        window.ethereum.removeListener('chainChanged', handleChainChanged);
+      }
+    };
+  }, []);
 
   return (
     <Web3Context.Provider value={{
