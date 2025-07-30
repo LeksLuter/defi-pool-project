@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import AddLiquidityModal from './AddLiquidityModal';
-import CreatePoolForm from './CreatePoolForm';
+import CreatePoolModal from './CreatePoolModal'; // Импортируем модальное окно создания пула
 import { ethers } from 'ethers';
 
 const PoolsList = () => {
@@ -10,6 +10,7 @@ const PoolsList = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCreatePoolModalOpen, setIsCreatePoolModalOpen] = useState(false); // Состояние для модального окна создания пула
   const [selectedPool, setSelectedPool] = useState(null);
 
   // Функция для получения пулов с фабрики
@@ -23,9 +24,7 @@ const PoolsList = () => {
     try {
       // TODO: Замените на реальный адрес фабрики и ABI
       const factoryAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-      const factoryABI = [
-        "function getPools() view returns (address[])"
-      ];
+      const factoryABI = ["function getPools() view returns (address[])"];
       const factory = new ethers.Contract(factoryAddress, factoryABI, provider);
 
       // TODO: Получите адреса пулов и информацию о каждом пуле (токены, комиссия)
@@ -62,6 +61,15 @@ const PoolsList = () => {
     setSelectedPool(null);
   };
 
+  // Функции для открытия/закрытия модального окна создания пула
+  const openCreatePoolModal = () => {
+    setIsCreatePoolModalOpen(true);
+  };
+
+  const closeCreatePoolModal = () => {
+    setIsCreatePoolModalOpen(false);
+  };
+
   const handleSwapClick = (pool) => {
     console.log("Обменять в пуле:", pool);
     alert(`Функция обмена для пула ${pool.token0}/${pool.token1} будет реализована`);
@@ -75,7 +83,13 @@ const PoolsList = () => {
             <h1 className="text-3xl md:text-4xl font-bold">Пулы ликвидности</h1>
             <p className="mt-2 text-gray-400">Управляйте своими позициями в пулах ликвидности</p>
           </div>
-          {isAdmin && <CreatePoolForm onPoolCreated={fetchPools} />}
+          {/* Кнопка "Создать пул" для всех пользователей */}
+          <button
+            onClick={openCreatePoolModal}
+            className="mt-4 md:mt-0 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-medium rounded-lg transition shadow-lg"
+          >
+            Создать пул
+          </button>
         </div>
 
         {error && (
@@ -100,13 +114,11 @@ const PoolsList = () => {
                 <div className="p-5">
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="text-xl font-bold text-cyan-400">{pool.token0} / {pool.token1}</h3>
-                      <p className="text-gray-400 text-sm mt-1">Комиссия: {pool.fee}</p>
-                    </div>
-                    <div className="bg-gray-700/50 text-xs font-semibold px-2.5 py-1 rounded-full">
-                      Активен
+                      <h3 className="text-xl font-bold text-white">{pool.token0}/{pool.token1}</h3>
+                      <p className="text-cyan-400 font-medium">{pool.fee} комиссия</p>
                     </div>
                   </div>
+
                   <div className="mt-6 flex space-x-3">
                     <button
                       onClick={() => openAddLiquidityModal(pool)}
@@ -127,8 +139,19 @@ const PoolsList = () => {
           </div>
         )}
 
+        {/* Модальное окно добавления ликвидности */}
         {isModalOpen && selectedPool && (
-          <AddLiquidityModal pool={selectedPool} onClose={closeAddLiquidityModal} />
+          <AddLiquidityModal
+            pool={selectedPool}
+            onClose={closeAddLiquidityModal}
+          />
+        )}
+
+        {/* Модальное окно создания пула */}
+        {isCreatePoolModalOpen && (
+          <CreatePoolModal
+            onClose={closeCreatePoolModal}
+          />
         )}
       </div>
     </div>
