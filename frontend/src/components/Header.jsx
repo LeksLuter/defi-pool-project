@@ -1,108 +1,81 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useWeb3 } from '../context/Web3Context';
+import ConnectButton from './ConnectButton';
 
 const Header = () => {
-  const { account, isConnected, isAdmin, connectWallet, disconnectWallet, error } = useWeb3();
   const location = useLocation();
+  const { isConnected, account, isAdmin } = useWeb3();
 
-  const getShortAddress = (address) => {
+  // Функция для форматирования адреса кошелька
+  const formatAddress = (address) => {
     if (!address) return '';
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
 
   return (
-    <header className="bg-gray-900 bg-opacity-80 backdrop-blur-sm border-b border-gray-800">
-      <div className="container mx-auto px-4">
-        <div className="flex justify-between items-center h-16">
-          <div className="flex items-center space-x-8">
-            <Link to="/" className="text-xl font-bold text-cyan-400">
+    <header className="bg-gray-800 bg-opacity-50 backdrop-blur-sm border-b border-gray-700">
+      <div className="container mx-auto px-4 py-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center justify-between">
+            <Link to="/" className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
               DeFi Pool
             </Link>
+            {/* Отображаем адрес подключенного кошелька на мобильных устройствах */}
             {isConnected && (
-              <nav className="hidden md:flex space-x-4">
+              <div className="md:hidden mt-2 text-sm text-gray-300">
+                {formatAddress(account)}
+              </div>
+            )}
+          </div>
+
+          <nav className="mt-4 md:mt-0">
+            <ul className="flex flex-wrap gap-4 md:gap-6">
+              <li>
                 <Link
                   to="/"
-                  className={`px-3 py-2 rounded-md text-sm font-medium ${location.pathname === '/'
-                    ? 'bg-gray-800 text-white'
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                    }`}
-                >
-                  Главная
-                </Link>
-                <Link
-                  to="/dashboard"
-                  className={`px-3 py-2 rounded-md text-sm font-medium ${location.pathname === '/dashboard'
-                    ? 'bg-gray-800 text-white'
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                    }`}
+                  className={`font-medium transition-colors hover:text-cyan-400 ${location.pathname === '/' ? 'text-cyan-400' : 'text-gray-300'}`}
                 >
                   Дашборд
                 </Link>
+              </li>
+              <li>
                 <Link
                   to="/swap"
-                  className={`px-3 py-2 rounded-md text-sm font-medium ${location.pathname === '/swap'
-                    ? 'bg-gray-800 text-white'
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                    }`}
+                  className={`font-medium transition-colors hover:text-cyan-400 ${location.pathname === '/swap' ? 'text-cyan-400' : 'text-gray-300'}`}
                 >
                   Обмен
                 </Link>
-                {/* Новый пункт меню "Бурн и минт" */}
+              </li>
+              <li>
                 <Link
                   to="/burn-mint"
-                  className={`px-3 py-2 rounded-md text-sm font-medium ${location.pathname === '/burn-mint'
-                    ? 'bg-gray-800 text-white'
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                    }`}
+                  className={`font-medium transition-colors hover:text-cyan-400 ${location.pathname === '/burn-mint' ? 'text-cyan-400' : 'text-gray-300'}`}
                 >
-                  Бурн и минт
+                  Mint/Burn
                 </Link>
-                {isAdmin && (
+              </li>
+              {isAdmin && (
+                <li>
                   <Link
                     to="/admin"
-                    className={`px-3 py-2 rounded-md text-sm font-medium ${location.pathname === '/admin'
-                      ? 'bg-gray-800 text-white'
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                      }`}
+                    className={`font-medium transition-colors hover:text-cyan-400 ${location.pathname === '/admin' ? 'text-cyan-400' : 'text-gray-300'}`}
                   >
                     Админка
                   </Link>
-                )}
-              </nav>
-            )}
-          </div>
-          <div className="flex items-center">
-            {error && (
-              <div className="hidden md:block mr-4 text-sm text-red-400 bg-red-900 bg-opacity-50 px-3 py-1 rounded">
-                Ошибка: {error}
+                </li>
+              )}
+            </ul>
+          </nav>
+
+          <div className="mt-4 md:mt-0 flex items-center space-x-4">
+            {/* Отображаем адрес подключенного кошелька на десктопах */}
+            {isConnected && (
+              <div className="hidden md:block text-sm text-gray-300">
+                {formatAddress(account)}
               </div>
             )}
-            {isConnected ? (
-              <div className="flex items-center space-x-4">
-                {isAdmin && (
-                  <span className="hidden sm:inline-block text-xs font-medium bg-amber-900 text-amber-300 px-2 py-1 rounded">
-                    Админ
-                  </span>
-                )}
-                <span className="hidden sm:inline-block text-sm font-medium text-gray-300">
-                  {getShortAddress(account)}
-                </span>
-                <button
-                  onClick={disconnectWallet}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition"
-                >
-                  Отключить
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={connectWallet}
-                className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white text-sm font-medium rounded-lg transition"
-              >
-                Подключить кошелек
-              </button>
-            )}
+            <ConnectButton />
           </div>
         </div>
       </div>
