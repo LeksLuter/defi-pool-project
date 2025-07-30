@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useWeb3 } from '../context/Web3Context';
-import { ethers } from 'ethers';
+// Импортируем необходимые функции из ethers v6
+import { Contract, formatUnits, parseUnits } from 'ethers'; // Импорт из корня ethers для v6
 
 // ABI для ERC20 токенов (минимальный набор функций для получения метаданных)
 const ERC20_ABI = [
@@ -34,44 +35,68 @@ const WalletTokens = () => {
 
   // Функция для получения цены токена через CoinGecko API
   const fetchTokenPriceFromCoinGecko = async (tokenId) => {
+    if (!tokenId) return 0; // Защита от undefined/null
     try {
-      const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${tokenId}&vs_currencies=usd`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // Таймаут 5 секунд
+
+      const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${tokenId}&vs_currencies=usd`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
-        throw new Error(`CoinGecko HTTP error! status: ${response.status}`);
+        console.warn(`CoinGecko API ошибка для ${tokenId}: ${response.status}`);
+        return 0;
       }
       const data = await response.json();
       return data[tokenId]?.usd || 0;
     } catch (error) {
-      console.warn(`Не удалось получить цену для токена ${tokenId} через CoinGecko:`, error);
-      return null;
+      if (error.name === 'AbortError') {
+        console.warn(`Таймаут при получении цены для ${tokenId} через CoinGecko`);
+      } else {
+        console.warn(`Не удалось получить цену для ${tokenId} через CoinGecko:`, error.message);
+      }
+      return 0;
     }
   };
 
   // Функция для получения цены токена через CoinMarketCap API
   const fetchTokenPriceFromCoinMarketCap = async (tokenId) => {
+    // Поддержка обоих ключей из переменных окружения
+    const cmcApiKey = import.meta.env.VITE_CMC_API_KEY || import.meta.env.VITE_COINMARKETCAP_API_KEY;
+    if (!cmcApiKey) {
+      console.warn('API ключ CoinMarketCap не задан в переменных окружения (VITE_CMC_API_KEY или VITE_COINMARKETCAP_API_KEY)');
+      return null;
+    }
+    if (!tokenId) return 0; // Защита от undefined/null
     try {
-      const cmcApiKey = import.meta.env.VITE_COINMARKETCAP_API_KEY;
-      if (!cmcApiKey) {
-        console.warn('CoinMarketCap API ключ не задан в переменных окружения');
-        return null;
-      }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // Таймаут 5 секунд
+
       const response = await fetch(
         `https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?convert=USD&id=${tokenId}`,
         {
           headers: {
             'X-CMC_PRO_API_KEY': cmcApiKey,
           },
+          signal: controller.signal
         }
       );
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
-        throw new Error(`CoinMarketCap HTTP error! status: ${response.status}`);
+        console.warn(`CoinMarketCap API ошибка для ${tokenId}: ${response.status}`);
+        return 0;
       }
       const data = await response.json();
       const tokenData = data.data[tokenId];
       return tokenData?.quote?.USD?.price || 0;
     } catch (error) {
-      console.warn(`Не удалось получить цену для токена ${tokenId} через CoinMarketCap:`, error);
-      return null;
+      if (error.name === 'AbortError') {
+        console.warn(`Таймаут при получении цены для ${tokenId} через CoinMarketCap`);
+      } else {
+        console.warn(`Не удалось получить цену для ${tokenId} через CoinMarketCap:`, error.message);
+      }
+      return 0;
     }
   };
 
@@ -80,7 +105,7 @@ const WalletTokens = () => {
     // Сначала пробуем CoinGecko
     let price = await fetchTokenPriceFromCoinGecko(tokenId);
     // Если CoinGecko не сработал, пробуем CoinMarketCap
-    if (price === null && cmcId) {
+    if ((price === null || price === 0) && cmcId) {
       price = await fetchTokenPriceFromCoinMarketCap(cmcId);
     }
     return price || 0;
@@ -89,8 +114,8 @@ const WalletTokens = () => {
   // Функция для получения цен нескольких токенов с резервными вариантами
   const fetchMultipleTokenPricesWithFallback = async (tokenMap) => {
     const tokenIds = Object.keys(tokenMap);
-    // Создаем карту адресов токенов к ценам
     const addressToPrice = {};
+    // Последовательно для предотвращения перегрузки API
     for (const address of tokenIds) {
       const { coingeckoId, cmcId } = tokenMap[address];
       addressToPrice[address] = await fetchTokenPriceWithFallback(coingeckoId, cmcId);
@@ -98,91 +123,98 @@ const WalletTokens = () => {
     return addressToPrice;
   };
 
-
   // Функция для получения токенов через Etherscan V2 API (основной метод)
-  const fetchTokensFromEtherscanV2 = async (account) => {
+  const fetchTokensFromEtherscanV2 = async (accountAddress, ethProvider) => {
+    if (!ethProvider || !accountAddress) return [];
     try {
       const etherscanApiKey = import.meta.env.VITE_ETHERSCAN_API_KEY;
       if (!etherscanApiKey) {
-        throw new Error('ETHERSCAN_API_KEY не задан в переменных окружения');
+        console.warn('VITE_ETHERSCAN_API_KEY не задан в переменных окружения');
+        return [];
       }
-      // Chain ID для Polygon Mainnet
       const polygonChainId = 137;
 
-      // Запрашиваем транзакции токенов ERC-20 через Etherscan V2 API
-      // Используем page=1, offset=1000 для получения большего количества транзакций за один запрос
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // Таймаут 15 секунд
+
       const response = await fetch(
-        `https://api.etherscan.io/v2/api?chainid=${polygonChainId}&module=account&action=tokentx&address=${account}&apikey=${etherscanApiKey}&page=1&offset=1000&sort=desc`
+        `https://api.etherscan.io/v2/api?chainid=${polygonChainId}&module=account&action=tokentx&address=${accountAddress}&apikey=${etherscanApiKey}&page=1&offset=100&sort=desc`,
+        { signal: controller.signal }
       );
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
-        throw new Error(`Etherscan V2 API error! status: ${response.status}`);
+        console.warn(`Etherscan V2 API ошибка: ${response.status}`);
+        return [];
       }
       const data = await response.json();
       if (data.status !== "1") {
-        throw new Error(data.message || 'Ошибка при получении данных от Etherscan V2 API');
+        console.warn('Etherscan V2 API вернул статус 0 или ошибку:', data.message);
+        return [];
       }
 
-      // Получаем уникальные адреса токенов из транзакций
       const uniqueTokens = new Set();
-      const tokenSampleData = {}; // Для хранения примера данных токена
-      data.result.forEach(tx => {
+      const tokenSampleData = {};
+      // Ограничиваем количество обрабатываемых транзакций
+      data.result.slice(0, 50).forEach(tx => {
         const contractAddress = tx.contractAddress.toLowerCase();
         uniqueTokens.add(contractAddress);
-        // Сохраняем пример данных для fallback при получении метаданных
         if (!tokenSampleData[contractAddress]) {
           tokenSampleData[contractAddress] = {
             tokenName: tx.tokenName,
             tokenSymbol: tx.tokenSymbol,
-            tokenDecimal: parseInt(tx.tokenDecimal)
+            tokenDecimal: parseInt(tx.tokenDecimal, 10) // Убедимся, что это число
           };
         }
       });
 
       console.log(`Найдено ${uniqueTokens.size} уникальных токенов через Etherscan`);
 
-      // Для каждого уникального токена получаем актуальный баланс и метаданные
       const tokenDetails = [];
 
       // Обрабатываем нативный токен POL отдельно
       try {
-        const polBalance = await provider.getBalance(account);
-        if (polBalance.gt(0)) {
+        const polBalance = await ethProvider.getBalance(accountAddress);
+        if (polBalance > 0n) { // Используем BigInt для сравнения в v6
           tokenDetails.push({
             contractAddress: '0x0000000000000000000000000000000000000000',
             tokenName: 'Polygon Ecosystem Token',
             tokenSymbol: 'POL',
             tokenDecimal: 18,
-            balance: polBalance.toString()
+            balance: polBalance.toString() // BigInt в строку
           });
         }
       } catch (error) {
-        console.warn('Ошибка при получении баланса POL:', error);
+        console.warn('Ошибка при получении баланса POL:', error.message);
       }
 
-
-      // Обрабатываем каждый ERC-20 токен
+      // Обрабатываем каждый ERC-20 токен (ограничиваем для скорости)
+      let tokenCount = 0;
+      const MAX_TOKENS = 20;
       for (const tokenAddress of uniqueTokens) {
+        if (tokenCount >= MAX_TOKENS) break;
         try {
-          // Создаем контракт токена
-          const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+          const tokenContract = new Contract(tokenAddress, ERC20_ABI, ethProvider);
+          const balance = await tokenContract.balanceOf(accountAddress);
 
-          // Получаем баланс токена напрямую
-          const balance = await tokenContract.balanceOf(account);
-
-          // Если баланс больше 0, получаем метаданные
-          if (balance.gt(0)) {
+          if (balance > 0n) { // Используем BigInt
             let tokenInfo = tokenSampleData[tokenAddress];
-            // Если данные из транзакций не получены, запрашиваем напрямую
             if (!tokenInfo) {
-              const [symbol, name, decimals] = await Promise.allSettled([
+              // Используем Promise.allSettled корректно
+              const results = await Promise.allSettled([
                 tokenContract.symbol(),
                 tokenContract.name(),
                 tokenContract.decimals()
               ]);
-              // Обрабатываем результаты Promise.allSettled
-              const symbolValue = symbol.status === 'fulfilled' ? symbol.value : '???';
-              const nameValue = name.status === 'fulfilled' ? name.value : 'Unknown Token';
-              const decimalsValue = decimals.status === 'fulfilled' ? decimals.value : 18;
+              // Правильная обработка результатов
+              const symbolResult = results[0];
+              const nameResult = results[1];
+              const decimalsResult = results[2];
+
+              const symbolValue = symbolResult.status === 'fulfilled' ? symbolResult.value : '???';
+              const nameValue = nameResult.status === 'fulfilled' ? nameResult.value : 'Unknown Token';
+              // Убедимся, что decimals - это число
+              const decimalsValue = decimalsResult.status === 'fulfilled' && Number.isInteger(decimalsResult.value) ? decimalsResult.value : 18;
 
               tokenInfo = {
                 tokenName: nameValue,
@@ -196,31 +228,35 @@ const WalletTokens = () => {
               tokenName: tokenInfo.tokenName,
               tokenSymbol: tokenInfo.tokenSymbol,
               tokenDecimal: tokenInfo.tokenDecimal,
-              balance: balance.toString()
+              balance: balance.toString() // BigInt в строку
             });
+            tokenCount++;
           }
         } catch (error) {
-          console.warn(`Ошибка при обработке токена ${tokenAddress}:`, error);
-          // Пропускаем токен с ошибкой
+          console.warn(`Ошибка при обработке токена ${tokenAddress}:`, error.message);
         }
       }
 
       return tokenDetails;
     } catch (error) {
-      console.warn('Не удалось получить токены через Etherscan V2:', error);
-      throw error;
+      if (error.name !== 'AbortError') {
+        console.error('Критическая ошибка Etherscan V2:', error.message);
+      } else {
+        console.warn('Таймаут Etherscan V2');
+      }
+      return [];
     }
   };
 
   // Функция для получения токенов через прямой вызов balanceOf (резервный метод)
-  const fetchTokensDirectBalance = async (account) => {
+  const fetchTokensDirectBalance = async (accountAddress, ethProvider) => {
+    if (!ethProvider || !accountAddress) return [];
     try {
       console.log('Используется резервный метод получения токенов');
       const tokens = [];
-      // Получаем баланс POL
       try {
-        const polBalance = await provider.getBalance(account);
-        if (polBalance.gt(0)) {
+        const polBalance = await ethProvider.getBalance(accountAddress);
+        if (polBalance > 0n) {
           tokens.push({
             contractAddress: '0x0000000000000000000000000000000000000000',
             tokenName: 'Polygon Ecosystem Token',
@@ -230,14 +266,12 @@ const WalletTokens = () => {
           });
         }
       } catch (error) {
-        console.warn('Ошибка при получении баланса POL в резервном методе:', error);
+        console.warn('Ошибка при получении баланса POL в резервном методе:', error.message);
       }
-      // Здесь можно добавить запросы балансов для известных токенов из переменных окружения
-      // Но в данном случае ограничимся только нативным токеном как минимальный fallback
       return tokens;
     } catch (error) {
-      console.warn('Не удалось получить токены через резервный метод:', error);
-      throw error;
+      console.warn('Не удалось получить токены через резервный метод:', error.message);
+      return [];
     }
   };
 
@@ -253,21 +287,20 @@ const WalletTokens = () => {
       setError(null);
 
       try {
-        // Используем Etherscan V2 API как основной метод
         let tokenList = [];
         try {
           console.log('Попытка получения токенов через Etherscan V2 API...');
-          tokenList = await fetchTokensFromEtherscanV2(account);
-          console.log('Токены получены через Etherscan V2:', tokenList);
+          tokenList = await fetchTokensFromEtherscanV2(account, provider);
+          console.log('Токены получены через Etherscan V2:', tokenList.length);
         } catch (etherscanError) {
-          console.error('Etherscan V2 API недоступен, пробуем резервный метод...', etherscanError);
-          // Резервный метод - получение токенов напрямую
+          console.error('Etherscan V2 API недоступен, пробуем резервный метод...', etherscanError.message);
           try {
-            tokenList = await fetchTokensDirectBalance(account);
-            console.log('Токены получены через резервный метод:', tokenList);
+            tokenList = await fetchTokensDirectBalance(account, provider);
+            console.log('Токены получены через резервный метод:', tokenList.length);
           } catch (directError) {
-            console.error('Резервный метод также недоступен:', directError);
-            throw new Error(`Не удалось получить токены ни через Etherscan V2, ни через резервный метод: ${directError.message}`);
+            console.error('Резервный метод также недоступен:', directError.message);
+            // Не блокируем UI критической ошибкой, просто показываем пустой список
+            tokenList = [];
           }
         }
 
@@ -275,17 +308,18 @@ const WalletTokens = () => {
         const processedTokens = tokenList
           .filter(token => {
             try {
-              const balanceBN = ethers.BigNumber.from(token.balance);
-              return balanceBN.gt(0);
+              const balanceBN = BigInt(token.balance); // Используем BigInt для v6
+              return balanceBN > 0n;
             } catch (e) {
+              console.warn("Ошибка при проверке баланса BN:", e.message);
               return false;
             }
           })
           .map(tokenInfo => {
             try {
-              // Конвертируем баланс из smallest unit в десятичный формат
-              const balanceBN = ethers.BigNumber.from(tokenInfo.balance);
-              const formattedBalance = ethers.utils.formatUnits(balanceBN, tokenInfo.tokenDecimal);
+              const balanceBN = BigInt(tokenInfo.balance);
+              // Используем formatUnits из ethers v6
+              const formattedBalance = formatUnits(balanceBN, tokenInfo.tokenDecimal);
               return {
                 address: tokenInfo.contractAddress,
                 symbol: tokenInfo.tokenSymbol,
@@ -295,7 +329,7 @@ const WalletTokens = () => {
                 decimals: tokenInfo.tokenDecimal
               };
             } catch (formatError) {
-              console.warn(`Ошибка при форматировании баланса токена ${tokenInfo.contractAddress}:`, formatError);
+              console.warn(`Ошибка при форматировании баланса токена ${tokenInfo.contractAddress}:`, formatError.message);
               return null;
             }
           })
@@ -304,9 +338,11 @@ const WalletTokens = () => {
         // Подготавливаем карту токенов для получения цен
         const tokenPriceMap = {};
         processedTokens.forEach(token => {
-          tokenPriceMap[token.address.toLowerCase()] = {
-            coingeckoId: TOKEN_ADDRESS_TO_COINGECKO_ID[token.address.toLowerCase()] || token.symbol.toLowerCase(),
-            cmcId: TOKEN_ADDRESS_TO_CMC_ID[token.address.toLowerCase()]
+          const lowerAddress = token.address.toLowerCase();
+          // Используем символ как fallback для CoinGecko ID
+          tokenPriceMap[lowerAddress] = {
+            coingeckoId: TOKEN_ADDRESS_TO_COINGECKO_ID[lowerAddress] || token.symbol?.toLowerCase(),
+            cmcId: TOKEN_ADDRESS_TO_CMC_ID[lowerAddress]
           };
         });
 
@@ -315,32 +351,50 @@ const WalletTokens = () => {
 
         // Добавляем цены и стоимость к токенам
         const tokensWithPrices = processedTokens.map(token => {
+          // Убедимся, что баланс - число
+          const balanceFloat = parseFloat(token.balance);
+          if (isNaN(balanceFloat)) {
+            return { ...token, price: '0.0000', value: '0.00' };
+          }
           const price = addressToPrice[token.address.toLowerCase()] || 0;
-          const value = parseFloat(token.balance) * price;
+          const value = balanceFloat * price;
+          // Защита от NaN при форматировании
+          const formattedPrice = isNaN(price) ? '0.0000' : price.toFixed(4);
+          const formattedValue = isNaN(value) ? '0.00' : value.toFixed(2);
           return {
             ...token,
-            price: price.toFixed(4),
-            value: value.toFixed(2)
+            price: formattedPrice,
+            value: formattedValue
           };
         });
 
         setTokens(tokensWithPrices);
       } catch (err) {
-        console.error("Ошибка при получении балансов токенов:", err);
-        setError(`Не удалось получить балансы токенов: ${err.message}`);
+        console.error("Критическая ошибка при получении балансов токенов:", err);
+        setError(`Не удалось получить балансы токенов: ${err.message || 'Неизвестная ошибка'}`);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchTokenBalances();
+    // Используем флаг для предотвращения обновления состояния после размонтирования
+    let isMounted = true;
+    const fetchData = async () => {
+      await fetchTokenBalances();
+      if (!isMounted) return;
+    };
+    fetchData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [provider, account]);
 
   // Функция для копирования адреса в буфер обмена
-  const copyToClipboard = async (address, symbol) => {
+  const copyToClipboard = async (address) => {
+    if (!address) return;
     try {
       await navigator.clipboard.writeText(address);
-      // Можно добавить уведомление об успешном копировании
     } catch (err) {
       console.error('Ошибка при копировании: ', err);
     }
@@ -350,7 +404,7 @@ const WalletTokens = () => {
   const openInPolygonscan = (address) => {
     if (address && address !== '0x0000000000000000000000000000000000000000') {
       const url = `https://polygonscan.com/address/${address}`;
-      window.open(url, '_blank');
+      window.open(url, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -358,7 +412,7 @@ const WalletTokens = () => {
   const openInBlockscan = (address) => {
     if (address && address !== '0x0000000000000000000000000000000000000000') {
       const url = `https://blockscan.com/address/${address}`;
-      window.open(url, '_blank');
+      window.open(url, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -410,11 +464,11 @@ const WalletTokens = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-10 w-10 rounded-full bg-gradient-to-br from-cyan-700 to-blue-700 flex items-center justify-center text-white font-bold">
-                            {token.symbol.charAt(0)}
+                            {token.symbol ? token.symbol.charAt(0) : '?'}
                           </div>
                           <div className="ml-4">
-                            <div className="text-sm font-medium text-white">{token.symbol}</div>
-                            <div className="text-sm text-gray-400">{token.name}</div>
+                            <div className="text-sm font-medium text-white">{token.symbol || '???'}</div>
+                            <div className="text-sm text-gray-400">{token.name || 'Неизвестный токен'}</div>
                             <div className="flex items-center mt-1">
                               <span className="text-xs text-gray-500 mr-2">
                                 {token.address === '0x0000000000000000000000000000000000000000'
@@ -423,9 +477,10 @@ const WalletTokens = () => {
                               </span>
                               <div className="flex space-x-1">
                                 <button
-                                  onClick={() => copyToClipboard(token.address, token.symbol)}
+                                  onClick={() => copyToClipboard(token.address)}
                                   className="p-1 rounded hover:bg-gray-600 transition text-gray-400 hover:text-white"
                                   title="Копировать адрес"
+                                  aria-label={`Копировать адрес ${token.symbol}`}
                                 >
                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -435,6 +490,7 @@ const WalletTokens = () => {
                                   onClick={() => openInPolygonscan(token.address)}
                                   className="p-1 rounded hover:bg-gray-600 transition text-gray-400 hover:text-white"
                                   title="Посмотреть на Polygonscan"
+                                  aria-label={`Открыть ${token.symbol} в Polygonscan`}
                                 >
                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -444,6 +500,7 @@ const WalletTokens = () => {
                                   onClick={() => openInBlockscan(token.address)}
                                   className="p-1 rounded hover:bg-gray-600 transition text-gray-400 hover:text-white"
                                   title="Посмотреть на Blockscan"
+                                  aria-label={`Открыть ${token.symbol} в Blockscan`}
                                 >
                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
