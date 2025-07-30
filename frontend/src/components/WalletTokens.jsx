@@ -1,9 +1,7 @@
+// frontend/src/components/WalletTokens.jsx
 import React, { useEffect, useState } from 'react';
 import { useWeb3 } from '../context/Web3Context';
-// Исправлен импорт для ethers v5
-import { ethers } from 'ethers'; // Импортируем ethers как объект, но будем использовать подмодули
-import { BigNumber } from 'ethers'; // Импортируем BigNumber напрямую
-import { formatUnits } from 'ethers/lib/utils'; // Исправлен импорт formatUnits
+import { ethers } from 'ethers';
 
 // ABI для ERC20 токенов (минимальный набор функций для получения метаданных)
 const ERC20_ABI = [
@@ -14,7 +12,7 @@ const ERC20_ABI = [
 ];
 
 // Карта адресов токенов Polygon в CoinGecko ID
-// Исправлен ID для POL (ранее MATIC) и USDT
+// Исправлен ID для POL (ранее MATIC)
 const TOKEN_ADDRESS_TO_COINGECKO_ID = {
   '0x0000000000000000000000000000000000000000': 'polygon-ecosystem-token', // POL
   '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619': 'weth', // WETH
@@ -25,19 +23,10 @@ const TOKEN_ADDRESS_TO_COINGECKO_ID = {
 // Карта адресов токенов Polygon в CoinMarketCap ID
 // Исправлены ID для USDC и USDT
 const TOKEN_ADDRESS_TO_CMC_ID = {
-  '0x0000000000000000000000000000000000000000': 3890, // POL (ранее MATIC)
+  '0x0000000000000000000000000000000000000000': 3890, // POL
   '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619': 2396, // WETH
   '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 3408, // USDC (CoinMarketCap ID)
   '0xc2132d05d31c914a87c6611c10748aeb04b58e8f': 825,  // USDT (CoinMarketCap ID)
-};
-
-// Пример данных токенов для адресов, которые могут не возвращать метаданные через RPC
-const tokenSampleData = {
-  '0x0000000000000000000000000000000000000000': {
-    tokenName: 'Polygon Ecosystem Token',
-    tokenSymbol: 'POL',
-    tokenDecimal: '18'
-  }
 };
 
 const WalletTokens = () => {
@@ -46,38 +35,131 @@ const WalletTokens = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Функция для получения токенов через Etherscan API (основной метод)
-  const fetchTokensFromEtherscan = async (accountAddress, ethProvider) => {
-    if (!ethProvider || !accountAddress) return [];
-
+  // Функция для получения цены токена через CoinGecko API
+  const fetchTokenPriceFromCoinGecko = async (tokenId) => {
+    if (!tokenId) return 0;
     try {
-      console.log('Используется Etherscan V2 API');
-      const apiKey = import.meta.env.VITE_ETHERSCAN_API_KEY || 'YourApiKeyToken'; // Используем переменную окружения
-      const apiUrl = `https://api.polygonscan.com/api?module=account&action=tokentx&address=${accountAddress}&startblock=0&endblock=99999999&sort=asc&apikey=${apiKey}`;
-
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // Таймаут 10 секунд
-
-      const response = await fetch(apiUrl, { signal: controller.signal });
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // Таймаут 5 секунд
+      const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${tokenId}&vs_currencies=usd`, {
+        signal: controller.signal
+      });
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(`Ошибка HTTP: ${response.status}`);
+        console.warn(`CoinGecko API ошибка для ${tokenId}: ${response.status}`);
+        return 0;
+      }
+
+      const data = await response.json();
+      return data[tokenId]?.usd || 0;
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.warn(`Ошибка при получении цены из CoinGecko для ${tokenId}:`, error.message);
+      } else {
+        console.warn(`Таймаут CoinGecko API для ${tokenId}`);
+      }
+      return 0;
+    }
+  };
+
+  // Функция для получения цены токена через CoinMarketCap API
+  const fetchTokenPriceFromCoinMarketCap = async (cmcId) => {
+    if (!cmcId) return 0;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // Таймаут 5 секунд
+      const response = await fetch(`https://api.coincap.io/v2/assets/${cmcId}`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        console.warn(`CoinMarketCap API ошибка для ${cmcId}: ${response.status}`);
+        return 0;
+      }
+
+      const data = await response.json();
+      return parseFloat(data.data?.priceUsd) || 0;
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.warn(`Ошибка при получении цены из CoinMarketCap для ${cmcId}:`, error.message);
+      } else {
+        console.warn(`Таймаут CoinMarketCap API для ${cmcId}`);
+      }
+      return 0;
+    }
+  };
+
+  // Функция для получения цены с резервными вариантами
+  const fetchTokenPriceWithFallback = async (tokenId, cmcId) => {
+    let price = await fetchTokenPriceFromCoinGecko(tokenId);
+    if ((price === null || price === 0) && cmcId) {
+      price = await fetchTokenPriceFromCoinMarketCap(cmcId);
+    }
+    return price || 0;
+  };
+
+  // Функция для получения цен нескольких токенов с резервными вариантами
+  const fetchMultipleTokenPricesWithFallback = async (tokenMap) => {
+    const tokenIds = Object.keys(tokenMap);
+    const addressToPrice = {};
+
+    // Последовательно для предотвращения перегрузки API
+    for (const address of tokenIds) {
+      const { coingeckoId, cmcId } = tokenMap[address];
+      addressToPrice[address] = await fetchTokenPriceWithFallback(coingeckoId, cmcId);
+    }
+
+    return addressToPrice;
+  };
+
+  // Функция для получения токенов через Etherscan V2 API (основной метод)
+  const fetchTokensFromEtherscanV2 = async (accountAddress, ethProvider) => {
+    if (!ethProvider || !accountAddress) return [];
+
+    try {
+      const etherscanApiKey = import.meta.env.VITE_ETHERSCAN_API_KEY;
+      if (!etherscanApiKey) {
+        console.warn('VITE_ETHERSCAN_API_KEY не задан в переменных окружения');
+        return [];
+      }
+
+      const polygonChainId = 137;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // Таймаут 15 секунд
+
+      const response = await fetch(
+        `https://api.etherscan.io/v2/api?chainid=${polygonChainId}&module=account&action=tokentx&address=${accountAddress}&apikey=${etherscanApiKey}&page=1&offset=100&sort=desc`,
+        { signal: controller.signal }
+      );
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        console.warn(`Etherscan V2 API ошибка: ${response.status}`);
+        return [];
       }
 
       const data = await response.json();
 
       if (data.status !== "1") {
-        console.warn('Etherscan API вернул статус 0 или ошибку:', data.message);
+        console.warn('Etherscan V2 API вернул статус 0 или ошибку:', data.message);
         return [];
       }
 
-      const transactions = data.result;
       const uniqueTokens = new Set();
+      const tokenSampleData = {};
 
-      transactions.forEach(tx => {
-        if (tx.to && tx.to.toLowerCase() === accountAddress.toLowerCase()) {
-          uniqueTokens.add(tx.contractAddress.toLowerCase());
+      // Ограничиваем количество обрабатываемых транзакций
+      data.result.slice(0, 50).forEach(tx => {
+        const contractAddress = tx.contractAddress.toLowerCase();
+        uniqueTokens.add(contractAddress);
+        if (!tokenSampleData[contractAddress]) {
+          tokenSampleData[contractAddress] = {
+            tokenName: tx.tokenName,
+            tokenSymbol: tx.tokenSymbol,
+            tokenDecimal: parseInt(tx.tokenDecimal, 10) // Убедимся, что это число
+          };
         }
       });
 
@@ -238,25 +320,32 @@ const WalletTokens = () => {
     let tokenList = [];
 
     try {
-      const ethProvider = new ethers.providers.Web3Provider(window.ethereum);
+      // Используем provider напрямую, как в контексте
+      const ethProvider = provider;
 
-      // Попытка получить токены через Etherscan API
+      // Попытка получить токены через Etherscan V2 API
       try {
-        tokenList = await fetchTokensFromEtherscan(account, ethProvider);
-        console.log('Токены получены через Etherscan API:', tokenList.length);
+        console.log('Попытка получения токенов через Etherscan V2 API...');
+        tokenList = await fetchTokensFromEtherscanV2(account, ethProvider);
+        console.log('Токены получены через Etherscan V2:', tokenList.length);
       } catch (etherscanError) {
-        console.warn('Etherscan API недоступен, пробуем резервный метод:', etherscanError.message);
-        // Если Etherscan API недоступен, используем резервный метод
-        tokenList = await fetchTokensDirectBalance(account, ethProvider);
-        console.log('Токены получены через резервный метод:', tokenList.length);
-      } // Удален лишний catch
+        console.error('Etherscan V2 API недоступен, пробуем резервный метод...', etherscanError.message);
+        try {
+          tokenList = await fetchTokensDirectBalance(account, ethProvider);
+          console.log('Токены получены через резервный метод:', tokenList.length);
+        } catch (directError) {
+          console.error('Резервный метод также недоступен:', directError.message);
+          // Не блокируем UI критической ошибкой, просто показываем пустой список
+          tokenList = [];
+        }
+      }
 
       // Преобразуем данные токенов в формат для отображения
       const processedTokens = tokenList
         .filter(token => {
           try {
             // Используем BigNumber из ethers v5 для проверки
-            const balanceBN = BigNumber.from(token.balance);
+            const balanceBN = ethers.BigNumber.from(token.balance);
             return balanceBN.gt(0);
           } catch (e) {
             console.warn("Ошибка при проверке баланса BN:", e.message);
@@ -265,9 +354,9 @@ const WalletTokens = () => {
         })
         .map(tokenInfo => {
           try {
-            const balanceBN = BigNumber.from(tokenInfo.balance);
+            const balanceBN = ethers.BigNumber.from(tokenInfo.balance);
             // Используем formatUnits из ethers v5
-            const formattedBalance = formatUnits(balanceBN, tokenInfo.tokenDecimal);
+            const formattedBalance = ethers.utils.formatUnits(balanceBN, tokenInfo.tokenDecimal);
             return {
               address: tokenInfo.contractAddress,
               symbol: tokenInfo.tokenSymbol,
@@ -289,29 +378,23 @@ const WalletTokens = () => {
         const lowerAddress = token.address.toLowerCase();
         // Используем символ как fallback для CoinGecko ID
         tokenPriceMap[lowerAddress] = {
-          coingeckoId: TOKEN_ADDRESS_TO_COINGECKO_ID[lowerAddress] || token.symbol.toLowerCase(),
+          coingeckoId: TOKEN_ADDRESS_TO_COINGECKO_ID[lowerAddress] || token.symbol?.toLowerCase(),
           cmcId: TOKEN_ADDRESS_TO_CMC_ID[lowerAddress]
         };
       });
 
-      // Получаем цены токенов (заглушка)
+      // Получаем цены для всех токенов с резервными вариантами
+      const addressToPrice = await fetchMultipleTokenPricesWithFallback(tokenPriceMap);
+
+      // Добавляем цены и стоимость к токенам
       const tokensWithPrices = processedTokens.map(token => {
-        const lowerAddress = token.address.toLowerCase();
-        const priceInfo = tokenPriceMap[lowerAddress];
-        // В реальной реализации здесь будет вызов API CoinGecko или CoinMarketCap
-        // Пока что используем фиктивные цены или 0
-        let price = 0;
-        if (priceInfo && priceInfo.coingeckoId) {
-          // Здесь будет логика получения цены по CoinGecko ID
-          // price = await fetchPriceFromCoinGecko(priceInfo.coingeckoId);
-          // Для демонстрации используем фиктивные цены
-          if (priceInfo.coingeckoId === 'polygon-ecosystem-token') price = 0.75;
-          if (priceInfo.coingeckoId === 'weth') price = 3000;
-          if (priceInfo.coingeckoId === 'usd-coin') price = 1;
-          if (priceInfo.coingeckoId === 'tether') price = 1;
+        // Убедимся, что баланс - число
+        const balanceFloat = parseFloat(token.balance);
+        if (isNaN(balanceFloat)) {
+          return { ...token, price: '0.0000', value: '0.00' };
         }
 
-        const balanceFloat = parseFloat(token.balance);
+        const price = addressToPrice[token.address.toLowerCase()] || 0;
         const value = balanceFloat * price;
 
         // Защита от NaN при форматировании
