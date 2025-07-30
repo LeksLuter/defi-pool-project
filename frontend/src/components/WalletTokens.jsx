@@ -1,5 +1,5 @@
 // frontend/src/components/WalletTokens.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react'; // Добавлен useRef
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
 
@@ -31,6 +31,9 @@ const TOKEN_ADDRESS_TO_CMC_ID = {
 
 // Вспомогательная функция для получения ключа кэша
 const getCacheKey = (account) => `walletTokens_${account}`;
+
+// Вспомогательная функция для получения ключа времени последнего обновления
+const getLastUpdateKey = (account) => `walletTokens_lastUpdate_${account}`;
 
 // Вспомогательная функция для проверки устаревания кэша (например, 5 минут)
 const isCacheExpired = (timestamp, maxAgeMinutes = 5) => {
@@ -77,11 +80,43 @@ const saveTokensToCache = (account, tokens) => {
   }
 };
 
+// Функция для сохранения времени последнего обновления
+const saveLastUpdateTime = (account) => {
+  if (!account) return;
+  try {
+    const lastUpdateKey = getLastUpdateKey(account);
+    localStorage.setItem(lastUpdateKey, Date.now().toString());
+  } catch (error) {
+    console.error('Ошибка при сохранении времени последнего обновления:', error);
+  }
+};
+
+// Функция для проверки, можно ли выполнить фоновое обновление
+// (прошло ли достаточно времени с последнего обновления)
+const canPerformBackgroundUpdate = (account, minIntervalMinutes = 5) => {
+  if (!account) return false;
+  try {
+    const lastUpdateKey = getLastUpdateKey(account);
+    const lastUpdateStr = localStorage.getItem(lastUpdateKey);
+    if (!lastUpdateStr) return true; // Нет записи - можно обновлять
+
+    const lastUpdate = parseInt(lastUpdateStr, 10);
+    if (isNaN(lastUpdate)) return true; // Некорректная запись - можно обновлять
+
+    return isCacheExpired(lastUpdate, minIntervalMinutes);
+  } catch (error) {
+    console.error('Ошибка при проверке возможности фонового обновления:', error);
+    return true; // В случае ошибки разрешаем обновление
+  }
+};
+
 const WalletTokens = () => {
   const { provider, account } = useWeb3();
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Ref для хранения ID таймера (если понадобится отмена)
+  const updateTimerRef = useRef(null);
 
   // Функция для получения цены токена через CoinGecko API
   const fetchTokenPriceFromCoinGecko = async (tokenId) => {
@@ -114,13 +149,18 @@ const WalletTokens = () => {
   // Функция для получения цены токена через CoinMarketCap API
   const fetchTokenPriceFromCoinMarketCap = async (cmcId) => {
     if (!cmcId) return 0;
+    const cmcApiKey = import.meta.env.VITE_CMC_API_KEY;
+    if (!cmcApiKey) {
+        console.warn('VITE_CMC_API_KEY не задан в переменных окружения для CoinMarketCap');
+        return 0;
+    }
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000); // Таймаут 5 секунд
       // Исправлен URL для CoinMarketCap
       const response = await fetch(`https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?id=${cmcId}`, {
         headers: {
-          'X-CMC_PRO_API_KEY': import.meta.env.VITE_CMC_API_KEY || '' // Используйте свой ключ CMC
+          'X-CMC_PRO_API_KEY': cmcApiKey
         },
         signal: controller.signal
       });
@@ -367,8 +407,24 @@ const WalletTokens = () => {
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    // Пункт 3: Проверяем, можно ли выполнить обновление
+    // Получаем интервал из localStorage или используем значение по умолчанию (5 минут)
+    const updateIntervalStr = localStorage.getItem('walletTokens_updateIntervalMinutes') || '5';
+    const updateIntervalMinutes = parseInt(updateIntervalStr, 10);
+    const minInterval = isNaN(updateIntervalMinutes) ? 5 : updateIntervalMinutes;
+
+    if (!canPerformBackgroundUpdate(accountAddress, minInterval)) {
+       console.log(`Фоновое обновление пропущено: последнее обновление было менее ${minInterval} минут назад.`);
+       // Даже если фоновое обновление пропущено, мы всё равно можем показать кэш
+       // и завершить состояние загрузки, если оно ещё активно
+       if (loading && tokens.length === 0) {
+         setLoading(false);
+       }
+       return;
+    }
+
+    console.log('Начинаем фоновое обновление токенов...');
+    setError(null); // Сбрасываем ошибку перед новой попыткой
     let tokenList = [];
 
     try {
@@ -460,16 +516,24 @@ const WalletTokens = () => {
       setTokens(tokensWithPrices);
       // Сохраняем в кэш
       saveTokensToCache(accountAddress, tokensWithPrices);
+      // Сохраняем время последнего обновления
+      saveLastUpdateTime(accountAddress);
     } catch (err) {
       console.error("Критическая ошибка при получении балансов токенов:", err);
-      setError(`Не удалось получить балансы токенов: ${err.message || 'Неизвестная ошибка'}`);
-      // В случае ошибки обновления, можно попробовать загрузить из кэша
-      const cachedTokens = getCachedTokens(accountAddress);
-      if (cachedTokens) {
-        setTokens(cachedTokens);
+      // Не устанавливаем ошибку в состояние, если у нас есть кэш, чтобы не перезаписывать отображаемые данные
+      if (tokens.length === 0) {
+         setError(`Не удалось получить балансы токенов: ${err.message || 'Неизвестная ошибка'}`);
       }
+      // В случае ошибки обновления, можно попробовать загрузить из кэша
+      // (хотя кэш уже должен быть загружен в useEffect)
+      // const cachedTokens = getCachedTokens(accountAddress);
+      // if (cachedTokens) {
+      //   setTokens(cachedTokens);
+      // }
     } finally {
-      setLoading(false);
+      if (loading) {
+        setLoading(false);
+      }
     }
   };
 
@@ -499,6 +563,10 @@ const WalletTokens = () => {
 
     return () => {
       isMounted = false;
+      // Очищаем таймер при размонтировании, если он был установлен
+      if (updateTimerRef.current) {
+        clearTimeout(updateTimerRef.current);
+      }
     };
   }, [provider, account]);
 
