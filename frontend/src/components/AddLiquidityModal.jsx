@@ -8,6 +8,7 @@ const AddLiquidityModal = ({ pool, onClose }) => {
   const [lowerPrice, setLowerPrice] = useState('');
   const [upperPrice, setUpperPrice] = useState('');
   const [status, setStatus] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleAddLiquidity = async (e) => {
     e.preventDefault();
@@ -24,128 +25,145 @@ const AddLiquidityModal = ({ pool, onClose }) => {
       return;
     }
 
+    setIsSubmitting(true);
     setStatus('Добавление ликвидности...');
     // Здесь будет логика добавления ликвидности
-    console.log("Добавление ликвидности:", {
-      pool,
-      token0Amount,
-      token1Amount,
-      lowerPrice,
-      upperPrice
-    });
-    setStatus('Ликвидность успешно добавлена!');
+    console.log("Добавление ликвидности:", { pool, token0Amount, token1Amount, lowerPrice, upperPrice });
 
-    // Очищаем форму после успешного добавления
-    setToken0Amount('');
-    setToken1Amount('');
-    setLowerPrice('');
-    setUpperPrice('');
+    // Имитация асинхронной операции
+    setTimeout(() => {
+      setStatus('Ликвидность успешно добавлена!');
+      // Очищаем форму после успешного добавления
+      setToken0Amount('');
+      setToken1Amount('');
+      setLowerPrice('');
+      setUpperPrice('');
+      setIsSubmitting(false);
+      // Закрытие модального окна через 1.5 секунды после успеха
+      setTimeout(onClose, 1500);
+    }, 2000); // Имитация задержки 2 секунды
+
+    // alert("Функция добавления ликвидности будет реализована");
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-lg font-medium text-gray-900">
-            Добавить ликвидность в пул {pool.token0}/{pool.token1}
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+      <div className="bg-gray-800 rounded-xl shadow-2xl w-full max-w-md border border-gray-700 overflow-hidden">
+        {/* Заголовок модального окна */}
+        <div className="px-6 py-4 border-b border-gray-700 flex justify-between items-center bg-gray-800/50">
+          <h3 className="text-lg font-bold text-cyan-400">
+            Добавить ликвидность в пул <span className="text-white">{pool.token0}/{pool.token1}</span>
           </h3>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500"
+            className="text-gray-400 hover:text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500 rounded-full p-1"
+            aria-label="Закрыть"
           >
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        <form onSubmit={handleAddLiquidity} className="px-6 py-4">
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Количество {pool.token0}
-            </label>
-            <input
-              type="number"
-              value={token0Amount}
-              onChange={(e) => setToken0Amount(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-              placeholder="0.0"
-              step="any"
-              min="0"
-            />
-          </div>
+        {/* Содержимое формы */}
+        <div className="px-6 py-5">
+          <form onSubmit={handleAddLiquidity}>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="token0Amount" className="block text-sm font-medium text-gray-300 mb-1">
+                  Количество {pool.token0}
+                </label>
+                <input
+                  type="number"
+                  id="token0Amount"
+                  value={token0Amount}
+                  onChange={(e) => setToken0Amount(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition duration-200"
+                  placeholder="0.0"
+                  step="any"
+                  min="0"
+                  required
+                />
+              </div>
 
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Количество {pool.token1}
-            </label>
-            <input
-              type="number"
-              value={token1Amount}
-              onChange={(e) => setToken1Amount(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-              placeholder="0.0"
-              step="any"
-              min="0"
-            />
-          </div>
+              <div>
+                <label htmlFor="token1Amount" className="block text-sm font-medium text-gray-300 mb-1">
+                  Количество {pool.token1}
+                </label>
+                <input
+                  type="number"
+                  id="token1Amount"
+                  value={token1Amount}
+                  onChange={(e) => setToken1Amount(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition duration-200"
+                  placeholder="0.0"
+                  step="any"
+                  min="0"
+                  required
+                />
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Нижняя граница цены
-              </label>
-              <input
-                type="number"
-                value={lowerPrice}
-                onChange={(e) => setLowerPrice(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="0.0"
-                step="any"
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="lowerPrice" className="block text-sm font-medium text-gray-300 mb-1">
+                    Нижняя цена
+                  </label>
+                  <input
+                    type="number"
+                    id="lowerPrice"
+                    value={lowerPrice}
+                    onChange={(e) => setLowerPrice(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition duration-200"
+                    placeholder="0.0"
+                    step="any"
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="upperPrice" className="block text-sm font-medium text-gray-300 mb-1">
+                    Верхняя цена
+                  </label>
+                  <input
+                    type="number"
+                    id="upperPrice"
+                    value={upperPrice}
+                    onChange={(e) => setUpperPrice(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition duration-200"
+                    placeholder="0.0"
+                    step="any"
+                    min="0"
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Верхняя граница цены
-              </label>
-              <input
-                type="number"
-                value={upperPrice}
-                onChange={(e) => setUpperPrice(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="0.0"
-                step="any"
-              />
-            </div>
-          </div>
 
-          {status && (
-            <div className={`mb-4 p-3 rounded-md text-sm ${status.includes('успешно')
-                ? 'bg-green-100 text-green-700'
-                : status.includes('Пожалуйста')
-                  ? 'bg-yellow-100 text-yellow-700'
-                  : 'bg-blue-100 text-blue-700'
-              }`}>
-              {status}
-            </div>
-          )}
+            {status && (
+              <div className={`mt-4 text-sm text-center px-4 py-2 rounded-lg ${status.includes('успешно') ? 'bg-green-900/30 text-green-400 border border-green-800' : 'bg-yellow-900/30 text-yellow-400 border border-yellow-800'}`}>
+                {status}
+              </div>
+            )}
 
-          <div className="flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-            >
-              Отмена
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-            >
-              Добавить ликвидность
-            </button>
-          </div>
-        </form>
+            <div className="mt-6">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className={`w-full py-3 px-4 rounded-lg font-semibold transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-cyan-500 ${isSubmitting ? 'bg-gray-600 cursor-not-allowed' : 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-lg hover:shadow-cyan-500/20'}`}
+              >
+                {isSubmitting ? (
+                  <span className="flex items-center justify-center">
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Обработка...
+                  </span>
+                ) : (
+                  'Добавить ликвидность'
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );
