@@ -1,55 +1,111 @@
-// frontend/src/components/PoolList.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWeb3 } from '../context/Web3Context';
 import AddLiquidityModal from './AddLiquidityModal';
-import CreatePoolModal from './CreatePoolModal'; // Добавляем импорт модального окна создания пула
+import CreatePoolModal from './CreatePoolModal';
+import { ethers } from 'ethers';
+import PoolFactoryABI from '../abi/PoolFactory.json';
+import LiquidityPoolABI from '../abi/LiquidityPool.json';
 
 const PoolList = () => {
-  const { provider } = useWeb3();
+  const { provider, account } = useWeb3();
   const navigate = useNavigate();
   const [pools, setPools] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isCreatePoolModalOpen, setIsCreatePoolModalOpen] = useState(false); // Состояние для модального окна создания пула
+  const [isCreatePoolModalOpen, setIsCreatePoolModalOpen] = useState(false);
   const [selectedPool, setSelectedPool] = useState(null);
 
-  // Здесь будет логика получения списка пулов
-  // Пока что показываем заглушку
-  useEffect(() => {
-    if (provider) {
-      // Получение списка пулов с фабрики
-      // Это пример, вам нужно будет реализовать реальную логику
-      setPools([
-        { id: 1, token0: "TokenA", token1: "TokenB", fee: "0.3%" },
-        { id: 2, token0: "TokenC", token1: "TokenD", fee: "1%" }
-      ]);
+  // Адрес фабрики (замените на реальный адрес после деплоя)
+  const FACTORY_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+
+  const fetchPools = async () => {
+    if (!provider) {
+      setPools([]);
+      return;
     }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const factory = new ethers.Contract(
+        FACTORY_ADDRESS,
+        PoolFactoryABI.abi,
+        provider
+      );
+
+      // Получаем адреса всех пулов
+      const poolAddresses = await factory.getPools();
+
+      // Получаем информацию о каждом пуле
+      const poolPromises = poolAddresses.map(async (address) => {
+        try {
+          const poolContract = new ethers.Contract(
+            address,
+            LiquidityPoolABI.abi,
+            provider
+          );
+
+          // Получаем данные из контракта пула
+          const token0 = await poolContract.token0();
+          const token1 = await poolContract.token1();
+          const feeRate = await poolContract.feeRate();
+
+          // Получаем символы токенов (если нужно)
+          // Для простоты используем адреса, в реальном приложении можно получить символы
+
+          return {
+            id: address,
+            address: address,
+            token0: token0.substring(0, 6) + '...' + token0.substring(token0.length - 4),
+            token1: token1.substring(0, 6) + '...' + token1.substring(token1.length - 4),
+            fee: `${ethers.utils.formatUnits(feeRate, 2)}%`,
+          };
+        } catch (poolError) {
+          console.error("Ошибка при получении данных пула:", poolError);
+          return null;
+        }
+      });
+
+      const poolsData = (await Promise.all(poolPromises)).filter(pool => pool !== null);
+      setPools(poolsData);
+    } catch (err) {
+      console.error("Ошибка при получении пулов:", err);
+      setError(`Не удалось получить список пулов: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPools();
   }, [provider]);
 
-  // Функция для открытия модального окна добавления ликвидности
   const openAddLiquidityModal = (pool) => {
     setSelectedPool(pool);
     setIsModalOpen(true);
   };
 
-  // Функция для закрытия модального окна добавления ликвидности
   const closeAddLiquidityModal = () => {
     setIsModalOpen(false);
     setSelectedPool(null);
   };
 
-  // Функции для открытия/закрытия модального окна создания пула
   const openCreatePoolModal = () => {
     setIsCreatePoolModalOpen(true);
   };
 
   const closeCreatePoolModal = () => {
     setIsCreatePoolModalOpen(false);
+    // Обновляем список пулов после создания нового
+    fetchPools();
   };
 
-  // Функция для перехода на страницу обмена
-  const handleSwapClick = () => {
-    navigate('/swap');
+  const handleSwapClick = (pool) => {
+    console.log("Переход к обмену для пула:", pool);
+    // TODO: Реализуйте переход на страницу обмена
   };
 
   return (
@@ -60,16 +116,25 @@ const PoolList = () => {
             <h1 className="text-3xl md:text-4xl font-bold">Пулы ликвидности</h1>
             <p className="mt-2 text-gray-400">Управляйте своими позициями в пулах ликвидности</p>
           </div>
-          {/* Кнопка "Создать пул" для всех пользователей */}
           <button
-            onClick={openCreatePoolModal} // Открываем модальное окно вместо перехода на страницу
+            onClick={openCreatePoolModal}
             className="mt-4 md:mt-0 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-medium rounded-lg transition shadow-lg"
           >
             Создать пул
           </button>
         </div>
 
-        {pools.length === 0 ? (
+        {error && (
+          <div className="bg-red-900/30 border border-red-700 text-red-300 px-4 py-3 rounded mb-6">
+            <strong>Ошибка:</strong> {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
+          </div>
+        ) : pools.length === 0 ? (
           <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-8 text-center">
             <p className="text-xl text-gray-400">Пулы не найдены</p>
             <p className="mt-2 text-gray-500">Станьте первым, кто создаст пул!</p>
@@ -88,7 +153,7 @@ const PoolList = () => {
                   <div className="mt-6 flex space-x-3">
                     <button
                       onClick={() => openAddLiquidityModal(pool)}
-                      className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-medium py-2 px-4 rounded-lg transition duration-300 ease-in-out transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-opacity-50"
+                      className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-600 text-white font-medium py-2 px-4 rounded-lg transition duration-300 ease-in-out transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-opacity-50"
                     >
                       Добавить
                     </button>
