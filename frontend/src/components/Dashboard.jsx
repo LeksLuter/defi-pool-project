@@ -1,3 +1,4 @@
+// frontend/src/components/Dashboard.jsx
 import React, { useState } from 'react';
 import WalletTokens from './WalletTokens';
 import PoolsList from './PoolsList';
@@ -25,22 +26,25 @@ const Dashboard = () => {
           <div className="flex flex-wrap gap-2 border-b border-gray-700">
             <button
               onClick={() => setActiveTab('wallet')}
-              className={`px-4 py-2 font-medium rounded-t-lg transition-colors duration-200 ${activeTab === 'wallet' ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white hover:bg-gray-800/30'
-                }`}
+              className={`px-4 py-2 font-medium rounded-t-lg transition-colors duration-200 ${
+                activeTab === 'wallet' ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white hover:bg-gray-800/30'
+              }`}
             >
               Кошелёк
             </button>
             <button
               onClick={() => setActiveTab('pools')}
-              className={`px-4 py-2 font-medium rounded-t-lg transition-colors duration-200 ${activeTab === 'pools' ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white hover:bg-gray-800/30'
-                }`}
+              className={`px-4 py-2 font-medium rounded-t-lg transition-colors duration-200 ${
+                activeTab === 'pools' ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white hover:bg-gray-800/30'
+              }`}
             >
               Пулы ликвидности
             </button>
             <button
               onClick={() => setActiveTab('vault')}
-              className={`px-4 py-2 font-medium rounded-t-lg transition-colors duration-200 ${activeTab === 'vault' ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white hover:bg-gray-800/30'
-                }`}
+              className={`px-4 py-2 font-medium rounded-t-lg transition-colors duration-200 ${
+                activeTab === 'vault' ? 'bg-gray-800 text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white hover:bg-gray-800/30'
+              }`}
             >
               Хранилище токенов
             </button>

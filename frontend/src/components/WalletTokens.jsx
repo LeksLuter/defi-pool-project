@@ -1,3 +1,4 @@
+// frontend/src/components/WalletTokens.jsx
 import React, { useEffect, useState } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 // Импортируем необходимые функции из ethers v6
@@ -117,8 +118,8 @@ const WalletTokens = () => {
     const addressToPrice = {};
     // Последовательно для предотвращения перегрузки API
     for (const address of tokenIds) {
-      const { coingeckoId, cmcId } = tokenMap[address];
-      addressToPrice[address] = await fetchTokenPriceWithFallback(coingeckoId, cmcId);
+        const { coingeckoId, cmcId } = tokenMap[address];
+        addressToPrice[address] = await fetchTokenPriceWithFallback(coingeckoId, cmcId);
     }
     return addressToPrice;
   };
@@ -240,9 +241,9 @@ const WalletTokens = () => {
       return tokenDetails;
     } catch (error) {
       if (error.name !== 'AbortError') {
-        console.error('Критическая ошибка Etherscan V2:', error.message);
+         console.error('Критическая ошибка Etherscan V2:', error.message);
       } else {
-        console.warn('Таймаут Etherscan V2');
+         console.warn('Таймаут Etherscan V2');
       }
       return [];
     }
@@ -380,13 +381,13 @@ const WalletTokens = () => {
     // Используем флаг для предотвращения обновления состояния после размонтирования
     let isMounted = true;
     const fetchData = async () => {
-      await fetchTokenBalances();
-      if (!isMounted) return;
+        await fetchTokenBalances();
+        if (!isMounted) return;
     };
     fetchData();
 
     return () => {
-      isMounted = false;
+        isMounted = false;
     };
   }, [provider, account]);
 
