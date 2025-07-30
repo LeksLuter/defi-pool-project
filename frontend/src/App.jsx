@@ -1,6 +1,7 @@
+// frontend/src/App.jsx
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'; // Импортирован Navigate
-import { Web3Provider } from './context/Web3Context';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Web3Provider, useWeb3 } from './context/Web3Context'; // Импортирован useWeb3
 import Header from './components/Header';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
