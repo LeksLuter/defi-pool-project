@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import WalletTokens from './WalletTokens';
-import PoolsList from './PoolsList';
+import PoolsList from './PoolList';
 import TokenVault from './TokenVault';
 import CreatePoolModal from './CreatePoolModal';
 
