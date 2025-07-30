@@ -8,7 +8,7 @@ import SwapPage from './components/SwapPage';
 import BurnMintPage from './components/BurnMintPage';
 import AdminPanel from './components/AdminPanel';
 import PoolList from './components/PoolList'; // Используем PoolList вместо PoolsList
-import './App.css';
+//import './App.css';
 
 function App() {
   return (
