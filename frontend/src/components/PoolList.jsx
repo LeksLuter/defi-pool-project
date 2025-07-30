@@ -1,3 +1,4 @@
+// frontend/src/components/PoolList.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWeb3 } from '../context/Web3Context';
@@ -41,7 +42,7 @@ const PoolList = () => {
 
       // Получаем адреса всех пулов
       const poolAddresses = await factory.getPools();
-
+      
       // Получаем информацию о каждом пуле
       const poolPromises = poolAddresses.map(async (address) => {
         try {
@@ -50,15 +51,13 @@ const PoolList = () => {
             LiquidityPoolABI.abi,
             provider
           );
-
+          
           // Получаем данные из контракта пула
           const token0 = await poolContract.token0();
           const token1 = await poolContract.token1();
           const feeRate = await poolContract.feeRate();
-
-          // Получаем символы токенов (если нужно)
+          
           // Для простоты используем адреса, в реальном приложении можно получить символы
-
           return {
             id: address,
             address: address,
@@ -67,7 +66,7 @@ const PoolList = () => {
             fee: `${ethers.utils.formatUnits(feeRate, 2)}%`,
           };
         } catch (poolError) {
-          console.error("Ошибка при получении данных пула:", poolError);
+          console.error("Ошибка при получении данных пула:", address, poolError);
           return null;
         }
       });
