@@ -1,7 +1,6 @@
 // frontend/src/components/CreatePoolModal.jsx
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useWeb3 } from '../context/Web3Context';
-import { useTokens } from './WalletTokens'; // Используем useTokens из WalletTokens
 import { ethers } from 'ethers';
 import PoolFactoryABI from '../abi/PoolFactory.json';
 
@@ -37,20 +36,12 @@ const fetchTokenDataDirect = async (address, provider) => {
 
 const CreatePoolModal = ({ onClose }) => {
   const { signer, account, provider } = useWeb3();
-  // Используем хук useTokens из WalletTokens
-  const { tokens: userTokens, loading: tokensLoading } = useTokens(); 
   
   // Состояния для токенов
   const [token0, setToken0] = useState('');
   const [token1, setToken1] = useState('');
   const [token0Data, setToken0Data] = useState(null);
   const [token1Data, setToken1Data] = useState(null);
-  
-  // Состояния для выбора токенов из списка
-  const [showToken0List, setShowToken0List] = useState(false);
-  const [showToken1List, setShowToken1List] = useState(false);
-  const [searchToken0, setSearchToken0] = useState('');
-  const [searchToken1, setSearchToken1] = useState('');
   
   // Состояния для цены и диапазона
   const [useFullRange, setUseFullRange] = useState(true);
@@ -66,50 +57,14 @@ const CreatePoolModal = ({ onClose }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Фильтрация токенов для выпадающих списков
-  const filteredToken0List = useMemo(() => {
-    if (!searchToken0) return userTokens;
-    return userTokens.filter(token => 
-      token.symbol?.toLowerCase().includes(searchToken0.toLowerCase()) ||
-      token.name?.toLowerCase().includes(searchToken0.toLowerCase()) ||
-      token.address.toLowerCase().includes(searchToken0.toLowerCase())
-    );
-  }, [userTokens, searchToken0]);
-
-  const filteredToken1List = useMemo(() => {
-    if (!searchToken1) return userTokens;
-    return userTokens.filter(token => 
-      token.symbol?.toLowerCase().includes(searchToken1.toLowerCase()) ||
-      token.name?.toLowerCase().includes(searchToken1.toLowerCase()) ||
-      token.address.toLowerCase().includes(searchToken1.toLowerCase())
-    );
-  }, [userTokens, searchToken1]);
-
   // Получение данных токена по адресу
-  const fetchTokenData = useCallback(async (address, setTokenData) => {
+  const fetchTokenData = async (address, setTokenData) => {
     if (!address || !ethers.utils.isAddress(address)) {
       setTokenData(null);
       return;
     }
     
     try {
-      // 1. Проверяем, есть ли токен в списке пользовательских токенов
-      const userToken = userTokens.find(t =>
-        t.address.toLowerCase() === address.toLowerCase()
-      );
-
-      if (userToken) {
-        // Используем данные из кэша пользователя
-        setTokenData({
-          symbol: userToken.symbol,
-          name: userToken.name,
-          decimals: userToken.decimals
-        });
-        setStatus('');
-        return;
-      }
-
-      // 2. Если нет в списке пользователя, запрашиваем данные напрямую
       setStatus(`Получение данных токена ${address.substring(0, 6)}...`);
       const tokenData = await fetchTokenDataDirect(address, provider);
       setTokenData(tokenData);
@@ -119,7 +74,7 @@ const CreatePoolModal = ({ onClose }) => {
       setTokenData(null);
       setStatus(''); // Очищаем статус загрузки
     }
-  }, [userTokens, provider]);
+  };
 
   // Эффекты для получения данных токенов при изменении адресов
   useEffect(() => {
@@ -128,7 +83,7 @@ const CreatePoolModal = ({ onClose }) => {
     } else {
       setToken0Data(null);
     }
-  }, [token0, fetchTokenData]);
+  }, [token0]);
 
   useEffect(() => {
     if (token1) {
@@ -136,7 +91,7 @@ const CreatePoolModal = ({ onClose }) => {
     } else {
       setToken1Data(null);
     }
-  }, [token1, fetchTokenData]);
+  }, [token1]);
 
   // Получение текущей цены (заглушка)
   useEffect(() => {
@@ -163,19 +118,6 @@ const CreatePoolModal = ({ onClose }) => {
     
     fetchCurrentPrice();
   }, [token0, token1, token0Data, token1Data]);
-
-  // Обработчики выбора токенов из списка
-  const handleSelectToken0 = (token) => {
-    setToken0(token.address);
-    setSearchToken0('');
-    setShowToken0List(false);
-  };
-
-  const handleSelectToken1 = (token) => {
-    setToken1(token.address);
-    setSearchToken1('');
-    setShowToken1List(false);
-  };
 
   // Обработчик создания пула
   const handleCreatePool = async (e) => {
@@ -272,52 +214,12 @@ const CreatePoolModal = ({ onClose }) => {
               <div className="relative">
                 <input
                   type="text"
-                  value={showToken0List ? searchToken0 : token0}
-                  onChange={(e) => {
-                    if (showToken0List) {
-                      setSearchToken0(e.target.value);
-                    } else {
-                      setToken0(e.target.value);
-                    }
-                  }}
-                  onFocus={() => setShowToken0List(true)}
-                  onBlur={() => setTimeout(() => setShowToken0List(false), 200)}
+                  value={token0}
+                  onChange={(e) => setToken0(e.target.value)}
                   placeholder="Адрес контракта токена"
                   className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   disabled={isLoading}
                 />
-                
-                {showToken0List && (
-                  <div className="absolute z-10 mt-1 w-full bg-gray-700 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {tokensLoading ? (
-                      <div className="px-4 py-2 text-gray-400 flex items-center">
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-cyan-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Загрузка токенов...
-                      </div>
-                    ) : filteredToken0List.length > 0 ? (
-                      filteredToken0List.map((token) => (
-                        <div
-                          key={token.address}
-                          className="px-4 py-2 hover:bg-gray-600 cursor-pointer flex items-center"
-                          onClick={() => handleSelectToken0(token)}
-                          onMouseDown={(e) => e.preventDefault()}
-                        >
-                          <div className="bg-gray-600 border-2 border-dashed rounded-xl w-8 h-8 mr-3" />
-                          <div>
-                            <div className="font-medium text-white">{token.symbol}</div>
-                            <div className="text-xs text-gray-400 truncate" style={{maxWidth: '150px'}}>{token.name}</div>
-                            <div className="text-xs text-gray-500">{token.address.substring(0, 10)}...</div>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="px-4 py-2 text-gray-400">Токены не найдены</div>
-                    )}
-                  </div>
-                )}
               </div>
               {token0Data && (
                 <div className="mt-1 text-sm text-cyan-400">
@@ -334,52 +236,12 @@ const CreatePoolModal = ({ onClose }) => {
               <div className="relative">
                 <input
                   type="text"
-                  value={showToken1List ? searchToken1 : token1}
-                  onChange={(e) => {
-                    if (showToken1List) {
-                      setSearchToken1(e.target.value);
-                    } else {
-                      setToken1(e.target.value);
-                    }
-                  }}
-                  onFocus={() => setShowToken1List(true)}
-                  onBlur={() => setTimeout(() => setShowToken1List(false), 200)}
+                  value={token1}
+                  onChange={(e) => setToken1(e.target.value)}
                   placeholder="Адрес контракта токена"
                   className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   disabled={isLoading}
                 />
-                
-                {showToken1List && (
-                  <div className="absolute z-10 mt-1 w-full bg-gray-700 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {tokensLoading ? (
-                      <div className="px-4 py-2 text-gray-400 flex items-center">
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-cyan-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Загрузка токенов...
-                      </div>
-                    ) : filteredToken1List.length > 0 ? (
-                      filteredToken1List.map((token) => (
-                        <div
-                          key={token.address}
-                          className="px-4 py-2 hover:bg-gray-600 cursor-pointer flex items-center"
-                          onClick={() => handleSelectToken1(token)}
-                          onMouseDown={(e) => e.preventDefault()}
-                        >
-                          <div className="bg-gray-600 border-2 border-dashed rounded-xl w-8 h-8 mr-3" />
-                          <div>
-                            <div className="font-medium text-white">{token.symbol}</div>
-                            <div className="text-xs text-gray-400 truncate" style={{maxWidth: '150px'}}>{token.name}</div>
-                            <div className="text-xs text-gray-500">{token.address.substring(0, 10)}...</div>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="px-4 py-2 text-gray-400">Токены не найдены</div>
-                    )}
-                  </div>
-                )}
               </div>
               {token1Data && (
                 <div className="mt-1 text-sm text-cyan-400">

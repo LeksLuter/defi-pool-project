@@ -7,7 +7,7 @@ import Dashboard from './components/Dashboard';
 import SwapPage from './components/SwapPage';
 import BurnMintPage from './components/BurnMintPage';
 import AdminPanel from './components/AdminPanel';
-import PoolList from './components/PoolList'; // Используем PoolList вместо PoolsList
+import PoolList from './components/PoolList';
 //import './App.css';
 
 function App() {
@@ -23,7 +23,7 @@ function App() {
               <Route path="/swap" element={<SwapPage />} />
               <Route path="/burn-mint" element={<BurnMintPage />} />
               <Route path="/admin" element={<AdminPanel />} />
-              <Route path="/pools" element={<PoolList />} /> {/* Используем PoolList */}
+              <Route path="/pools" element={<PoolList />} />
             </Routes>
           </main>
         </div>
