@@ -368,7 +368,8 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
             name: tokenInfo.tokenName,
             symbol: tokenInfo.tokenSymbol,
             balance: formattedBalance,
-            value: '0.00', // Цена будет установлена позже
+            price: 0, // Цена за единицу токена будет установлена позже
+            totalValue: 0, // Общая стоимость будет рассчитана позже
             decimals: tokenInfo.tokenDecimal
           };
         } catch (e) {
@@ -390,24 +391,26 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
         });
         // Получаем цены для известных токенов
         const addressToPrice = await fetchMultipleTokenPricesWithFallback(tokenPriceMap);
-        // Обновляем цены в processedTokens
+        // Обновляем цены и общую стоимость в processedTokens
         processedTokens.forEach(token => {
           const address = token.contractAddress.toLowerCase();
           const price = addressToPrice[address] || 0;
+          token.price = price;
+
           if (price > 0) {
             const balanceNum = parseFloat(token.balance);
             if (!isNaN(balanceNum)) {
-              token.value = (balanceNum * price).toFixed(2);
+              token.totalValue = (balanceNum * price);
             } else {
-              token.value = '0.00';
+              token.totalValue = 0;
             }
           } else {
-            token.value = '0.00';
+            token.totalValue = 0;
           }
         });
       } catch (priceError) {
         console.warn("Ошибка при получении цен токенов:", priceError.message);
-        // Если не удалось получить цены, оставляем value = '0.00'
+        // Если не удалось получить цены, оставляем price = 0 и totalValue = 0
       }
     }
     // Сохраняем в состояние и кэш
@@ -509,8 +512,8 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
   // Вычисляем общий баланс
-  const totalValue = tokens.reduce((sum, token) => {
-    const value = parseFloat(token.value);
+  const totalPortfolioValue = tokens.reduce((sum, token) => {
+    const value = parseFloat(token.totalValue);
     return isNaN(value) ? sum : sum + value;
   }, 0);
   // Функции-заглушки для обмена и сжигания
@@ -551,7 +554,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
             )}
           </div>
           <div className="mt-2 sm:mt-0">
-            <span className="text-lg font-semibold text-cyan-400">{totalValue.toFixed(2)} $</span>
+            <span className="text-lg font-semibold text-cyan-400">{totalPortfolioValue.toFixed(2)} $</span>
           </div>
         </div>
       </div>
@@ -591,10 +594,10 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
                     <div className="text-xs text-gray-500 font-mono">{formatAddress(token.contractAddress)}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                    {parseFloat(token.value).toFixed(2)} $
+                    {token.price > 0 ? token.price.toFixed(4) : 'N/A'} $
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                    {parseFloat(token.value).toFixed(2)} $
+                    {token.totalValue > 0 ? token.totalValue.toFixed(2) : '0.00'} $
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex flex-wrap gap-2">
