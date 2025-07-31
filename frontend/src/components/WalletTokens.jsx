@@ -1,3 +1,4 @@
+// frontend\src\components\WalletTokens.jsx
 import React, { useEffect, useState, useRef } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
@@ -414,7 +415,7 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
           const address = token.contractAddress.toLowerCase();
           const price = addressToPrice[address] || 0;
           token.price = price;
-
+          
           if (price > 0) {
             const balanceNum = parseFloat(token.balance);
             if (!isNaN(balanceNum)) {
@@ -460,9 +461,11 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const intervalRef = useRef(null); // useRef для хранения ID интервала
-
+  
   // Состояние для фильтра сетей (по умолчанию активна только Polygon - chainId 137)
   const [activeChains, setActiveChains] = useState([137]);
+  // Состояние для отображения дополнительных сетей
+  const [showMoreChains, setShowMoreChains] = useState(false);
 
   // Функция для обновления токенов с учетом кэширования
   const handleRefresh = async () => {
@@ -470,6 +473,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
     setLoading(true);
     setError(null);
     await updateTokensAndCache(account, provider, setTokens, setLoading, setError, updateIntervalMinutes);
+    setLoading(false); // Убираем состояние загрузки после обновления
   };
 
   // Эффект для инициализации: сначала из кэша, потом обновление
@@ -559,7 +563,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
   // Фильтрация токенов по активным сетям
   const filteredTokens = tokens.filter(token => {
     // В текущей реализации все токены считаются принадлежащими сети Polygon (chainId 137)
-    return activeChains.includes(137);
+    return activeChains.includes(137); 
   });
 
   // Расчет баланса по сетям (в данном случае только для Polygon)
@@ -603,46 +607,52 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
           </div>
         </div>
       </div>
-
+      
       {/* Блок фильтра сетей - теперь всегда отображается */}
       <div className="px-6 py-4 border-b border-gray-700">
         <div className="flex flex-wrap gap-2">
-          {Object.entries(SUPPORTED_CHAINS).slice(0, 5).map(([chainIdStr, config]) => {
-            const id = parseInt(chainIdStr);
-            const isActive = activeChains.includes(id);
-            const balance = chainBalances[id] || 0;
-            const percentage = totalPortfolioValue > 0 ? (balance / totalPortfolioValue) * 100 : 0;
+          {Object.entries(SUPPORTED_CHAINS)
+            .slice(0, showMoreChains ? Object.keys(SUPPORTED_CHAINS).length : 5)
+            .map(([chainIdStr, config]) => {
+              const id = parseInt(chainIdStr);
+              const isActive = activeChains.includes(id);
+              const balance = chainBalances[id] || 0;
+              const percentage = totalPortfolioValue > 0 ? (balance / totalPortfolioValue) * 100 : 0;
 
-            return (
-              <button
-                key={id}
-                onClick={() => {
-                  if (isActive) {
-                    setActiveChains(activeChains.filter(chain => chain !== id));
-                  } else {
-                    setActiveChains([...activeChains, id]);
-                  }
-                }}
-                className={`px-3 py-2 rounded-md flex items-center gap-2 text-sm ${isActive
-                    ? 'bg-gray-700 border border-cyan-500/30'
-                    : 'bg-gray-800 border border-gray-600'
+              return (
+                <button
+                  key={id}
+                  onClick={() => {
+                    if (isActive) {
+                      setActiveChains(activeChains.filter(chain => chain !== id));
+                    } else {
+                      setActiveChains([...activeChains, id]);
+                    }
+                  }}
+                  className={`px-3 py-2 rounded-md flex items-center gap-2 text-sm ${
+                    isActive 
+                      ? 'bg-gray-700 border border-cyan-500/30' 
+                      : 'bg-gray-800 border border-gray-600'
                   }`}
-              >
-                <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
-                <div className="text-left">
-                  <div className="font-medium text-white">{config.name}</div>
-                  <div className="text-xs text-gray-400">
-                    ${balance.toFixed(2)} ({percentage.toFixed(1)}%)
+                >
+                  <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
+                  <div className="text-left">
+                    <div className="font-medium text-white">{config.name}</div>
+                    <div className="text-xs text-gray-400">
+                      ${balance.toFixed(2)} ({percentage.toFixed(1)}%)
+                    </div>
                   </div>
-                </div>
-              </button>
-            );
-          })}
-
+                </button>
+              );
+            })}
+          
           {/* Кнопка "Show more chains" если сетей больше 5 */}
           {Object.keys(SUPPORTED_CHAINS).length > 5 && (
-            <button className="px-3 py-2 rounded-md bg-gray-800 border border-gray-600 text-sm text-gray-400 hover:text-white transition">
-              +{Object.keys(SUPPORTED_CHAINS).length - 5} more chains
+            <button 
+              onClick={() => setShowMoreChains(!showMoreChains)}
+              className="px-3 py-2 rounded-md bg-gray-800 border border-gray-600 text-sm text-gray-400 hover:text-white transition"
+            >
+              {showMoreChains ? 'Скрыть сети' : `+${Object.keys(SUPPORTED_CHAINS).length - 5} других сетей`}
             </button>
           )}
         </div>
@@ -690,30 +700,49 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
                     {token.totalValue > 0 ? token.totalValue.toFixed(2) : '0.00'} $
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex space-x-2">
+                      {/* Иконка обмена */}
                       <button
                         onClick={() => handleSwap(token)}
-                        className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded transition"
+                        className="p-2 bg-green-600 hover:bg-green-700 text-white rounded-full transition"
+                        title="Обменять"
                       >
-                        Обменять
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                        </svg>
                       </button>
+                      
+                      {/* Иконка сжигания */}
                       <button
                         onClick={() => handleBurn(token)}
-                        className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded transition"
+                        className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-full transition"
+                        title="Сжечь"
                       >
-                        Сжечь
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
                       </button>
+                      
+                      {/* Иконка копирования */}
                       <button
                         onClick={() => copyTokenAddress(token.contractAddress, token.symbol)}
-                        className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white rounded transition"
+                        className="p-2 bg-gray-600 hover:bg-gray-500 text-white rounded-full transition"
+                        title="Копировать адрес"
                       >
-                        Копировать
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
                       </button>
+                      
+                      {/* Иконка просмотра */}
                       <button
                         onClick={() => openInPolygonscan(token.contractAddress)}
-                        className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition"
+                        className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition"
+                        title="Посмотреть в explorer"
                       >
-                        Посмотреть
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
                       </button>
                     </div>
                   </td>
