@@ -783,5 +783,3 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
     </div>
   );
 };
-
-export default WalletTokens;
