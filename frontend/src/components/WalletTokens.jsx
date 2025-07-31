@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
 // Импортируем конфигурацию сетей
-import { SUPPORTED_CHAINS } from '../config/supportedChains';
+import SUPPORTED_CHAINS from '../config/supportedChains'; // Предполагаем экспорт по умолчанию
 
 // ABI для ERC20 токенов (минимальный набор функций для получения метаданных)
 const ERC20_ABI = [
@@ -15,58 +15,75 @@ const ERC20_ABI = [
 
 // Сопоставление адресов токенов с их ID для CoinGecko и CoinMarketCap
 // Это позволяет получать цены для известных токенов
+// Добавлены ключи для chainId 137 (Polygon)
 const KNOWN_TOKENS_MAP = {
-  // Native POL (Matic)
-  '0x0000000000000000000000000000000000000000': {
-    coingeckoId: 'matic-network', // CoinGecko ID для Polygon
-    cmcId: '3890', // CoinMarketCap ID для POL
+  // Native POL (Matic) - chainId 137
+  '137_0x0000000000000000000000000000000000000000': {
+    coingeckoId: 'matic-network',
+    cmcId: '3890',
     name: 'Polygon Ecosystem Token',
     symbol: 'POL',
     decimals: 18
   },
-  // WETH (Wrapped Ether)
-  '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619': {
+  // WETH (Wrapped Ether) - chainId 137
+  '137_0x7ceb23fd6bc0add59e62ac25578270cff1b9f619': {
     coingeckoId: 'weth',
     cmcId: '2396',
     name: 'Wrapped Ether',
     symbol: 'WETH',
     decimals: 18
   },
-  // USDC (USD Coin)
-  '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': {
+  // USDC (USD Coin) - chainId 137
+  '137_0x2791bca1f2de4661ed88a30c99a7a9449aa84174': {
     coingeckoId: 'usd-coin',
     cmcId: '3408',
     name: 'USD Coin',
     symbol: 'USDC',
     decimals: 6
   },
-  // USDT (Tether USD)
-  '0xc2132d05d31c914a87c6611c10748aeb04b58e8f': {
+  // USDT (Tether USD) - chainId 137
+  '137_0xc2132d05d31c914a87c6611c10748aeb04b58e8f': {
     coingeckoId: 'tether',
     cmcId: '825',
     name: 'Tether USD',
     symbol: 'USDT',
     decimals: 6
   },
-  // DAI (Dai Stablecoin)
-  '0x8f3cf7ad23cd3cadbd9735aff958023239c6a063': {
+  // DAI (Dai Stablecoin) - chainId 137
+  '137_0x8f3cf7ad23cd3cadbd9735aff958023239c6a063': {
     coingeckoId: 'dai',
     cmcId: '4943',
     name: 'Dai Stablecoin',
     symbol: 'DAI',
     decimals: 18
+  },
+  // Пример для Ethereum Mainnet (chainId 1)
+  '1_0x0000000000000000000000000000000000000000': {
+    coingeckoId: 'ethereum',
+    cmcId: '1027',
+    name: 'Ethereum',
+    symbol: 'ETH',
+    decimals: 18
   }
-  // Добавьте другие известные токены по необходимости
+  // Добавьте другие известные токены по необходимости, используя префикс chainId_
 };
 
 // Функция для получения токенов из Etherscan API (основной метод)
 const fetchTokensFromEtherscan = async (accountAddress, ethProvider, chainId) => {
   const networkConfig = SUPPORTED_CHAINS[chainId];
-  if (!networkConfig || !networkConfig.explorerApiKey) {
-    console.warn(`Конфигурация сети ${chainId} не найдена или отсутствует API ключ`);
+  console.log(`Проверка конфигурации сети ${chainId}:`, networkConfig); // Лог для отладки
+
+  if (!networkConfig) {
+    console.warn(`Конфигурация сети ${chainId} не найдена в SUPPORTED_CHAINS`);
     return [];
   }
-  const apiKey = networkConfig.explorerApiKey;
+  
+  // Проверяем наличие explorerApiKey
+  const apiKey = networkConfig.explorerApiKey || import.meta.env.VITE_ETHERSCAN_API_KEY; // Fallback на env
+  if (!apiKey) {
+    console.warn(`API ключ для сети ${chainId} не найден ни в конфигурации, ни в VITE_ETHERSCAN_API_KEY`);
+    return [];
+  }
 
   // Определяем URL API в зависимости от сети
   let apiUrl;
@@ -123,6 +140,7 @@ const fetchTokensFromEtherscan = async (accountAddress, ethProvider, chainId) =>
     const data = await response.json();
 
     // Проверяем структуру и статус ответа от API
+    // Исправлено: data.status === "0" вместо data.status !== "1"
     if (!data || data.status === "0" || !data.result) {
       console.warn(`Etherscan API вернул статус 0 или ошибку: ${data?.message || 'NOTOK'}`);
       // Не бросаем ошибку, а возвращаем пустой массив, чтобы продолжить с резервным методом
@@ -157,7 +175,8 @@ const fetchTokensFromEtherscan = async (accountAddress, ethProvider, chainId) =>
       const nativeBalance = await ethProvider.getBalance(accountAddress);
       // Используем BigNumber из ethers v5 для сравнения
       if (nativeBalance.gt(0)) {
-        const nativeInfo = KNOWN_TOKENS_MAP['0x0000000000000000000000000000000000000000'] || { name: 'Native Token', symbol: 'NATIVE', decimals: 18 };
+        const nativeKey = `${chainId}_0x0000000000000000000000000000000000000000`;
+        const nativeInfo = KNOWN_TOKENS_MAP[nativeKey] || { name: 'Native Token', symbol: 'NATIVE', decimals: 18 };
         tokenDetails.push({
           contractAddress: '0x0000000000000000000000000000000000000000',
           tokenName: nativeInfo.name,
@@ -212,8 +231,8 @@ const fetchTokensFromEtherscan = async (accountAddress, ethProvider, chainId) =>
 };
 
 // Функция для получения токенов через прямой вызов balanceOf (резервный метод)
-const fetchTokensDirectBalance = async (accountAddress, ethProvider) => {
-  if (!ethProvider || !accountAddress) return [];
+const fetchTokensDirectBalance = async (accountAddress, ethProvider, chainId) => {
+  if (!ethProvider || !accountAddress || !chainId) return [];
 
   try {
     console.log('Используется резервный метод получения токенов');
@@ -224,7 +243,8 @@ const fetchTokensDirectBalance = async (accountAddress, ethProvider) => {
       const nativeBalance = await ethProvider.getBalance(accountAddress);
       // Используем BigNumber из ethers v5 для сравнения
       if (nativeBalance.gt(0)) {
-        const nativeInfo = KNOWN_TOKENS_MAP['0x0000000000000000000000000000000000000000'] || { name: 'Native Token', symbol: 'NATIVE', decimals: 18 };
+        const nativeKey = `${chainId}_0x0000000000000000000000000000000000000000`;
+        const nativeInfo = KNOWN_TOKENS_MAP[nativeKey] || { name: 'Native Token', symbol: 'NATIVE', decimals: 18 };
         tokens.push({
           contractAddress: '0x0000000000000000000000000000000000000000',
           tokenName: nativeInfo.name,
@@ -238,16 +258,22 @@ const fetchTokensDirectBalance = async (accountAddress, ethProvider) => {
     }
 
     // Проверка балансов известных токенов ERC20
-    // Используем KNOWN_TOKENS_MAP для получения списка известных токенов
-    const knownTokenAddresses = Object.keys(KNOWN_TOKENS_MAP);
-    for (const tokenAddress of knownTokenAddresses) {
-      // Пропускаем нативный токен, он уже обработан
-      if (tokenAddress === '0x0000000000000000000000000000000000000000') continue;
+    // Используем KNOWN_TOKENS_MAP для получения списка известных токенов для текущей сети
+    const knownTokensForChain = Object.entries(KNOWN_TOKENS_MAP)
+      .filter(([key]) => key.startsWith(`${chainId}_`))
+      .map(([, value]) => value);
 
-      const tokenInfo = KNOWN_TOKENS_MAP[tokenAddress];
-      if (!tokenInfo) continue;
+    for (const tokenInfo of knownTokensForChain) {
+      // Пропускаем нативный токен, он уже обработан
+      if (tokenInfo.address === '0x0000000000000000000000000000000000000000') continue;
 
       try {
+        // Извлекаем адрес из ключа KNOWN_TOKENS_MAP (например, '137_0x...')
+        const fullKey = Object.keys(KNOWN_TOKENS_MAP).find(k => KNOWN_TOKENS_MAP[k] === tokenInfo);
+        const tokenAddress = fullKey.split('_')[1]; // Берем часть после '_'
+
+        if (!tokenAddress) continue;
+
         const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, ethProvider);
         const balance = await tokenContract.balanceOf(accountAddress);
 
@@ -261,7 +287,7 @@ const fetchTokensDirectBalance = async (accountAddress, ethProvider) => {
           });
         }
       } catch (error) {
-        console.warn(`Ошибка при получении баланса для ${tokenAddress}:`, error.message);
+        console.warn(`Ошибка при получении баланса для токена ${tokenInfo.symbol || tokenInfo.name}:`, error.message);
       }
     }
 
@@ -274,31 +300,35 @@ const fetchTokensDirectBalance = async (accountAddress, ethProvider) => {
 
 // Функция для получения цены токена с CoinGecko
 const fetchTokenPriceFromCoinGecko = async (coingeckoId) => {
+  if (!coingeckoId) return 0;
   try {
     const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${coingeckoId}&vs_currencies=usd`);
     if (!response.ok) {
-      throw new Error(`CoinGecko API error: ${response.status}`);
+      const errorText = await response.text();
+      console.warn(`CoinGecko API error (${response.status}): ${errorText}`);
+      return 0;
     }
     const data = await response.json();
-    return data[coingeckoId]?.usd || null;
+    return data[coingeckoId]?.usd || 0;
   } catch (error) {
-    console.warn(`Ошибка при получении цены с CoinGecko для ${coingeckoId}:`, error.message);
-    return null;
+    console.warn(`Ошибка при получении цены из CoinGecko для ${coingeckoId}:`, error.message);
+    return 0;
   }
 };
 
 // Функция для получения цены токена с CoinMarketCap
 const fetchTokenPriceFromCoinMarketCap = async (cmcId) => {
+  if (!cmcId) return 0;
   // CoinMarketCap API требует ключ, который обычно хранится в .env
-  const cmcApiKey = process.env.REACT_APP_CMC_API_KEY;
+  const cmcApiKey = import.meta.env.VITE_CMC_API_KEY;
   if (!cmcApiKey) {
-    console.warn('CoinMarketCap API ключ не найден в REACT_APP_CMC_API_KEY');
-    return null;
+    console.warn('CoinMarketCap API ключ не найден в VITE_CMC_API_KEY');
+    return 0;
   }
 
   try {
     const response = await fetch(
-      `https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?id=${cmcId}`,
+      `https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?id=${cmcId}`,
       {
         headers: {
           'X-CMC_PRO_API_KEY': cmcApiKey,
@@ -306,13 +336,19 @@ const fetchTokenPriceFromCoinMarketCap = async (cmcId) => {
       }
     );
     if (!response.ok) {
-      throw new Error(`CoinMarketCap API error: ${response.status}`);
+      const errorText = await response.text();
+      console.warn(`CoinMarketCap API error (${response.status}): ${errorText}`);
+      return 0;
     }
     const data = await response.json();
-    return data.data?.[cmcId]?.quote?.USD?.price || null;
+    if (data.status.error_code !== 0) {
+      console.warn(`CoinMarketCap API returned error: ${data.status.error_message}`);
+      return 0;
+    }
+    return data.data[cmcId]?.quote?.USD?.price || 0;
   } catch (error) {
-    console.warn(`Ошибка при получении цены с CoinMarketCap для ${cmcId}:`, error.message);
-    return null;
+    console.warn(`Ошибка при получении цены из CoinMarketCap для ${cmcId}:`, error.message);
+    return 0;
   }
 };
 
@@ -360,7 +396,7 @@ const isCacheExpired = (timestamp, maxAgeMinutes = 10) => {
 
 // Функция для получения токенов из кэша
 const getCachedTokens = (account, chainId) => {
-  if (!account) return null;
+  if (!account || !chainId) return null;
   try {
     const cacheKey = getCacheKey(account, chainId);
     const cachedData = localStorage.getItem(cacheKey);
@@ -382,7 +418,7 @@ const getCachedTokens = (account, chainId) => {
 
 // Функция для сохранения токенов в кэш
 const saveTokensToCache = (account, chainId, tokens) => {
-  if (!account || !tokens) return;
+  if (!account || !tokens || !chainId) return;
   try {
     const cacheKey = getCacheKey(account, chainId);
     const dataToCache = {
@@ -398,7 +434,7 @@ const saveTokensToCache = (account, chainId, tokens) => {
 
 // Функция для установки времени последнего обновления
 const setLastUpdateTime = (account, chainId) => {
-  if (!account) return;
+  if (!account || !chainId) return;
   try {
     const lastUpdateKey = getLastUpdateKey(account, chainId);
     localStorage.setItem(lastUpdateKey, Date.now().toString());
@@ -410,7 +446,7 @@ const setLastUpdateTime = (account, chainId) => {
 // Функция для проверки, можно ли выполнить фоновое обновление
 // (прошло ли достаточно времени с последнего обновления)
 const canPerformBackgroundUpdate = (account, chainId, minIntervalMinutes = 5) => {
-  if (!account) return false;
+  if (!account || !chainId) return false;
   try {
     const lastUpdateKey = getLastUpdateKey(account, chainId);
     const lastUpdateStr = localStorage.getItem(lastUpdateKey);
@@ -429,14 +465,16 @@ const canPerformBackgroundUpdate = (account, chainId, minIntervalMinutes = 5) =>
 
 // Основная функция обновления токенов и кэширования
 const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setLoading, setError, updateIntervalMinutes = 0, chainId) => {
-  if (!accountAddress || !ethProvider) {
-    console.warn("Невозможно обновить токены: отсутствует адрес аккаунта или провайдер");
+  if (!accountAddress || !ethProvider || !chainId) {
+    console.warn("Невозможно обновить токены: отсутствует адрес аккаунта, провайдер или chainId");
     if (setLoading) setLoading(false);
     return;
   }
 
   const networkConfig = SUPPORTED_CHAINS[chainId];
-  if (!networkConfig || !networkConfig.explorerApiKey) {
+  console.log(`Проверка конфигурации сети ${chainId} в updateTokensAndCache:`, networkConfig); // Лог для отладки
+
+  if (!networkConfig) {
     console.warn(`Конфигурация сети ${chainId} не найдена или отсутствует API ключ`);
     if (setError) setError(`Сеть ${chainId} не поддерживается или не настроена.`);
     if (setLoading) setLoading(false);
@@ -465,11 +503,11 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
           tokenList = await fetchTokensFromEtherscan(accountAddress, ethProvider, chainId);
           if (tokenList.length === 0) {
             console.log("Etherscan V2 API не вернул токенов, пробуем резервный метод...");
-            tokenList = await fetchTokensDirectBalance(accountAddress, ethProvider);
+            tokenList = await fetchTokensDirectBalance(accountAddress, ethProvider, chainId);
           }
         } catch (apiError) {
           console.warn("Ошибка при вызове Etherscan V2 API, пробуем резервный метод:", apiError.message);
-          tokenList = await fetchTokensDirectBalance(accountAddress, ethProvider);
+          tokenList = await fetchTokensDirectBalance(accountAddress, ethProvider, chainId);
         }
 
         // Преобразуем данные токенов в формат для отображения
@@ -508,9 +546,9 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
             // Создаем карту адресов токенов с их ID для API
             const tokenPriceMap = {};
             processedTokens.forEach(token => {
-              const address = token.contractAddress.toLowerCase();
-              if (KNOWN_TOKENS_MAP[address]) {
-                tokenPriceMap[address] = KNOWN_TOKENS_MAP[address];
+              const key = `${chainId}_${token.contractAddress.toLowerCase()}`;
+              if (KNOWN_TOKENS_MAP[key]) {
+                tokenPriceMap[token.contractAddress.toLowerCase()] = KNOWN_TOKENS_MAP[key];
               }
             });
 
@@ -569,11 +607,11 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
        tokenList = await fetchTokensFromEtherscan(accountAddress, ethProvider, chainId);
        if (tokenList.length === 0) {
           console.log("Etherscan V2 API не вернул токенов, пробуем резервный метод...");
-          tokenList = await fetchTokensDirectBalance(accountAddress, ethProvider);
+          tokenList = await fetchTokensDirectBalance(accountAddress, ethProvider, chainId);
        }
     } catch (apiError) {
        console.warn("Ошибка при вызове Etherscan V2 API, пробуем резервный метод:", apiError.message);
-       tokenList = await fetchTokensDirectBalance(accountAddress, ethProvider);
+       tokenList = await fetchTokensDirectBalance(accountAddress, ethProvider, chainId);
     }
 
     // Преобразуем данные токенов в формат для отображения
@@ -610,9 +648,9 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
         // Создаем карту адресов токенов с их ID для API
         const tokenPriceMap = {};
         processedTokens.forEach(token => {
-          const address = token.contractAddress.toLowerCase();
-          if (KNOWN_TOKENS_MAP[address]) {
-            tokenPriceMap[address] = KNOWN_TOKENS_MAP[address];
+          const key = `${chainId}_${token.contractAddress.toLowerCase()}`;
+          if (KNOWN_TOKENS_MAP[key]) {
+            tokenPriceMap[token.contractAddress.toLowerCase()] = KNOWN_TOKENS_MAP[key];
           }
         });
 
@@ -672,7 +710,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
 
   // Функция для обновления токенов с учетом кэширования
   const handleRefresh = async () => {
-    if (!account || !provider) return;
+    if (!account || !provider || !chainId) return;
     setLoading(true);
     setError(null);
     await updateTokensAndCache(account, provider, setTokens, setLoading, setError, updateIntervalMinutes, chainId);
@@ -710,7 +748,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
     initializeTokens();
 
     // Устанавливаем новый интервал, если updateIntervalMinutes > 0
-    if (updateIntervalMinutes > 0) {
+    if (updateIntervalMinutes > 0 && chainId) { // Добавлен chainId
       intervalRef.current = setInterval(() => {
         updateTokensAndCache(account, provider, setTokens, setLoading, setError, updateIntervalMinutes, chainId);
       }, updateIntervalMinutes * 60 * 1000);
