@@ -1,4 +1,3 @@
-// frontend\src\components\WalletTokens.jsx
 import React, { useEffect, useState, useRef } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
@@ -13,29 +12,71 @@ const ERC20_ABI = [
   "function balanceOf(address) view returns (uint256)"
 ];
 
-// Сопоставление адресов токенов с их ID для CoinGecko и CoinMarketCap
-// Это позволяет получать цены для известных токенов
-const KNOWN_TOKENS_MAP = {
-  // Native POL (Matic)
-  '0x0000000000000000000000000000000000000000': {
-    coingeckoId: 'matic-network', // CoinGecko ID для Polygon
-    cmcId: '3890' // CoinMarketCap ID для POL
-  },
-  // WETH (Wrapped Ether)
-  '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619': {
-    coingeckoId: 'weth',
-    cmcId: '2396'
-  },
-  // USDC (USD Coin)
-  '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': {
-    coingeckoId: 'usd-coin',
-    cmcId: '3408'
-  },
-  // USDT (Tether USD)
-  '0xc2132d05d31c914a87c6611c10748aeb04b58e8f': {
-    coingeckoId: 'tether',
-    cmcId: '825'
-  }
+// Карта токенов по умолчанию (включая нативные токены)
+const DEFAULT_TOKENS = {
+  // Ethereum Mainnet
+  1: [
+    {
+      address: '0x0000000000000000000000000000000000000000', // Нативный токен ETH
+      name: 'Ethereum',
+      symbol: 'ETH',
+      decimals: 18,
+      logo: 'https://cryptologos.cc/logos/ethereum-eth-logo.png?v=024',
+      coingeckoId: 'ethereum',
+      cmcId: '1027'
+    },
+    {
+      address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+      name: 'Tether USD',
+      symbol: 'USDT',
+      decimals: 6,
+      logo: 'https://cryptologos.cc/logos/tether-usdt-logo.png?v=024',
+      coingeckoId: 'tether',
+      cmcId: '825'
+    }
+  ],
+  // Polygon
+  137: [
+    {
+      address: '0x0000000000000000000000000000000000000000', // Нативный токен MATIC
+      name: 'Matic Token',
+      symbol: 'MATIC',
+      decimals: 18,
+      logo: 'https://cryptologos.cc/logos/polygon-matic-logo.png?v=024',
+      coingeckoId: 'matic-network',
+      cmcId: '3890'
+    },
+    {
+      address: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
+      name: 'Tether USD',
+      symbol: 'USDT',
+      decimals: 6,
+      logo: 'https://cryptologos.cc/logos/tether-usdt-logo.png?v=024',
+      coingeckoId: 'tether',
+      cmcId: '825'
+    }
+  ],
+  // Binance Smart Chain
+  56: [
+    {
+      address: '0x0000000000000000000000000000000000000000', // Нативный токен BNB
+      name: 'BNB',
+      symbol: 'BNB',
+      decimals: 18,
+      logo: 'https://cryptologos.cc/logos/bnb-bnb-logo.png?v=024',
+      coingeckoId: 'binancecoin',
+      cmcId: '1839'
+    },
+    {
+      address: '0x55d398326f99059fF775485246999027B3197955',
+      name: 'Tether USD',
+      symbol: 'USDT',
+      decimals: 18,
+      logo: 'https://cryptologos.cc/logos/tether-usdt-logo.png?v=024',
+      coingeckoId: 'tether',
+      cmcId: '825'
+    }
+  ]
 };
 
 // Вспомогательная функция для получения ключа кэша
@@ -83,41 +124,12 @@ const saveTokensToCache = (account, tokens) => {
       timestamp: Date.now()
     };
     localStorage.setItem(cacheKey, JSON.stringify(dataToCache));
-    console.log('Токены сохранены в кэш');
   } catch (error) {
-    console.error('Ошибка при сохранении токенов в кэш:', error);
+    console.error('Ошибка при сохранении кэша токенов:', error);
   }
 };
 
-// Функция для сохранения времени последнего обновления
-const saveLastUpdateTime = (account) => {
-  if (!account) return;
-  try {
-    const lastUpdateKey = getLastUpdateKey(account);
-    localStorage.setItem(lastUpdateKey, Date.now().toString());
-  } catch (error) {
-    console.error('Ошибка при сохранении времени последнего обновления:', error);
-  }
-};
-
-// Функция для проверки, можно ли выполнить фоновое обновление
-// (прошло ли достаточно времени с последнего обновления)
-const canPerformBackgroundUpdate = (account, minIntervalMinutes = 5) => {
-  if (!account) return false;
-  try {
-    const lastUpdateKey = getLastUpdateKey(account);
-    const lastUpdateStr = localStorage.getItem(lastUpdateKey);
-    if (!lastUpdateStr) return true; // Нет записи - можно обновлять
-    const lastUpdate = parseInt(lastUpdateStr, 10);
-    if (isNaN(lastUpdate)) return true; // Некорректная запись - можно обновлять
-    return isCacheExpired(lastUpdate, minIntervalMinutes);
-  } catch (error) {
-    console.error('Ошибка при проверке возможности фонового обновления:', error);
-    return true; // В случае ошибки разрешаем обновление
-  }
-};
-
-// Функция для получения цены токена через CoinGecko API
+// Функция для получения цены токена с CoinGecko
 const fetchTokenPriceFromCoinGecko = async (coingeckoId) => {
   if (!coingeckoId) return 0;
   try {
@@ -135,15 +147,17 @@ const fetchTokenPriceFromCoinGecko = async (coingeckoId) => {
   }
 };
 
-// Функция для получения цены токена через CoinMarketCap API
+// Функция для получения цены токена с CoinMarketCap
 const fetchTokenPriceFromCoinMarketCap = async (cmcId) => {
   if (!cmcId) return 0;
+  // В реальной реализации здесь должен быть ваш API ключ
+  const API_KEY = 'YOUR_CMC_API_KEY'; // Замените на ваш API ключ
   try {
     const response = await fetch(
-      `https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?id=${cmcId}`,
+      `https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?id=${cmcId}`,
       {
         headers: {
-          'X-CMC_PRO_API_KEY': import.meta.env.VITE_CMC_API_KEY || '' // Убедитесь, что ключ API установлен
+          'X-CMC_PRO_API_KEY': API_KEY
         }
       }
     );
@@ -182,273 +196,83 @@ const fetchTokenPriceWithFallback = async (coingeckoId, cmcId) => {
 const fetchMultipleTokenPricesWithFallback = async (tokenMap) => {
   const tokenIds = Object.keys(tokenMap);
   const addressToPrice = {};
+
   // Последовательно для предотвращения перегрузки API
   for (const address of tokenIds) {
     const { coingeckoId, cmcId } = tokenMap[address];
-    addressToPrice[address] = await fetchTokenPriceWithFallback(coingeckoId, cmcId);
+    const price = await fetchTokenPriceWithFallback(coingeckoId, cmcId);
+    addressToPrice[address] = price;
   }
+
   return addressToPrice;
 };
 
-// Функция для получения токенов через Etherscan V2 API
-const fetchTokensFromEtherscanV2 = async (accountAddress, ethProvider) => {
-  if (!ethProvider || !accountAddress) return [];
+// Функция для получения баланса токена
+const fetchTokenBalance = async (provider, tokenAddress, account, decimals) => {
   try {
-    console.log('Попытка получения токенов через Etherscan V2 API...');
-    // Используем API ключ из переменных окружения
-    const apiKey = import.meta.env.VITE_ETHERSCAN_API_KEY || 'YourApiKeyToken';
-    const url = `https://api.polygonscan.com/api?module=account&action=tokenlist&address=${accountAddress}&apikey=${apiKey}`;
-    // Установим таймаут для запроса
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 секунд
-    const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeoutId);
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Etherscan API error (${response.status}): ${errorText}`);
-    }
-    const data = await response.json();
-    if (data.status !== "1") {
-      console.warn("Etherscan API вернул статус 0 или ошибку:", data.message);
-      // Не бросаем ошибку, а возвращаем пустой массив, чтобы продолжить с резервным методом
-      return [];
-    }
-    console.log(`Получено ${data.result.length} записей из Etherscan V2`);
-    // Создаем Set для уникальных адресов токенов и объект для хранения метаданных
-    const uniqueTokens = new Set();
-    const tokenSampleData = {};
-    // Обрабатываем только первые 50 токенов для ограничения API вызовов
-    data.result.slice(0, 50).forEach(tx => {
-      const contractAddress = tx.contractAddress.toLowerCase();
-      uniqueTokens.add(contractAddress);
-      if (!tokenSampleData[contractAddress]) {
-        tokenSampleData[contractAddress] = {
-          tokenName: tx.tokenName,
-          tokenSymbol: tx.tokenSymbol,
-          tokenDecimal: parseInt(tx.tokenDecimal, 10) // Убедимся, что это число
-        };
-      }
-    });
-    console.log(`Найдено ${uniqueTokens.size} уникальных токенов через Etherscan`);
-    const tokenDetails = [];
-    // Обрабатываем нативный токен POL отдельно
-    try {
-      const polBalance = await ethProvider.getBalance(accountAddress);
-      // Используем BigNumber из ethers v5 для сравнения
-      if (polBalance.gt(0)) {
-        tokenDetails.push({
-          contractAddress: '0x0000000000000000000000000000000000000000',
-          tokenName: 'Polygon Ecosystem Token',
-          tokenSymbol: 'POL',
-          tokenDecimal: 18,
-          balance: polBalance.toString() // BigNumber в строку
-        });
-      }
-    } catch (error) {
-      console.warn('Ошибка при получении баланса POL:', error.message);
-    }
-    // Обрабатываем ERC-20 токены
-    let tokenCount = 0;
-    for (const tokenAddress of Array.from(uniqueTokens)) {
-      if (tokenAddress === '0x0000000000000000000000000000000000000000') continue; // POL уже обработан
-      if (tokenCount >= 20) {
-        console.warn('Достигнут лимит обработки токенов (20), остальные пропущены');
-        break;
-      }
-      try {
-        const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, ethProvider);
-        const balance = await tokenContract.balanceOf(accountAddress);
-        // Используем BigNumber из ethers v5 для сравнения
-        if (balance.gt(0)) {
-          tokenDetails.push({
-            contractAddress: tokenAddress,
-            tokenName: tokenSampleData[tokenAddress]?.tokenName || 'Unknown Token',
-            tokenSymbol: tokenSampleData[tokenAddress]?.tokenSymbol || '???',
-            tokenDecimal: tokenSampleData[tokenAddress]?.tokenDecimal || 18,
-            balance: balance.toString() // BigNumber в строку
-          });
-          tokenCount++;
-        }
-      } catch (error) {
-        console.warn(`Ошибка при обработке токена ${tokenAddress}:`, error.message);
-      }
-    }
-    return tokenDetails;
-  } catch (error) {
-    if (error.name !== 'AbortError') {
-      console.error('Критическая ошибка Etherscan V2:', error.message);
+    if (tokenAddress === '0x0000000000000000000000000000000000000000') {
+      // Для нативного токена
+      const balance = await provider.getBalance(account);
+      return ethers.utils.formatUnits(balance, decimals);
     } else {
-      console.warn('Таймаут Etherscan V2');
+      // Для ERC20 токенов
+      const contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+      const balance = await contract.balanceOf(account);
+      return ethers.utils.formatUnits(balance, decimals);
     }
-    return [];
-  }
-};
-
-// Функция для получения токенов через прямой вызов balanceOf (резервный метод)
-const fetchTokensDirectBalance = async (accountAddress, ethProvider) => {
-  if (!ethProvider || !accountAddress) return [];
-  try {
-    console.log('Используется резервный метод получения токенов');
-    const tokens = [];
-    try {
-      const polBalance = await ethProvider.getBalance(accountAddress);
-      // Используем BigNumber из ethers v5 для сравнения
-      if (polBalance.gt(0)) {
-        tokens.push({
-          contractAddress: '0x0000000000000000000000000000000000000000',
-          tokenName: 'Polygon Ecosystem Token',
-          tokenSymbol: 'POL',
-          tokenDecimal: 18,
-          balance: polBalance.toString()
-        });
-      }
-    } catch (error) {
-      console.warn('Ошибка при получении баланса POL в резервном методе:', error.message);
-    }
-    // Здесь можно добавить вызовы balanceOf для известных адресов токенов
-    // Например, для USDC, USDT и т.д., если Etherscan API недоступен
-    const knownTokens = [
-      { address: '0x2791bca1f2de4661ed88a30c99a7a9449aa84174', name: 'USD Coin', symbol: 'USDC', decimals: 6 },
-      { address: '0xc2132d05d31c914a87c6611c10748aeb04b58e8f', name: 'Tether USD', symbol: 'USDT', decimals: 6 },
-      { address: '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619', name: 'Wrapped Ether', symbol: 'WETH', decimals: 18 },
-      // Добавьте другие известные токены по необходимости
-    ];
-    for (const token of knownTokens) {
-      try {
-        const tokenContract = new ethers.Contract(token.address, ERC20_ABI, ethProvider);
-        const balance = await tokenContract.balanceOf(accountAddress);
-        if (balance.gt(0)) {
-          tokens.push({
-            contractAddress: token.address,
-            tokenName: token.name,
-            tokenSymbol: token.symbol,
-            tokenDecimal: token.decimals,
-            balance: balance.toString()
-          });
-        }
-      } catch (error) {
-        console.warn(`Ошибка при получении баланса для ${token.symbol}:`, error.message);
-      }
-    }
-    return tokens;
   } catch (error) {
-    console.warn('Не удалось получить токены через резервный метод:', error.message);
-    return [];
+    console.error(`Ошибка при получении баланса для токена ${tokenAddress}:`, error);
+    return "0";
   }
 };
 
-// Основная функция обновления токенов и кэширования
-const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setLoading, setError, updateIntervalMinutes = 0) => {
-  // Определяем минимальный интервал обновления (5 минут по умолчанию или значение из админки)
-  const minInterval = updateIntervalMinutes <= 0 ? 5 : updateIntervalMinutes;
-  if (!canPerformBackgroundUpdate(accountAddress, minInterval)) {
-    console.log(`Фоновое обновление пропущено: последнее обновление было менее ${minInterval} минут назад.`);
-    // Даже если фоновое обновление пропущено, мы всё равно можем показать кэш
-    // и завершить состояние загрузки, если оно ещё активно
-    if (loading && setTokens.length === 0) { // Исправлена опечатка: было setTokens.length, должно быть tokens.length из состояния
-      // setLoading(false); // Это будет вызвано в useEffect
-    }
-    return;
-  }
-  console.log('Начинаем фоновое обновление токенов...');
-  setError(null); // Сбрасываем ошибку перед новой попыткой
-  let tokenList = [];
+// Функция для получения данных токенов с балансами
+const fetchTokensWithBalances = async (provider, account, chainId) => {
+  if (!account || !provider) return [];
+
   try {
-    // Попытка получить токены через Etherscan V2 API
-    try {
-      tokenList = await fetchTokensFromEtherscanV2(accountAddress, ethProvider);
-      if (tokenList.length === 0) {
-        console.log("Etherscan V2 API не вернул токенов, пробуем резервный метод...");
-        tokenList = await fetchTokensDirectBalance(accountAddress, ethProvider);
-      }
-    } catch (apiError) {
-      console.warn("Ошибка при вызове Etherscan V2 API, пробуем резервный метод:", apiError.message);
-      tokenList = await fetchTokensDirectBalance(accountAddress, ethProvider);
-    }
-    // Преобразуем данные токенов в формат для отображения
-    const processedTokens = tokenList
-      .filter(token => {
-        try {
-          // Используем BigNumber из ethers v5 для проверки
-          const balanceBN = ethers.BigNumber.from(token.balance);
-          return balanceBN.gt(0);
-        } catch (e) {
-          console.warn("Ошибка при проверке баланса BN:", e.message);
-          return false;
-        }
-      })
-      .map(tokenInfo => {
-        try {
-          const balanceBN = ethers.BigNumber.from(tokenInfo.balance);
-          // Используем formatUnits из ethers v5
-          const formattedBalance = ethers.utils.formatUnits(balanceBN, tokenInfo.tokenDecimal);
-          return {
-            contractAddress: tokenInfo.contractAddress,
-            name: tokenInfo.tokenName,
-            symbol: tokenInfo.tokenSymbol,
-            balance: formattedBalance,
-            value: '0.00', // Цена будет установлена позже
-            decimals: tokenInfo.tokenDecimal
-          };
-        } catch (e) {
-          console.error("Ошибка при обработке токена:", e.message);
-          return null;
-        }
-      })
-      .filter(Boolean); // Убираем null значения
-    // Получаем цены для токенов
-    if (processedTokens.length > 0) {
-      try {
-        // Создаем карту адресов токенов с их ID для API
-        const tokenPriceMap = {};
-        processedTokens.forEach(token => {
-          const address = token.contractAddress.toLowerCase();
-          if (KNOWN_TOKENS_MAP[address]) {
-            tokenPriceMap[address] = KNOWN_TOKENS_MAP[address];
-          }
-        });
-        // Получаем цены для известных токенов
-        const addressToPrice = await fetchMultipleTokenPricesWithFallback(tokenPriceMap);
-        // Обновляем цены в processedTokens
-        processedTokens.forEach(token => {
-          const address = token.contractAddress.toLowerCase();
-          const price = addressToPrice[address] || 0;
-          if (price > 0) {
-            const balanceNum = parseFloat(token.balance);
-            if (!isNaN(balanceNum)) {
-              token.value = (balanceNum * price).toFixed(2);
-            } else {
-              token.value = '0.00';
-            }
-          } else {
-            token.value = '0.00';
-          }
-        });
-      } catch (priceError) {
-        console.warn("Ошибка при получении цен токенов:", priceError.message);
-        // Если не удалось получить цены, оставляем value = '0.00'
-      }
-    }
-    // Сохраняем в состояние и кэш
-    setTokens(processedTokens);
-    saveTokensToCache(accountAddress, processedTokens);
-    saveLastUpdateTime(accountAddress);
+    // Получаем список токенов для текущей сети
+    const tokens = DEFAULT_TOKENS[chainId] || [];
+
+    // Создаем массив промисов для получения балансов
+    const balancePromises = tokens.map(token =>
+      fetchTokenBalance(provider, token.address, account, token.decimals)
+    );
+
+    // Ждем завершения всех запросов балансов
+    const balances = await Promise.all(balancePromises);
+
+    // Создаем карту токенов для получения цен
+    const tokenPriceMap = {};
+    tokens.forEach(token => {
+      tokenPriceMap[token.address] = {
+        coingeckoId: token.coingeckoId,
+        cmcId: token.cmcId
+      };
+    });
+
+    // Получаем цены токенов
+    const prices = await fetchMultipleTokenPricesWithFallback(tokenPriceMap);
+
+    // Комбинируем данные
+    const tokensWithBalances = tokens.map((token, index) => {
+      const balance = parseFloat(balances[index]);
+      const price = prices[token.address] || 0;
+      const value = isNaN(balance) ? 0 : balance * price;
+
+      return {
+        ...token,
+        balance: isNaN(balance) ? "0" : balance.toFixed(token.decimals),
+        price: price,
+        value: value.toFixed(2),
+        chainId: chainId
+      };
+    });
+
+    return tokensWithBalances;
   } catch (err) {
-    console.error("Критическая ошибка при получении балансов токенов:", err);
-    // Не устанавливаем ошибку в состояние, если у нас есть кэш, чтобы не перезаписывать отображаемые данные
-    // if (tokens.length === 0) { // Это будет проверено в компоненте
-    //   setError(`Не удалось получить балансы токенов: ${err.message || 'Неизвестная ошибка'}`);
-    // }
-    // В случае ошибки обновления, можно попробовать загрузить из кэша
-    // (хотя кэш уже должен быть загружен в useEffect)
-    // const cachedTokens = getCachedTokens(accountAddress);
-    // if (cachedTokens) {
-    //   setTokens(cachedTokens);
-    // }
-  } finally {
-    // if (loading) { // Это будет проверено в компоненте
-    //   setLoading(false);
-    // }
+    console.error("Ошибка при получении балансов токенов:", err);
+    throw err;
   }
 };
 
@@ -458,68 +282,113 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const intervalRef = useRef(null); // useRef для хранения ID интервала
-  
+
   // Состояние для фильтра сетей (по умолчанию активна только текущая сеть)
   const [activeChains, setActiveChains] = useState([chainId || 137]); // 137 как fallback для Polygon
 
   // Функция для обновления токенов с учетом кэширования
-  const handleRefresh = async () => {
+  const updateTokens = async (useCache = true) => {
     if (!account || !provider) return;
-    setLoading(true);
-    setError(null);
-    await updateTokensAndCache(account, provider, setTokens, setLoading, setError, updateIntervalMinutes);
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Пытаемся получить данные из кэша
+      let cachedTokens = null;
+      if (useCache) {
+        cachedTokens = getCachedTokens(account);
+      }
+
+      if (cachedTokens) {
+        setTokens(cachedTokens);
+        // Не прекращаем выполнение, все равно обновляем в фоне
+      }
+
+      // Получаем токены для активных сетей
+      const tokensPromises = activeChains.map(chainId => {
+        // Здесь должна быть логика для получения провайдера для разных сетей
+        // Пока используем текущий провайдер для демонстрации
+        return fetchTokensWithBalances(provider, account, chainId);
+      });
+
+      const tokensResults = await Promise.all(tokensPromises);
+      const allTokens = tokensResults.flat();
+
+      setTokens(allTokens);
+      saveTokensToCache(account, allTokens);
+
+    } catch (err) {
+      console.error("Ошибка при обновлении токенов:", err);
+      // Не устанавливаем ошибку в состояние, если у нас есть кэш, чтобы не перезаписывать отображаемые данные
+      // if (tokens.length === 0) {
+      //   Это будет проверено в компоненте
+      //   setError(`Не удалось получить балансы токенов: ${err.message || 'Неизвестная ошибка'}`);
+      // }
+
+      // В случае ошибки обновления, можно попробовать загрузить из кэша
+      // (хотя кэш уже должен быть загружен в useEffect)
+      // const cachedTokens = getCachedTokens(account);
+      // if (cachedTokens) {
+      //   setTokens(cachedTokens);
+      // }
+    } finally {
+      // if (loading) {
+      //   Это будет проверено в компоненте
+      //   setLoading(false);
+      // }
+    }
   };
 
-  // Эффект для инициализации: сначала из кэша, потом обновление
+  // Эффект для инициализации и обновления по интервалу
   useEffect(() => {
-    let isMounted = true;
-    const initializeTokens = async () => {
-      if (!account || !provider) {
-        if (isMounted) {
-          setTokens([]);
-          setLoading(false);
-        }
-        return;
-      }
-      // 1. Попробуем загрузить из кэша
-      const cachedTokens = getCachedTokens(account);
-      if (cachedTokens && isMounted) {
-        setTokens(cachedTokens);
-        setLoading(false); // Показываем кэшированные данные сразу
-      }
-      // 2. Запускаем обновление в фоне
-      await updateTokensAndCache(account, provider, setTokens, setLoading, setError, updateIntervalMinutes);
-    };
-    // Очищаем предыдущий интервал
+    if (!account || !provider) return;
+
+    // Немедленное обновление при монтировании или изменении аккаунта/провайдера
+    updateTokens();
+
+    // Устанавливаем интервал для автоматического обновления
+    const intervalMinutes = updateIntervalMinutes || 1; // По умолчанию 1 минута
+    const intervalMs = intervalMinutes * 60 * 1000;
+
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
-    initializeTokens();
-    // Устанавливаем новый интервал, если updateIntervalMinutes > 0
-    if (updateIntervalMinutes > 0) {
-      intervalRef.current = setInterval(() => {
-        updateTokensAndCache(account, provider, setTokens, setLoading, setError, updateIntervalMinutes);
-      }, updateIntervalMinutes * 60 * 1000);
-    }
-    // Функция очистки
+
+    intervalRef.current = setInterval(() => {
+      updateTokens(false); // Не используем кэш при автоматическом обновлении
+    }, intervalMs);
+
+    // Очистка интервала при размонтировании или изменении зависимостей
     return () => {
-      isMounted = false;
-      // Очищаем таймер при размонтировании, если он был установлен
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [provider, account, signer, updateIntervalMinutes]); // Добавлены signer и updateIntervalMinutes в зависимости
+  }, [account, provider, updateIntervalMinutes, activeChains]); // Добавлены зависимости
 
-  // Функция для открытия адреса токена в Polygonscan
-  const openInPolygonscan = (address) => {
-    if (address && address !== '0x0000000000000000000000000000000000000000') {
-      const url = `https://polygonscan.com/token/${address}`;
-      window.open(url, '_blank', 'noopener,noreferrer');
+  // Эффект для обновления при изменении chainId
+  useEffect(() => {
+    if (chainId && !activeChains.includes(chainId)) {
+      setActiveChains([chainId]);
+    }
+  }, [chainId]);
+
+  // Функция для ручного обновления
+  const handleRefresh = () => {
+    updateTokens(false); // Не используем кэш при ручном обновлении
+  };
+
+  // Функция для переключения сети в фильтре
+  const toggleChain = (chainId) => {
+    if (activeChains.includes(chainId)) {
+      setActiveChains(activeChains.filter(id => id !== chainId));
+    } else {
+      setActiveChains([...activeChains, chainId]);
     }
   };
 
-  // Функция для копирования адреса токена в буфер обмена
+  // Функция для копирования адреса токена
   const copyTokenAddress = async (address, symbol) => {
     if (!address) return;
     try {
@@ -554,18 +423,21 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
     alert(`Функция сжигания для ${token.symbol} будет реализована`);
   };
 
-  // Фильтрация токенов по активным сетям (пока только текущая сеть)
-  const filteredTokens = tokens.filter(token => {
-    // В текущей реализации все токены считаются принадлежащими сети Polygon (chainId 137)
-    // В будущем можно добавить поле chainId в объект token
-    return activeChains.includes(137); 
-  });
+  // Фильтрация токенов по активным сетям
+  const filteredTokens = tokens.filter(token =>
+    activeChains.includes(token.chainId)
+  );
 
-  // Расчет баланса по сетям (в данном случае только для Polygon)
+  // Расчет баланса по сетям
   const chainBalances = {};
-  if (activeChains.includes(137)) {
-    chainBalances[137] = totalValue;
-  }
+  activeChains.forEach(chainId => {
+    chainBalances[chainId] = tokens
+      .filter(token => token.chainId === chainId)
+      .reduce((sum, token) => {
+        const value = parseFloat(token.value);
+        return isNaN(value) ? sum : sum + value;
+      }, 0);
+  });
 
   if (loading && tokens.length === 0) { // Показываем спиннер только если нет кэшированных данных
     return (
@@ -587,143 +459,129 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
   return (
     <div className="bg-gray-800 bg-opacity-50 rounded-xl shadow-lg overflow-hidden border border-gray-700">
       {/* Заголовок с адресом кошелька и общим балансом */}
-      <div className="px-6 py-4 border-b border-gray-700">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+      <div className="px-6 py-4 border-b border-gray-700 sticky top-0 bg-gray-800 bg-opacity-80 z-10">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-xl font-bold text-white">Токены в кошельке</h2>
-            {account && (
-              <p className="text-sm text-gray-400 mt-1">
-                Адрес: <span className="font-mono">{formatAddress(account)}</span>
-              </p>
-            )}
+            <h2 className="text-xl font-bold text-white">Токены кошелька</h2>
+            <p className="text-gray-400 text-sm mt-1">
+              Адрес: {account ? formatAddress(account) : 'Не подключен'}
+            </p>
           </div>
-          <div className="mt-2 sm:mt-0">
-            <span className="text-lg font-semibold text-cyan-400">{totalValue.toFixed(2)} $</span>
+          <div className="mt-4 md:mt-0 text-right">
+            <p className="text-gray-400 text-sm">Общий баланс</p>
+            <p className="text-2xl font-bold text-cyan-400">${totalValue.toFixed(2)}</p>
           </div>
         </div>
       </div>
-      
-      {/* Блок фильтра сетей */}
-      <div className="px-6 py-4 border-b border-gray-700">
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(SUPPORTED_CHAINS).slice(0, 5).map(([chainIdStr, config]) => {
-            const id = parseInt(chainIdStr);
-            const isActive = activeChains.includes(id);
-            const balance = chainBalances[id] || 0;
-            const percentage = totalValue > 0 ? (balance / totalValue) * 100 : 0;
 
-            return (
-              <button
-                key={id}
-                onClick={() => {
-                  if (isActive) {
-                    setActiveChains(activeChains.filter(chain => chain !== id));
-                  } else {
-                    setActiveChains([...activeChains, id]);
-                  }
-                }}
-                className={`px-3 py-2 rounded-md flex items-center gap-2 text-sm ${
-                  isActive 
-                    ? 'bg-gray-700 border border-cyan-500/30' 
-                    : 'bg-gray-800 border border-gray-600'
+      {/* Фильтр сетей */}
+      <div className="px-6 py-4 border-b border-gray-700 sticky top-[73px] bg-gray-800 bg-opacity-70 z-10">
+        <div className="flex flex-wrap gap-2">
+          {Object.values(SUPPORTED_CHAINS).map(network => (
+            <button
+              key={network.chainId}
+              onClick={() => toggleChain(network.chainId)}
+              className={`px-3 py-1 text-sm rounded-full transition ${activeChains.includes(network.chainId)
+                  ? 'bg-cyan-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
-              >
-                <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
-                <div className="text-left">
-                  <div className="font-medium text-white">{config.name}</div>
-                  <div className="text-xs text-gray-400">
-                    ${balance.toFixed(2)} ({percentage.toFixed(1)}%)
-                  </div>
-                </div>
-              </button>
+            >
+              {network.shortName}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-4 mt-3">
+          {activeChains.map(chainId => {
+            const network = SUPPORTED_CHAINS[chainId];
+            const balance = chainBalances[chainId] || 0;
+            return (
+              <div key={chainId} className="flex items-center">
+                <span className="text-gray-400 text-sm mr-2">{network?.shortName}:</span>
+                <span className="text-cyan-400 font-medium">${balance.toFixed(2)}</span>
+              </div>
             );
           })}
-          
-          {/* Кнопка "Show more chains" если сетей больше 5 */}
-          {Object.keys(SUPPORTED_CHAINS).length > 5 && (
-            <button className="px-3 py-2 rounded-md bg-gray-800 border border-gray-600 text-sm text-gray-400 hover:text-white transition">
-              +{Object.keys(SUPPORTED_CHAINS).length - 5} more chains
-            </button>
-          )}
         </div>
       </div>
 
-      {/* Список токенов */}
+      {/* Таблица токенов */}
       <div className="overflow-x-auto">
-        {filteredTokens.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            Токены не найдены
-          </div>
-        ) : (
-          <table className="min-w-full divide-y divide-gray-700">
-            <thead className="bg-gray-750">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Токен</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Баланс</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Цена</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Сумма</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Действия</th>
-              </tr>
-            </thead>
-            <tbody className="bg-gray-800 divide-y divide-gray-700">
-              {filteredTokens.map((token, index) => (
-                <tr key={index} className="hover:bg-gray-750 transition">
+        <table className="min-w-full divide-y divide-gray-700">
+          <thead className="bg-gray-750 sticky top-[137px] z-10">
+            <tr>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Токен</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Баланс</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Цена</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Сумма</th>
+              <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Действия</th>
+            </tr>
+          </thead>
+          <tbody className="bg-gray-800 bg-opacity-50 divide-y divide-gray-700">
+            {filteredTokens.length > 0 ? (
+              filteredTokens.map((token, index) => (
+                <tr key={`${token.address}-${token.chainId}`} className={index % 2 === 0 ? 'bg-gray-800 bg-opacity-30' : 'bg-gray-800 bg-opacity-20'}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="flex-shrink-0 h-10 w-10 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold">
-                        {token.symbol ? token.symbol.charAt(0) : '?'}
-                      </div>
+                      {token.logo ? (
+                        <img className="h-10 w-10 rounded-full" src={token.logo} alt={token.symbol} />
+                      ) : (
+                        <div className="bg-gray-700 border-2 border-dashed rounded-xl w-10 h-10" />
+                      )}
                       <div className="ml-4">
-                        <div className="text-sm font-medium text-white">{token.name || 'Unknown Token'}</div>
-                        <div className="text-sm text-gray-400">{token.symbol || '???'}</div>
+                        <div className="text-sm font-medium text-white">{token.symbol}</div>
+                        <div className="text-sm text-gray-400">{token.name}</div>
+                        <div className="text-xs text-gray-500">{formatAddress(token.address)}</div>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-white">{parseFloat(token.balance).toFixed(8)}</div>
-                    <div className="text-xs text-gray-500 font-mono">{formatAddress(token.contractAddress)}</div>
+                    <div className="text-sm text-white">{parseFloat(token.balance).toFixed(4)}</div>
+                    <div className="text-xs text-gray-400">{token.symbol}</div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                    {parseFloat(token.value).toFixed(2)} $
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                    ${token.price ? parseFloat(token.price).toFixed(4) : '0.0000'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => handleSwap(token)}
-                        className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded transition"
-                      >
-                        Обменять
-                      </button>
-                      <button
-                        onClick={() => handleBurn(token)}
-                        className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded transition"
-                      >
-                        Сжечь
-                      </button>
-                      <button
-                        onClick={() => copyTokenAddress(token.contractAddress, token.symbol)}
-                        className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white rounded transition"
-                      >
-                        Копировать
-                      </button>
-                      <button
-                        onClick={() => openInPolygonscan(token.contractAddress)}
-                        className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition"
-                      >
-                        Посмотреть
-                      </button>
-                    </div>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-cyan-400">
+                    ${token.value}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button
+                      onClick={() => handleSwap(token)}
+                      className="text-cyan-400 hover:text-cyan-300 mr-3"
+                    >
+                      Обмен
+                    </button>
+                    <button
+                      onClick={() => handleBurn(token)}
+                      className="text-rose-500 hover:text-rose-400 mr-3"
+                    >
+                      Сжечь
+                    </button>
+                    <button
+                      onClick={() => copyTokenAddress(token.address, token.symbol)}
+                      className="text-gray-400 hover:text-gray-300"
+                    >
+                      Копировать
+                    </button>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              ))
+            ) : (
+              <tr>
+                <td colSpan="5" className="px-6 py-4 text-center text-gray-400">
+                  Нет токенов для отображения
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
-      {/* Футер с информацией об обновлении */}
-      <div className="px-6 py-4 bg-gray-750 text-xs text-gray-500 border-t border-gray-700">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
-          <div>
+
+      {/* Панель управления */}
+      <div className="px-6 py-4 bg-gray-800 bg-opacity-60 border-t border-gray-700">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm text-gray-400">
             Данные обновляются автоматически
           </div>
           <div className="mt-1 sm:mt-0">
