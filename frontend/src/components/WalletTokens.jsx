@@ -463,9 +463,8 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
   const intervalRef = useRef(null); // useRef для хранения ID интервала
   
   // Состояние для фильтра сетей
-  // Изначально активна только текущая сеть (chainId из контекста)
-  const [activeChainsFilter, setActiveChainsFilter] = useState([chainId]);
-  // Состояние для отображения дополнительных сетей
+  // По умолчанию активна только сеть из контекста chainId
+  // showMoreChains управляет отображением НЕактивных сетей
   const [showMoreChains, setShowMoreChains] = useState(false);
 
   // Функция для обновления токенов с учетом кэширования
@@ -568,9 +567,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
   const filteredTokens = tokens.filter(token => {
     // Пока что фильтрация не применяется, так как все токены из Polygon
     // В будущем можно добавить проверку token.chainId === chainId
-    // Для демонстрации логики фильтрации, будем считать, что все токены принадлежат chainId 137
-    // и фильтруем по нему
-    return activeChainsFilter.includes(137); 
+    return true; 
   });
 
   // Расчет баланса по сетям (в данном случае только для Polygon)
@@ -579,7 +576,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
   if (chainId) {
     // Предполагаем, что все токены принадлежат активной сети
     // В реальной мультичейн реализации нужно группировать токены по их chainId
-    chainBalances[137] = totalPortfolioValue; // Используем 137 как пример
+    chainBalances[chainId] = totalPortfolioValue;
   }
 
   if (loading && tokens.length === 0) { // Показываем спиннер только если нет кэшированных данных
@@ -634,7 +631,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
               <div className="text-left">
                 <div className="font-medium text-white">{SUPPORTED_CHAINS[chainId].name}</div>
                 <div className="text-xs text-gray-400">
-                  ${chainBalances[137]?.toFixed(2) || '0.00'} {/* Используем 137 как пример */}
+                  ${chainBalances[chainId]?.toFixed(2) || '0.00'} (100%)
                 </div>
               </div>
             </button>
@@ -645,35 +642,23 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
             .filter(([idStr]) => parseInt(idStr) !== chainId) // Исключаем активную сеть
             .map(([chainIdStr, config]) => {
               const id = parseInt(chainIdStr);
-              // Проверяем, выбрана ли эта сеть для фильтрации
-              const isSelected = activeChainsFilter.includes(id);
-              // Баланс для неактивных сетей 0 (в текущей реализации)
-              const balance = 0; 
+              // Все остальные сети считаются "неактивными" для фильтрации токенов
+              // Но для отображения в UI они просто не выбраны
+              const balance = 0; // Баланс для неактивных сетей 0
               const percentage = 0;
 
               return (
                 <button
                   key={id}
-                  onClick={() => {
-                    // Переключаем выбор сети для фильтрации
-                    if (isSelected) {
-                      setActiveChainsFilter(prev => prev.filter(chain => chain !== id));
-                    } else {
-                      setActiveChainsFilter(prev => [...prev, id]);
-                    }
-                  }}
-                  className={`px-3 py-2 rounded-md flex items-center gap-2 text-sm ${
-                    isSelected 
-                      ? 'bg-gray-700 border border-cyan-500/30' 
-                      : 'bg-gray-800 border border-gray-600'
-                  }`}
-                  title={isSelected ? "Нажмите, чтобы убрать из фильтра" : "Нажмите, чтобы добавить в фильтр"}
+                  // Нажатие на неактивную сеть не переключает её, так как это фильтр
+                  // Если нужно сделать переключение сетей, нужно изменить логику
+                  // Сейчас это просто информационный список
+                  className={`px-3 py-2 rounded-md flex items-center gap-2 text-sm bg-gray-800 border border-gray-600 opacity-70`}
+                  title="Сеть не активна. Переключите сеть в кошельке."
                 >
-                  <div className={`w-2 h-2 rounded-full ${isSelected ? 'bg-cyan-500' : 'bg-gray-500'}`}></div>
+                  <div className="w-2 h-2 rounded-full bg-gray-500"></div>
                   <div className="text-left">
-                    <div className={`font-medium ${isSelected ? 'text-white' : 'text-gray-400'}`}>
-                      {config.name}
-                    </div>
+                    <div className="font-medium text-gray-400">{config.name}</div>
                     <div className="text-xs text-gray-500">
                       ${balance.toFixed(2)} ({percentage.toFixed(1)}%)
                     </div>
