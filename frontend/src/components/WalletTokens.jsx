@@ -561,8 +561,9 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
                       setActiveChains(prev => [...prev, chainId]);
                     }
                   }}
-                  className={`px-3 py-1 text-sm rounded-full flex items-center ${isActive ? 'bg-cyan-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    } transition-colors`}
+                  className={`px-3 py-1 text-sm rounded-full flex items-center ${
+                    isActive ? 'bg-cyan-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  } transition-colors`}
                   title={chain ? chain.name : `Chain ${chainId}`}
                 >
                   {chain && chain.logo && (
@@ -590,8 +591,9 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
           >
             Еще
             <svg
-              className={`w-4 h-4 ml-1 transform transition-transform ${showMoreChains ? 'rotate-180' : ''
-                }`}
+              className={`w-4 h-4 ml-1 transform transition-transform ${
+                showMoreChains ? 'rotate-180' : ''
+              }`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -631,10 +633,11 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
                       }
                       setShowMoreChains(false); // Закрываем список после выбора
                     }}
-                    className={`px-3 py-2 rounded-md flex items-center gap-2 text-sm ${isActive
+                    className={`px-3 py-2 rounded-md flex items-center gap-2 text-sm ${
+                      isActive
                         ? 'bg-gray-700 border border-cyan-500/30'
                         : 'bg-gray-800 border border-gray-600'
-                      }`}
+                    }`}
                     title={chain.name}
                   >
                     <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
@@ -753,10 +756,11 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
         <button
           onClick={handleRefresh}
           disabled={loading}
-          className={`px-4 py-2 rounded flex items-center ${loading
+          className={`px-4 py-2 rounded flex items-center ${
+            loading
               ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
               : 'bg-cyan-600 hover:bg-cyan-700 text-white'
-            } transition-colors`}
+          } transition-colors`}
         >
           {loading ? (
             <>
