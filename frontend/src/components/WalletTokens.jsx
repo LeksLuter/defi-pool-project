@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
+
 // ABI для ERC20 токенов (минимальный набор функций для получения метаданных)
 const ERC20_ABI = [
   "function decimals() view returns (uint8)",
@@ -8,6 +9,7 @@ const ERC20_ABI = [
   "function name() view returns (string)",
   "function balanceOf(address) view returns (uint256)"
 ];
+
 // Сопоставление адресов токенов с их ID для CoinGecko и CoinMarketCap
 // Это позволяет получать цены для известных токенов
 const KNOWN_TOKENS_MAP = {
@@ -32,16 +34,20 @@ const KNOWN_TOKENS_MAP = {
     cmcId: '825'
   }
 };
+
 // Вспомогательная функция для получения ключа кэша
 const getCacheKey = (account) => `walletTokens_${account}`;
+
 // Вспомогательная функция для получения ключа времени последнего обновления
 const getLastUpdateKey = (account) => `walletTokens_lastUpdate_${account}`;
+
 // Функция для проверки, устарели ли кэшированные данные
 const isCacheExpired = (timestamp, maxAgeMinutes = 10) => {
   const now = Date.now();
   const maxAgeMs = maxAgeMinutes * 60 * 1000;
   return (now - timestamp) > maxAgeMs;
 };
+
 // Функция для получения токенов из кэша
 const getCachedTokens = (account) => {
   if (!account) return null;
@@ -63,6 +69,7 @@ const getCachedTokens = (account) => {
   }
   return null;
 };
+
 // Функция для сохранения токенов в кэш
 const saveTokensToCache = (account, tokens) => {
   if (!account || !tokens) return;
@@ -78,6 +85,7 @@ const saveTokensToCache = (account, tokens) => {
     console.error('Ошибка при сохранении токенов в кэш:', error);
   }
 };
+
 // Функция для сохранения времени последнего обновления
 const saveLastUpdateTime = (account) => {
   if (!account) return;
@@ -88,6 +96,7 @@ const saveLastUpdateTime = (account) => {
     console.error('Ошибка при сохранении времени последнего обновления:', error);
   }
 };
+
 // Функция для проверки, можно ли выполнить фоновое обновление
 // (прошло ли достаточно времени с последнего обновления)
 const canPerformBackgroundUpdate = (account, minIntervalMinutes = 5) => {
@@ -104,6 +113,7 @@ const canPerformBackgroundUpdate = (account, minIntervalMinutes = 5) => {
     return true; // В случае ошибки разрешаем обновление
   }
 };
+
 // Функция для получения цены токена через CoinGecko API
 const fetchTokenPriceFromCoinGecko = async (coingeckoId) => {
   if (!coingeckoId) return 0;
@@ -121,6 +131,7 @@ const fetchTokenPriceFromCoinGecko = async (coingeckoId) => {
     return 0;
   }
 };
+
 // Функция для получения цены токена через CoinMarketCap API
 const fetchTokenPriceFromCoinMarketCap = async (cmcId) => {
   if (!cmcId) return 0;
@@ -149,6 +160,7 @@ const fetchTokenPriceFromCoinMarketCap = async (cmcId) => {
     return 0;
   }
 };
+
 // Функция для получения цены токена с резервными вариантами
 const fetchTokenPriceWithFallback = async (coingeckoId, cmcId) => {
   let price = 0;
@@ -162,6 +174,7 @@ const fetchTokenPriceWithFallback = async (coingeckoId, cmcId) => {
   }
   return price || 0;
 };
+
 // Функция для получения цен нескольких токенов с резервными вариантами
 const fetchMultipleTokenPricesWithFallback = async (tokenMap) => {
   const tokenIds = Object.keys(tokenMap);
@@ -173,6 +186,7 @@ const fetchMultipleTokenPricesWithFallback = async (tokenMap) => {
   }
   return addressToPrice;
 };
+
 // Функция для получения токенов через Etherscan V2 API
 const fetchTokensFromEtherscanV2 = async (accountAddress, ethProvider) => {
   if (!ethProvider || !accountAddress) return [];
@@ -266,6 +280,7 @@ const fetchTokensFromEtherscanV2 = async (accountAddress, ethProvider) => {
     return [];
   }
 };
+
 // Функция для получения токенов через прямой вызов balanceOf (резервный метод)
 const fetchTokensDirectBalance = async (accountAddress, ethProvider) => {
   if (!ethProvider || !accountAddress) return [];
@@ -318,6 +333,7 @@ const fetchTokensDirectBalance = async (accountAddress, ethProvider) => {
     return [];
   }
 };
+
 // Основная функция обновления токенов и кэширования
 const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setLoading, setError, updateIntervalMinutes = 0) => {
   // Определяем минимальный интервал обновления (5 минут по умолчанию или значение из админки)
@@ -435,12 +451,14 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
     // }
   }
 };
+
 const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
   const { provider, account, signer } = useWeb3(); // signer добавлен
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const intervalRef = useRef(null); // useRef для хранения ID интервала
+
   // Функция для обновления токенов с учетом кэширования
   const handleRefresh = async () => {
     if (!account || !provider) return;
@@ -448,6 +466,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
     setError(null);
     await updateTokensAndCache(account, provider, setTokens, setLoading, setError, updateIntervalMinutes);
   };
+
   // Эффект для инициализации: сначала из кэша, потом обновление
   useEffect(() => {
     let isMounted = true;
@@ -488,6 +507,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
       }
     };
   }, [provider, account, signer, updateIntervalMinutes]); // Добавлены signer и updateIntervalMinutes в зависимости
+
   // Функция для открытия адреса токена в Polygonscan
   const openInPolygonscan = (address) => {
     if (address && address !== '0x0000000000000000000000000000000000000000') {
@@ -495,6 +515,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
       window.open(url, '_blank', 'noopener,noreferrer');
     }
   };
+
   // Функция для копирования адреса токена в буфер обмена
   const copyTokenAddress = async (address, symbol) => {
     if (!address) return;
@@ -506,25 +527,30 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
       console.error('Ошибка при копировании адреса токена: ', err);
     }
   };
+
   // Функция для форматирования адреса
   const formatAddress = (address) => {
     if (!address) return '';
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
+
   // Вычисляем общий баланс
   const totalPortfolioValue = tokens.reduce((sum, token) => {
     const value = parseFloat(token.totalValue);
     return isNaN(value) ? sum : sum + value;
   }, 0);
+
   // Функции-заглушки для обмена и сжигания
   const handleSwap = (token) => {
     console.log("Обмен токена:", token);
     alert(`Функция обмена для ${token.symbol} будет реализована`);
   };
+
   const handleBurn = (token) => {
     console.log("Сжечь токен:", token);
     alert(`Функция сжигания для ${token.symbol} будет реализована`);
   };
+
   if (loading && tokens.length === 0) { // Показываем спиннер только если нет кэшированных данных
     return (
       <div className="flex justify-center items-center h-64">
@@ -532,6 +558,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
       </div>
     );
   }
+
   if (error && tokens.length === 0) { // Показываем ошибку только если нет кэшированных данных
     return (
       <div className="bg-red-900 bg-opacity-30 border border-red-700 text-red-300 px-4 py-3 rounded relative" role="alert">
@@ -540,6 +567,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
       </div>
     );
   }
+
   return (
     <div className="bg-gray-800 bg-opacity-50 rounded-xl shadow-lg overflow-hidden border border-gray-700">
       {/* Заголовок с адресом кошелька и общим балансом */}
@@ -590,7 +618,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-white">{token.balance}</div>
+                    <div className="text-sm text-white">{parseFloat(token.balance).toFixed(8)}</div>
                     <div className="text-xs text-gray-500 font-mono">{formatAddress(token.contractAddress)}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
@@ -600,30 +628,49 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
                     {token.totalValue > 0 ? token.totalValue.toFixed(2) : '0.00'} $
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex space-x-2">
+                      {/* Иконка обмена */}
                       <button
                         onClick={() => handleSwap(token)}
-                        className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded transition"
+                        className="p-2 bg-green-600 hover:bg-green-700 text-white rounded-full transition"
+                        title="Обменять"
                       >
-                        Обменять
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                        </svg>
                       </button>
+
+                      {/* Иконка сжигания */}
                       <button
                         onClick={() => handleBurn(token)}
-                        className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded transition"
+                        className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-full transition"
+                        title="Сжечь"
                       >
-                        Сжечь
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
                       </button>
+
+                      {/* Иконка копирования */}
                       <button
                         onClick={() => copyTokenAddress(token.contractAddress, token.symbol)}
-                        className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white rounded transition"
+                        className="p-2 bg-gray-600 hover:bg-gray-500 text-white rounded-full transition"
+                        title="Копировать адрес"
                       >
-                        Копировать
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
                       </button>
+
+                      {/* Иконка просмотра */}
                       <button
                         onClick={() => openInPolygonscan(token.contractAddress)}
-                        className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition"
+                        className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition"
+                        title="Посмотреть в explorer"
                       >
-                        Посмотреть
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
                       </button>
                     </div>
                   </td>
@@ -653,4 +700,5 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
     </div>
   );
 };
+
 export default WalletTokens;
