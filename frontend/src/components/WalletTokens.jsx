@@ -1,9 +1,8 @@
-// frontend\src\components\WalletTokens.jsx
 import React, { useEffect, useState, useRef } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
 // Импортируем конфигурацию сетей
-import { SUPPORTED_CHAINS, getNetworkConfig } from '../config/supportedChains';
+import { SUPPORTED_CHAINS } from '../config/supportedChains';
 
 // ABI для ERC20 токенов (минимальный набор функций для получения метаданных)
 const ERC20_ABI = [
@@ -387,7 +386,8 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
             name: tokenInfo.tokenName,
             symbol: tokenInfo.tokenSymbol,
             balance: formattedBalance,
-            value: '0.00', // Цена будет установлена позже
+            price: 0, // Цена за единицу токена будет установлена позже
+            totalValue: 0, // Общая стоимость будет рассчитана позже
             decimals: tokenInfo.tokenDecimal
           };
         } catch (e) {
@@ -409,24 +409,26 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
         });
         // Получаем цены для известных токенов
         const addressToPrice = await fetchMultipleTokenPricesWithFallback(tokenPriceMap);
-        // Обновляем цены в processedTokens
+        // Обновляем цены и общую стоимость в processedTokens
         processedTokens.forEach(token => {
           const address = token.contractAddress.toLowerCase();
           const price = addressToPrice[address] || 0;
+          token.price = price;
+
           if (price > 0) {
             const balanceNum = parseFloat(token.balance);
             if (!isNaN(balanceNum)) {
-              token.value = (balanceNum * price).toFixed(2);
+              token.totalValue = (balanceNum * price);
             } else {
-              token.value = '0.00';
+              token.totalValue = 0;
             }
           } else {
-            token.value = '0.00';
+            token.totalValue = 0;
           }
         });
       } catch (priceError) {
         console.warn("Ошибка при получении цен токенов:", priceError.message);
-        // Если не удалось получить цены, оставляем value = '0.00'
+        // Если не удалось получить цены, оставляем price = 0 и totalValue = 0
       }
     }
     // Сохраняем в состояние и кэш
@@ -453,14 +455,14 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
 };
 
 const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
-  const { provider, account, signer, chainId } = useWeb3(); // signer и chainId добавлены
+  const { provider, account, signer } = useWeb3(); // signer добавлен
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const intervalRef = useRef(null); // useRef для хранения ID интервала
-  
-  // Состояние для фильтра сетей (по умолчанию активна только текущая сеть)
-  const [activeChains, setActiveChains] = useState([chainId || 137]); // 137 как fallback для Polygon
+
+  // Состояние для фильтра сетей (по умолчанию активна только Polygon - chainId 137)
+  const [activeChains, setActiveChains] = useState([137]);
 
   // Функция для обновления токенов с учетом кэширования
   const handleRefresh = async () => {
@@ -538,8 +540,8 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
   };
 
   // Вычисляем общий баланс
-  const totalValue = tokens.reduce((sum, token) => {
-    const value = parseFloat(token.value);
+  const totalPortfolioValue = tokens.reduce((sum, token) => {
+    const value = parseFloat(token.totalValue);
     return isNaN(value) ? sum : sum + value;
   }, 0);
 
@@ -554,17 +556,16 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
     alert(`Функция сжигания для ${token.symbol} будет реализована`);
   };
 
-  // Фильтрация токенов по активным сетям (пока только текущая сеть)
+  // Фильтрация токенов по активным сетям
   const filteredTokens = tokens.filter(token => {
     // В текущей реализации все токены считаются принадлежащими сети Polygon (chainId 137)
-    // В будущем можно добавить поле chainId в объект token
-    return activeChains.includes(137); 
+    return activeChains.includes(137);
   });
 
   // Расчет баланса по сетям (в данном случае только для Polygon)
   const chainBalances = {};
   if (activeChains.includes(137)) {
-    chainBalances[137] = totalValue;
+    chainBalances[137] = totalPortfolioValue;
   }
 
   if (loading && tokens.length === 0) { // Показываем спиннер только если нет кэшированных данных
@@ -598,19 +599,19 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
             )}
           </div>
           <div className="mt-2 sm:mt-0">
-            <span className="text-lg font-semibold text-cyan-400">{totalValue.toFixed(2)} $</span>
+            <span className="text-lg font-semibold text-cyan-400">{totalPortfolioValue.toFixed(2)} $</span>
           </div>
         </div>
       </div>
-      
-      {/* Блок фильтра сетей */}
+
+      {/* Блок фильтра сетей - теперь всегда отображается */}
       <div className="px-6 py-4 border-b border-gray-700">
         <div className="flex flex-wrap gap-2">
           {Object.entries(SUPPORTED_CHAINS).slice(0, 5).map(([chainIdStr, config]) => {
             const id = parseInt(chainIdStr);
             const isActive = activeChains.includes(id);
             const balance = chainBalances[id] || 0;
-            const percentage = totalValue > 0 ? (balance / totalValue) * 100 : 0;
+            const percentage = totalPortfolioValue > 0 ? (balance / totalPortfolioValue) * 100 : 0;
 
             return (
               <button
@@ -622,11 +623,10 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
                     setActiveChains([...activeChains, id]);
                   }
                 }}
-                className={`px-3 py-2 rounded-md flex items-center gap-2 text-sm ${
-                  isActive 
-                    ? 'bg-gray-700 border border-cyan-500/30' 
+                className={`px-3 py-2 rounded-md flex items-center gap-2 text-sm ${isActive
+                    ? 'bg-gray-700 border border-cyan-500/30'
                     : 'bg-gray-800 border border-gray-600'
-                }`}
+                  }`}
               >
                 <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
                 <div className="text-left">
@@ -638,7 +638,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
               </button>
             );
           })}
-          
+
           {/* Кнопка "Show more chains" если сетей больше 5 */}
           {Object.keys(SUPPORTED_CHAINS).length > 5 && (
             <button className="px-3 py-2 rounded-md bg-gray-800 border border-gray-600 text-sm text-gray-400 hover:text-white transition">
@@ -661,6 +661,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Токен</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Баланс</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Цена</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Сумма</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Действия</th>
               </tr>
             </thead>
@@ -683,7 +684,10 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
                     <div className="text-xs text-gray-500 font-mono">{formatAddress(token.contractAddress)}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                    {parseFloat(token.value).toFixed(2)} $
+                    {token.price > 0 ? token.price.toFixed(4) : 'N/A'} $
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
+                    {token.totalValue > 0 ? token.totalValue.toFixed(2) : '0.00'} $
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex flex-wrap gap-2">
