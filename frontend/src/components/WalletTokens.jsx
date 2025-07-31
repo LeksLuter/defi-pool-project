@@ -1,51 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
-
-// === НАЧАЛО ИЗМЕНЕНИЙ: Мультичейн конфигурация ===
-// Карта сетей, поддерживаемых Etherscan V2, с их chainid и названиями
-// Источник: https://docs.etherscan.io/etherscan-v2/supported-chains
-// Добавьте сюда другие сети по необходимости
-const SUPPORTED_CHAINS = {
-  polygon: {
-    chainId: 137,
-    name: 'Polygon',
-    nativeTokenSymbol: 'MATIC',
-    nativeTokenName: 'MATIC Token', // Или Polygon Ecosystem Token если нужно
-    // Для нативного токена используем специальный адрес в KNOWN_TOKENS_MAP
-    nativeTokenAddress: '0x0000000000000000000000000000000000000000',
-    // API ключ для Etherscan V2 (используется для всех сетей)
-    // Убедитесь, что он имеет доступ к нужным сетям
-    apiKey: import.meta.env.VITE_ETHERSCAN_API_KEY || 'YourApiKeyToken',
-    apiUrl: 'https://api.etherscan.io/v2/api'
-  },
-  ethereum: {
-    chainId: 1,
-    name: 'Ethereum',
-    nativeTokenSymbol: 'ETH',
-    nativeTokenName: 'Ether',
-    nativeTokenAddress: '0x0000000000000000000000000000000000000000',
-    apiKey: import.meta.env.VITE_ETHERSCAN_API_KEY || 'YourApiKeyToken',
-    apiUrl: 'https://api.etherscan.io/v2/api'
-  },
-  bsc: {
-    chainId: 56,
-    name: 'Binance Smart Chain',
-    nativeTokenSymbol: 'BNB',
-    nativeTokenName: 'BNB',
-    nativeTokenAddress: '0x0000000000000000000000000000000000000000',
-    apiKey: import.meta.env.VITE_ETHERSCAN_API_KEY || 'YourApiKeyToken',
-    apiUrl: 'https://api.etherscan.io/v2/api' // Используется основной V2 эндпоинт
-  }
-  // Добавьте другие сети, поддерживаемые V2, здесь
-};
-
-// Получить конфигурацию сети по chainId
-const getNetworkConfig = (chainId) => {
-  return Object.values(SUPPORTED_CHAINS).find(net => net.chainId === chainId);
-};
-
-// === КОНЕЦ ИЗМЕНЕНИЙ: Мультичейн конфигурация ===
+import { getNetworkConfig } from '../config/supportedChains';
 
 // ABI для ERC20 токенов (минимальный набор функций для получения метаданных)
 const ERC20_ABI = [
@@ -58,37 +14,74 @@ const ERC20_ABI = [
 // Сопоставление адресов токенов с их ID для CoinGecko и CoinMarketCap
 // Это позволяет получать цены для известных токенов
 const KNOWN_TOKENS_MAP = {
-  // Native POL (Matic) - для Polygon
-  'polygon_0x0000000000000000000000000000000000000000': {
-    coingeckoId: 'matic-network', // CoinGecko ID для Polygon
-    cmcId: '3890' // CoinMarketCap ID для MATIC
-  },
-  // WETH (Wrapped Ether) - для Polygon
-  'polygon_0x7ceb23fd6bc0add59e62ac25578270cff1b9f619': {
-    coingeckoId: 'weth',
-    cmcId: '2396'
-  },
-  // USDC (USD Coin) - для Polygon
-  'polygon_0x2791bca1f2de4661ed88a30c99a7a9449aa84174': {
-    coingeckoId: 'usd-coin',
-    cmcId: '3408'
-  },
-  // USDT (Tether USD) - для Polygon
-  'polygon_0xc2132d05d31c914a87c6611c10748aeb04b58e8f': {
-    coingeckoId: 'tether',
-    cmcId: '825'
-  },
-  // Native ETH - для Ethereum
-  'ethereum_0x0000000000000000000000000000000000000000': {
+  // Native tokens
+  '1_0x0000000000000000000000000000000000000000': { // Ethereum
     coingeckoId: 'ethereum',
     cmcId: '1027'
   },
-  // Native BNB - для BSC
-  'bsc_0x0000000000000000000000000000000000000000': {
+  '137_0x0000000000000000000000000000000000000000': { // Polygon
+    coingeckoId: 'matic-network',
+    cmcId: '3890'
+  },
+  '56_0x0000000000000000000000000000000000000000': { // BSC
     coingeckoId: 'binancecoin',
     cmcId: '1839'
+  },
+  '10_0x0000000000000000000000000000000000000000': { // Optimism
+    coingeckoId: 'ethereum',
+    cmcId: '1027'
+  },
+  '42161_0x0000000000000000000000000000000000000000': { // Arbitrum
+    coingeckoId: 'ethereum',
+    cmcId: '1027'
+  },
+  '43114_0x0000000000000000000000000000000000000000': { // Avalanche
+    coingeckoId: 'avalanche-2',
+    cmcId: '5805'
+  },
+  '8453_0x0000000000000000000000000000000000000000': { // Base
+    coingeckoId: 'ethereum',
+    cmcId: '1027'
+  },
+  // Common ERC20 tokens on Polygon
+  '137_0x2791bca1f2de4661ed88a30c99a7a9449aa84174': { // USDC (Polygon)
+    coingeckoId: 'usd-coin',
+    cmcId: '3408'
+  },
+  '137_0xc2132d05d31c914a87c6611c10748aeb04b58e8f': { // USDT (Polygon)
+    coingeckoId: 'tether',
+    cmcId: '825'
+  },
+  '137_0x7ceb23fd6bc0add59e62ac25578270cff1b9f619': { // WETH (Polygon)
+    coingeckoId: 'weth',
+    cmcId: '2396'
+  },
+  // Common ERC20 tokens on Ethereum
+  '1_0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': { // USDC (Ethereum)
+    coingeckoId: 'usd-coin',
+    cmcId: '3408'
+  },
+  '1_0xdac17f958d2ee523a2206206994597c13d831ec7': { // USDT (Ethereum)
+    coingeckoId: 'tether',
+    cmcId: '825'
+  },
+  '1_0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': { // WETH (Ethereum)
+    coingeckoId: 'weth',
+    cmcId: '2396'
+  },
+  // Common ERC20 tokens on BSC
+  '56_0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d': { // USDC (BSC)
+    coingeckoId: 'usd-coin',
+    cmcId: '3408'
+  },
+  '56_0x55d398326f99059ff775485246999027b3197955': { // USDT (BSC)
+    coingeckoId: 'tether',
+    cmcId: '825'
+  },
+  '56_0x2170ed0880ac9a755fd29b2688956bd959f933f8': { // ETH (BSC)
+    coingeckoId: 'ethereum',
+    cmcId: '1027'
   }
-  // Добавьте другие токены для других сетей по необходимости
 };
 
 // Вспомогательная функция для получения ключа кэша
@@ -243,7 +236,6 @@ const fetchMultipleTokenPricesWithFallback = async (tokenMap) => {
   return addressToPrice;
 };
 
-// === НАЧАЛО ИЗМЕНЕНИЙ: Переработанный Etherscan V2 API метод ===
 // Функция для получения токенов через Etherscan V2 API
 const fetchTokensFromEtherscanV2 = async (accountAddress, ethProvider, chainId) => {
   if (!ethProvider || !accountAddress || !chainId) return [];
@@ -257,8 +249,8 @@ const fetchTokensFromEtherscanV2 = async (accountAddress, ethProvider, chainId) 
   try {
     console.log(`Попытка получения токенов через Etherscan V2 API для сети ${networkConfig.name} (chainId: ${chainId})...`);
 
-    // Используем API ключ и URL из конфигурации сети
-    const apiKey = networkConfig.apiKey;
+    // Используем API ключ из переменных окружения
+    const apiKey = import.meta.env.VITE_ETHERSCAN_API_KEY || 'YourApiKeyToken';
     const apiUrl = networkConfig.apiUrl;
 
     // Формируем URL для получения ERC20 транзакций (токен трансферов)
@@ -322,15 +314,15 @@ const fetchTokensFromEtherscanV2 = async (accountAddress, ethProvider, chainId) 
 
     // Обрабатываем нативный токен отдельно
     try {
-      const polBalance = await ethProvider.getBalance(accountAddress);
+      const nativeBalance = await ethProvider.getBalance(accountAddress);
       // Используем BigNumber из ethers v5 для сравнения
-      if (polBalance.gt(0)) {
+      if (nativeBalance.gt(0)) {
         tokenDetails.push({
           contractAddress: networkConfig.nativeTokenAddress, // Специальный адрес для нативного токена
           tokenName: networkConfig.nativeTokenName,
           tokenSymbol: networkConfig.nativeTokenSymbol,
           tokenDecimal: 18, // Обычно 18 для нативных токенов
-          balance: polBalance.toString() // BigNumber в строку
+          balance: nativeBalance.toString() // BigNumber в строку
         });
       }
     } catch (error) {
@@ -377,7 +369,6 @@ const fetchTokensFromEtherscanV2 = async (accountAddress, ethProvider, chainId) 
     return [];
   }
 };
-// === КОНЕЦ ИЗМЕНЕНИЙ: Переработанный Etherscan V2 API метод ===
 
 // Функция для получения токенов через прямой вызов balanceOf (резервный метод)
 // Обновлена для работы с мультичейн
@@ -429,6 +420,16 @@ const fetchTokensDirectBalance = async (accountAddress, ethProvider, chainId) =>
         { address: '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d', name: 'USD Coin', symbol: 'USDC', decimals: 18 }, // USDC.e
         { address: '0x55d398326f99059ff775485246999027b3197955', name: 'Tether USD', symbol: 'USDT', decimals: 18 },
         { address: '0x2170ed0880ac9a755fd29b2688956bd959f933f8', name: 'Ethereum Token', symbol: 'ETH', decimals: 18 },
+      ],
+      10: [ // Optimism
+        { address: '0x0b2c639c533813f4aa9d7837caf62653d097ff85', name: 'USD Coin', symbol: 'USDC', decimals: 6 },
+        { address: '0x94b008aa00579c1307b0ef2c499ad98a8ce58e58', name: 'Tether USD', symbol: 'USDT', decimals: 6 },
+        { address: '0x4200000000000000000000000000000000000006', name: 'Wrapped Ether', symbol: 'WETH', decimals: 18 },
+      ],
+      42161: [ // Arbitrum
+        { address: '0xaf88d065e77c8cc2239327c5edb3a432268e5831', name: 'USD Coin', symbol: 'USDC', decimals: 6 },
+        { address: '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', name: 'Tether USD', symbol: 'USDT', decimals: 6 },
+        { address: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1', name: 'Wrapped Ether', symbol: 'WETH', decimals: 18 },
       ]
       // Добавьте токены для других сетей по необходимости
     };
@@ -527,7 +528,7 @@ const updateTokensAndCache = async (accountAddress, ethProvider, chainId, setTok
         // Добавляем префикс chainId для уникальной идентификации токенов в разных сетях
         const tokenPriceMap = {};
         processedTokens.forEach(token => {
-          const prefixedAddress = `${getNetworkConfig(chainId)?.name.toLowerCase()}_${token.contractAddress.toLowerCase()}`;
+          const prefixedAddress = `${chainId}_${token.contractAddress.toLowerCase()}`;
           if (KNOWN_TOKENS_MAP[prefixedAddress]) {
             tokenPriceMap[prefixedAddress] = KNOWN_TOKENS_MAP[prefixedAddress];
           }
@@ -538,7 +539,7 @@ const updateTokensAndCache = async (accountAddress, ethProvider, chainId, setTok
 
         // Обновляем цены и общую стоимость в processedTokens
         processedTokens.forEach(token => {
-          const prefixedAddress = `${getNetworkConfig(chainId)?.name.toLowerCase()}_${token.contractAddress.toLowerCase()}`;
+          const prefixedAddress = `${chainId}_${token.contractAddress.toLowerCase()}`;
           const price = prefixedAddressToPrice[prefixedAddress] || 0;
           token.price = price;
 
@@ -640,16 +641,10 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
     let url;
     if (address === networkConfig.nativeTokenAddress) {
       // Для нативного токена открываем адрес кошелька
-      url = `https://polygonscan.com/address/${address}`; // Или соответствующий explorer
-      if (chainId === 1) url = `https://etherscan.io/address/${address}`;
-      else if (chainId === 56) url = `https://bscscan.com/address/${address}`;
-      // Добавьте другие сети по необходимости
+      url = `${networkConfig.explorerUrl}/address/${address}`;
     } else {
       // Для токенов открываем адрес контракта
-      url = `https://polygonscan.com/token/${address}`;
-      if (chainId === 1) url = `https://etherscan.io/token/${address}`;
-      else if (chainId === 56) url = `https://bscscan.com/token/${address}`;
-      // Добавьте другие сети по необходимости
+      url = `${networkConfig.explorerUrl}/token/${address}`;
     }
 
     if (url) {
