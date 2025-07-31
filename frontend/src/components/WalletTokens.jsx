@@ -345,9 +345,9 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
     console.log(`Фоновое обновление пропущено: последнее обновление было менее ${minInterval} минут назад.`);
     // Даже если фоновое обновление пропущено, мы всё равно можем показать кэш
     // и завершить состояние загрузки, если оно ещё активно
-    if (loading && setTokens.length === 0) { // Исправлена опечатка: было setTokens.length, должно быть tokens.length из состояния
-      // setLoading(false); // Это будет вызвано в useEffect
-    }
+    // if (loading && setTokens.length === 0) { // Исправлена опечатка: было setTokens.length, должно быть tokens.length из состояния
+    //   setLoading(false); // Это будет вызвано в useEffect
+    // }
     return;
   }
   console.log('Начинаем фоновое обновление токенов...');
@@ -456,15 +456,15 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
 };
 
 const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
-  const { provider, account, signer } = useWeb3(); // signer добавлен
+  const { provider, account, signer, chainId } = useWeb3(); // chainId добавлен
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const intervalRef = useRef(null); // useRef для хранения ID интервала
   
-  // Состояние для фильтра сетей (по умолчанию активна только Polygon - chainId 137)
-  const [activeChains, setActiveChains] = useState([137]);
-  // Состояние для отображения дополнительных сетей
+  // Состояние для фильтра сетей
+  // По умолчанию активна только сеть из контекста chainId
+  // showMoreChains управляет отображением НЕактивных сетей
   const [showMoreChains, setShowMoreChains] = useState(false);
 
   // Функция для обновления токенов с учетом кэширования
@@ -561,15 +561,22 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
   };
 
   // Фильтрация токенов по активным сетям
+  // В текущей реализации все токены считаются принадлежащими сети Polygon (chainId 137)
+  // Поэтому фильтрация по chainId не применяется напрямую к токенам
+  // Но для будущей мультичейн реализации это важно учитывать
   const filteredTokens = tokens.filter(token => {
-    // В текущей реализации все токены считаются принадлежащими сети Polygon (chainId 137)
-    return activeChains.includes(137); 
+    // Пока что фильтрация не применяется, так как все токены из Polygon
+    // В будущем можно добавить проверку token.chainId === chainId
+    return true; 
   });
 
   // Расчет баланса по сетям (в данном случае только для Polygon)
+  // Для текущей реализации мы предполагаем, что все токены принадлежат активной сети
   const chainBalances = {};
-  if (activeChains.includes(137)) {
-    chainBalances[137] = totalPortfolioValue;
+  if (chainId) {
+    // Предполагаем, что все токены принадлежат активной сети
+    // В реальной мультичейн реализации нужно группировать токены по их chainId
+    chainBalances[chainId] = totalPortfolioValue;
   }
 
   if (loading && tokens.length === 0) { // Показываем спиннер только если нет кэшированных данных
@@ -611,34 +618,48 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
       {/* Блок фильтра сетей - теперь всегда отображается */}
       <div className="px-6 py-4 border-b border-gray-700">
         <div className="flex flex-wrap gap-2">
-          {Object.entries(SUPPORTED_CHAINS)
-            .slice(0, showMoreChains ? Object.keys(SUPPORTED_CHAINS).length : 5)
+          {/* Всегда отображаем активную сеть */}
+          {chainId && SUPPORTED_CHAINS[chainId] && (
+            <button
+              key={chainId}
+              // Активная сеть всегда "активна" визуально, но не переключается
+              // onClick={() => {}} // Можно оставить пустым или убрать onClick
+              className={`px-3 py-2 rounded-md flex items-center gap-2 text-sm bg-gray-700 border border-cyan-500/30`}
+              disabled // Делаем её неактивной для кликов, так как это текущая сеть
+            >
+              <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
+              <div className="text-left">
+                <div className="font-medium text-white">{SUPPORTED_CHAINS[chainId].name}</div>
+                <div className="text-xs text-gray-400">
+                  ${chainBalances[chainId]?.toFixed(2) || '0.00'} (100%)
+                </div>
+              </div>
+            </button>
+          )}
+
+          {/* Отображаем/скрываем НЕактивные сети по кнопке */}
+          {showMoreChains && Object.entries(SUPPORTED_CHAINS)
+            .filter(([idStr]) => parseInt(idStr) !== chainId) // Исключаем активную сеть
             .map(([chainIdStr, config]) => {
               const id = parseInt(chainIdStr);
-              const isActive = activeChains.includes(id);
-              const balance = chainBalances[id] || 0;
-              const percentage = totalPortfolioValue > 0 ? (balance / totalPortfolioValue) * 100 : 0;
+              // Все остальные сети считаются "неактивными" для фильтрации токенов
+              // Но для отображения в UI они просто не выбраны
+              const balance = 0; // Баланс для неактивных сетей 0
+              const percentage = 0;
 
               return (
                 <button
                   key={id}
-                  onClick={() => {
-                    if (isActive) {
-                      setActiveChains(activeChains.filter(chain => chain !== id));
-                    } else {
-                      setActiveChains([...activeChains, id]);
-                    }
-                  }}
-                  className={`px-3 py-2 rounded-md flex items-center gap-2 text-sm ${
-                    isActive 
-                      ? 'bg-gray-700 border border-cyan-500/30' 
-                      : 'bg-gray-800 border border-gray-600'
-                  }`}
+                  // Нажатие на неактивную сеть не переключает её, так как это фильтр
+                  // Если нужно сделать переключение сетей, нужно изменить логику
+                  // Сейчас это просто информационный список
+                  className={`px-3 py-2 rounded-md flex items-center gap-2 text-sm bg-gray-800 border border-gray-600 opacity-70`}
+                  title="Сеть не активна. Переключите сеть в кошельке."
                 >
-                  <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
+                  <div className="w-2 h-2 rounded-full bg-gray-500"></div>
                   <div className="text-left">
-                    <div className="font-medium text-white">{config.name}</div>
-                    <div className="text-xs text-gray-400">
+                    <div className="font-medium text-gray-400">{config.name}</div>
+                    <div className="text-xs text-gray-500">
                       ${balance.toFixed(2)} ({percentage.toFixed(1)}%)
                     </div>
                   </div>
@@ -646,13 +667,13 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
               );
             })}
           
-          {/* Кнопка "Show more chains" если сетей больше 5 */}
-          {Object.keys(SUPPORTED_CHAINS).length > 5 && (
+          {/* Кнопка "Показать/Скрыть другие сети" */}
+          {Object.keys(SUPPORTED_CHAINS).length > 1 && (
             <button 
               onClick={() => setShowMoreChains(!showMoreChains)}
               className="px-3 py-2 rounded-md bg-gray-800 border border-gray-600 text-sm text-gray-400 hover:text-white transition"
             >
-              {showMoreChains ? 'Скрыть сети' : `+${Object.keys(SUPPORTED_CHAINS).length - 5} других сетей`}
+              {showMoreChains ? 'Скрыть другие сети' : `Показать другие сети (${Object.keys(SUPPORTED_CHAINS).length - 1})`}
             </button>
           )}
         </div>
