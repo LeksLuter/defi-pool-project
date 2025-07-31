@@ -1,9 +1,9 @@
 // frontend\src\components\WalletTokens.jsx
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
 // Импортируем конфигурацию сетей
-import SUPPORTED_CHAINS from '../config/supportedChains'; // Предполагаем экспорт по умолчанию
+import { SUPPORTED_CHAINS } from '../config/supportedChains';
 
 // ABI для ERC20 токенов (минимальный набор функций для получения метаданных)
 const ERC20_ABI = [
@@ -15,7 +15,6 @@ const ERC20_ABI = [
 
 // Сопоставление адресов токенов с их ID для CoinGecko и CoinMarketCap
 // Это позволяет получать цены для известных токенов
-// Добавлены ключи для chainId 137 (Polygon)
 const KNOWN_TOKENS_MAP = {
   // Native POL (Matic) - chainId 137
   '137_0x0000000000000000000000000000000000000000': {
@@ -270,7 +269,7 @@ const fetchTokensDirectBalance = async (accountAddress, ethProvider, chainId) =>
       try {
         // Извлекаем адрес из ключа KNOWN_TOKENS_MAP (например, '137_0x...')
         const fullKey = Object.keys(KNOWN_TOKENS_MAP).find(k => KNOWN_TOKENS_MAP[k] === tokenInfo);
-        const tokenAddress = fullKey.split('_')[1]; // Берем часть после '_'
+        const tokenAddress = fullKey ? fullKey.split('_')[1] : null; // Берем часть после '_'
 
         if (!tokenAddress) continue;
 
@@ -698,24 +697,23 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
 };
 
 const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
-  const { provider, account, signer, chainId } = useWeb3(); // chainId добавлен
+  const { provider, account, signer, chainId, switchNetwork } = useWeb3(); // switchNetwork добавлен
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const intervalRef = useRef(null); // useRef для хранения ID интервала
   // Состояние для фильтра сетей
-  // По умолчанию активна только сеть из контекста chainId
   // showMoreChains управляет отображением НЕактивных сетей
   const [showMoreChains, setShowMoreChains] = useState(false);
 
   // Функция для обновления токенов с учетом кэширования
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     if (!account || !provider || !chainId) return;
     setLoading(true);
     setError(null);
     await updateTokensAndCache(account, provider, setTokens, setLoading, setError, updateIntervalMinutes, chainId);
-    setLoading(false); // Убираем состояние загрузки после обновления
-  };
+    // setLoading(false); // Убираем, так как updateTokensAndCache сам управляет состоянием
+  }, [account, provider, chainId, updateIntervalMinutes]); // Зависимости
 
   // Эффект для инициализации: сначала из кэша, потом обновление
   useEffect(() => {
@@ -764,7 +762,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
     };
   }, [provider, account, signer, updateIntervalMinutes, chainId]); // Добавлены signer, updateIntervalMinutes и chainId в зависимости
 
-  // Функция для открытия адреса токена в Polygonscan (или explorer соответствующей сети)
+  // Функция для открытия адреса токена в explorer соответствующей сети
   const openInExplorer = (address) => {
     if (address && address !== '0x0000000000000000000000000000000000000000' && chainId) {
       const explorerUrl = SUPPORTED_CHAINS[chainId]?.explorerUrl;
@@ -776,16 +774,16 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
   };
 
   // Функция для копирования адреса токена в буфер обмена
-  const copyTokenAddress = (address) => {
-    if (address) {
-      navigator.clipboard.writeText(address).then(() => {
-        // Можно добавить уведомление об успешном копировании
-        console.log('Адрес токена скопирован в буфер обмена');
-      }).catch(err => {
-        console.error('Ошибка при копировании адреса токена: ', err);
-      });
+  const copyTokenAddress = useCallback(async (address, symbol) => {
+    if (!address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      // Здесь можно добавить уведомление пользователю об успешном копировании
+      console.log(`Адрес токена ${symbol} скопирован в буфер обмена`);
+    } catch (err) {
+      console.error('Ошибка при копировании адреса токена: ', err);
     }
-  };
+  }, []);
 
   // Функция для форматирования адреса
   const formatAddress = (address) => {
@@ -829,23 +827,6 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
     chainBalances[chainId] = totalPortfolioValue;
   }
 
-  if (loading && tokens.length === 0) { // Показываем спиннер только если нет кэшированных данных
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
-      </div>
-    );
-  }
-
-  if (error && tokens.length === 0) { // Показываем ошибку только если нет кэшированных данных
-    return (
-      <div className="bg-red-900 bg-opacity-30 border border-red-700 text-red-300 px-4 py-3 rounded relative" role="alert">
-        <strong className="font-bold">Ошибка! </strong>
-        <span className="block sm:inline">{error}</span>
-      </div>
-    );
-  }
-
   return (
     <div className="bg-gray-800 bg-opacity-50 rounded-xl shadow-lg overflow-hidden border border-gray-700">
       {/* Заголовок с адресом кошелька и общим балансом */}
@@ -855,65 +836,69 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
             <h2 className="text-xl font-bold text-white">Мои токены</h2>
             {account && (
               <p className="text-sm text-gray-400 mt-1">
-                Адрес кошелька: <span className="font-mono">{formatAddress(account)}</span>
+                Адрес: <span className="font-mono">{formatAddress(account)}</span>
               </p>
             )}
           </div>
-          <div className="mt-2 sm:mt-0 text-sm text-gray-400">
-            <p>Общий баланс: ${totalPortfolioValue.toFixed(2)}</p>
+          <div className="mt-2 sm:mt-0">
+            <span className="text-lg font-semibold text-cyan-400">{totalPortfolioValue.toFixed(2)} $</span>
           </div>
         </div>
       </div>
 
-      {/* Фильтры сетей */}
-      <div className="px-6 py-3 bg-gray-750/50 border-b border-gray-700 flex flex-wrap items-center gap-2">
-        <span className="text-xs text-gray-500">Сеть:</span>
-        {/* Активная сеть */}
-        {chainId && SUPPORTED_CHAINS[chainId] && (
+      {/* Блок фильтра сетей - теперь всегда отображается */}
+      <div className="px-6 py-4 border-b border-gray-700">
+        <div className="flex flex-wrap gap-2">
+          {/* Всегда отображаем активную сеть */}
+          {chainId && SUPPORTED_CHAINS[chainId] && (
+            <button
+              key={chainId}
+              // Активная сеть всегда "активна" визуально, но не переключается
+              className="px-3 py-2 bg-cyan-600 text-white text-sm rounded-lg flex items-center"
+            >
+              <span className="w-2 h-2 bg-green-400 rounded-full mr-2"></span>
+              {SUPPORTED_CHAINS[chainId].name}
+            </button>
+          )}
+
+          {/* Отображаем другие поддерживаемые сети, если showMoreChains=true */}
+          {showMoreChains && Object.entries(SUPPORTED_CHAINS)
+            .filter(([idStr]) => parseInt(idStr) !== chainId) // Исключаем активную сеть
+            .map(([chainIdStr, config]) => {
+              const id = parseInt(chainIdStr);
+              // Для неактивных сетей показываем кнопку переключения
+              return (
+                <button
+                  key={id}
+                  onClick={() => switchNetwork(id)} // Предполагается, что switchNetwork доступен в useWeb3
+                  className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg flex items-center transition-colors"
+                >
+                  <span className="w-2 h-2 bg-gray-400 rounded-full mr-2"></span>
+                  {config.name}
+                </button>
+              );
+            })}
           <button
-            className="px-3 py-1 bg-cyan-600 text-white text-xs rounded-full flex items-center"
+            onClick={() => setShowMoreChains(!showMoreChains)}
+            className="ml-auto px-3 py-2 bg-gray-700 hover:bg-gray-600 text-cyan-400 text-sm rounded-lg transition-colors"
           >
-            <span className="w-2 h-2 bg-green-400 rounded-full mr-1"></span>
-            {SUPPORTED_CHAINS[chainId].name}
+            {showMoreChains ? 'Скрыть' : 'Показать все'}
           </button>
-        )}
-        {/* Другие сети (если showMoreChains=true) */}
-        {showMoreChains && Object.entries(SUPPORTED_CHAINS).filter(([idStr]) => parseInt(idStr) !== chainId) // Исключаем активную сеть
-          .map(([chainIdStr, config]) => {
-            const id = parseInt(chainIdStr);
-            // Все остальные сети считаются "неактивными" для фильтрации токенов
-            // Но для отображения в UI они просто не выбраны
-            const balance = 0; // Баланс для неактивных сетей 0
-            const percentage = 0;
-            return (
-              <button
-                key={id}
-                // Нажатие на неактивную сеть не переключает её, так как это фильтр
-                // Если нужно сделать переключение сетей, нужно изменить логику
-                // Сейчас это просто информационный список
-                className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white text-xs rounded-full flex items-center opacity-70"
-              >
-                <span className="w-2 h-2 bg-gray-400 rounded-full mr-1"></span>
-                {config.name}
-                {balance > 0 && (
-                  <span className="ml-1 text-gray-300">
-                    ({percentage.toFixed(1)}%)
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        <button
-          onClick={() => setShowMoreChains(!showMoreChains)}
-          className="ml-auto text-xs text-cyan-400 hover:text-cyan-300"
-        >
-          {showMoreChains ? 'Скрыть' : 'Показать все'}
-        </button>
+        </div>
       </div>
 
-      {/* Таблица токенов */}
+      {/* Основное содержимое: спиннер, ошибка или таблица */}
       <div className="overflow-x-auto">
-        {filteredTokens.length === 0 ? (
+        {loading && tokens.length === 0 ? ( // Показываем спиннер только если нет кэшированных данных
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
+          </div>
+        ) : error && tokens.length === 0 ? ( // Показываем ошибку только если нет кэшированных данных
+          <div className="bg-red-900 bg-opacity-30 border border-red-700 text-red-300 px-4 py-3 rounded relative m-4" role="alert">
+            <strong className="font-bold">Ошибка! </strong>
+            <span className="block sm:inline">{error}</span>
+          </div>
+        ) : filteredTokens.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -966,9 +951,9 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
                     <div className="flex justify-end space-x-2">
                       {/* Иконка копирования адреса токена */}
                       <button
-                        onClick={() => copyTokenAddress(token.contractAddress)}
+                        onClick={() => copyTokenAddress(token.contractAddress, token.symbol)}
                         className="p-2 bg-gray-600 hover:bg-gray-500 text-white rounded-full transition"
-                        title="Копировать адрес"
+                        title={`Копировать адрес ${token.symbol}`}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -979,13 +964,33 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
                         <button
                           onClick={() => openInExplorer(token.contractAddress)}
                           className="p-2 bg-gray-600 hover:bg-gray-500 text-white rounded-full transition"
-                          title="Просмотр на explorer"
+                          title={`Посмотреть ${token.symbol} в explorer`}
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                           </svg>
                         </button>
                       )}
+                      {/* Иконка обмена */}
+                      <button
+                        onClick={() => handleSwap(token)}
+                        className="p-2 bg-gray-600 hover:bg-gray-500 text-white rounded-full transition"
+                        title={`Обменять ${token.symbol}`}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                        </svg>
+                      </button>
+                      {/* Иконка сжигания */}
+                      <button
+                        onClick={() => handleBurn(token)}
+                        className="p-2 bg-gray-600 hover:bg-gray-500 text-white rounded-full transition"
+                        title={`Сжечь ${token.symbol}`}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
                     </div>
                   </td>
                 </tr>
