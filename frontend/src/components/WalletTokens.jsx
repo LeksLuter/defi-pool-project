@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
-
 // ABI для ERC20 токенов (минимальный набор функций для получения метаданных)
 const ERC20_ABI = [
   "function decimals() view returns (uint8)",
@@ -9,7 +8,6 @@ const ERC20_ABI = [
   "function name() view returns (string)",
   "function balanceOf(address) view returns (uint256)"
 ];
-
 // Сопоставление адресов токенов с их ID для CoinGecko и CoinMarketCap
 // Это позволяет получать цены для известных токенов
 const KNOWN_TOKENS_MAP = {
@@ -34,19 +32,16 @@ const KNOWN_TOKENS_MAP = {
     cmcId: '825'
   }
 };
-
 // Вспомогательная функция для получения ключа кэша
 const getCacheKey = (account) => `walletTokens_${account}`;
 // Вспомогательная функция для получения ключа времени последнего обновления
 const getLastUpdateKey = (account) => `walletTokens_lastUpdate_${account}`;
-
 // Функция для проверки, устарели ли кэшированные данные
 const isCacheExpired = (timestamp, maxAgeMinutes = 10) => {
   const now = Date.now();
   const maxAgeMs = maxAgeMinutes * 60 * 1000;
   return (now - timestamp) > maxAgeMs;
 };
-
 // Функция для получения токенов из кэша
 const getCachedTokens = (account) => {
   if (!account) return null;
@@ -68,7 +63,6 @@ const getCachedTokens = (account) => {
   }
   return null;
 };
-
 // Функция для сохранения токенов в кэш
 const saveTokensToCache = (account, tokens) => {
   if (!account || !tokens) return;
@@ -84,7 +78,6 @@ const saveTokensToCache = (account, tokens) => {
     console.error('Ошибка при сохранении токенов в кэш:', error);
   }
 };
-
 // Функция для сохранения времени последнего обновления
 const saveLastUpdateTime = (account) => {
   if (!account) return;
@@ -95,7 +88,6 @@ const saveLastUpdateTime = (account) => {
     console.error('Ошибка при сохранении времени последнего обновления:', error);
   }
 };
-
 // Функция для проверки, можно ли выполнить фоновое обновление
 // (прошло ли достаточно времени с последнего обновления)
 const canPerformBackgroundUpdate = (account, minIntervalMinutes = 5) => {
@@ -112,7 +104,6 @@ const canPerformBackgroundUpdate = (account, minIntervalMinutes = 5) => {
     return true; // В случае ошибки разрешаем обновление
   }
 };
-
 // Функция для получения цены токена через CoinGecko API
 const fetchTokenPriceFromCoinGecko = async (coingeckoId) => {
   if (!coingeckoId) return 0;
@@ -130,7 +121,6 @@ const fetchTokenPriceFromCoinGecko = async (coingeckoId) => {
     return 0;
   }
 };
-
 // Функция для получения цены токена через CoinMarketCap API
 const fetchTokenPriceFromCoinMarketCap = async (cmcId) => {
   if (!cmcId) return 0;
@@ -159,7 +149,6 @@ const fetchTokenPriceFromCoinMarketCap = async (cmcId) => {
     return 0;
   }
 };
-
 // Функция для получения цены токена с резервными вариантами
 const fetchTokenPriceWithFallback = async (coingeckoId, cmcId) => {
   let price = 0;
@@ -173,7 +162,6 @@ const fetchTokenPriceWithFallback = async (coingeckoId, cmcId) => {
   }
   return price || 0;
 };
-
 // Функция для получения цен нескольких токенов с резервными вариантами
 const fetchMultipleTokenPricesWithFallback = async (tokenMap) => {
   const tokenIds = Object.keys(tokenMap);
@@ -185,7 +173,6 @@ const fetchMultipleTokenPricesWithFallback = async (tokenMap) => {
   }
   return addressToPrice;
 };
-
 // Функция для получения токенов через Etherscan V2 API
 const fetchTokensFromEtherscanV2 = async (accountAddress, ethProvider) => {
   if (!ethProvider || !accountAddress) return [];
@@ -194,32 +181,25 @@ const fetchTokensFromEtherscanV2 = async (accountAddress, ethProvider) => {
     // Используем API ключ из переменных окружения
     const apiKey = import.meta.env.VITE_ETHERSCAN_API_KEY || 'YourApiKeyToken';
     const url = `https://api.polygonscan.com/api?module=account&action=tokenlist&address=${accountAddress}&apikey=${apiKey}`;
-
     // Установим таймаут для запроса
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 секунд
-
     const response = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
-
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`Etherscan API error (${response.status}): ${errorText}`);
     }
-
     const data = await response.json();
     if (data.status !== "1") {
       console.warn("Etherscan API вернул статус 0 или ошибку:", data.message);
       // Не бросаем ошибку, а возвращаем пустой массив, чтобы продолжить с резервным методом
       return [];
     }
-
     console.log(`Получено ${data.result.length} записей из Etherscan V2`);
-
     // Создаем Set для уникальных адресов токенов и объект для хранения метаданных
     const uniqueTokens = new Set();
     const tokenSampleData = {};
-
     // Обрабатываем только первые 50 токенов для ограничения API вызовов
     data.result.slice(0, 50).forEach(tx => {
       const contractAddress = tx.contractAddress.toLowerCase();
@@ -232,11 +212,8 @@ const fetchTokensFromEtherscanV2 = async (accountAddress, ethProvider) => {
         };
       }
     });
-
     console.log(`Найдено ${uniqueTokens.size} уникальных токенов через Etherscan`);
-
     const tokenDetails = [];
-
     // Обрабатываем нативный токен POL отдельно
     try {
       const polBalance = await ethProvider.getBalance(accountAddress);
@@ -253,7 +230,6 @@ const fetchTokensFromEtherscanV2 = async (accountAddress, ethProvider) => {
     } catch (error) {
       console.warn('Ошибка при получении баланса POL:', error.message);
     }
-
     // Обрабатываем ERC-20 токены
     let tokenCount = 0;
     for (const tokenAddress of Array.from(uniqueTokens)) {
@@ -262,7 +238,6 @@ const fetchTokensFromEtherscanV2 = async (accountAddress, ethProvider) => {
         console.warn('Достигнут лимит обработки токенов (20), остальные пропущены');
         break;
       }
-
       try {
         const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, ethProvider);
         const balance = await tokenContract.balanceOf(accountAddress);
@@ -281,7 +256,6 @@ const fetchTokensFromEtherscanV2 = async (accountAddress, ethProvider) => {
         console.warn(`Ошибка при обработке токена ${tokenAddress}:`, error.message);
       }
     }
-
     return tokenDetails;
   } catch (error) {
     if (error.name !== 'AbortError') {
@@ -292,15 +266,12 @@ const fetchTokensFromEtherscanV2 = async (accountAddress, ethProvider) => {
     return [];
   }
 };
-
 // Функция для получения токенов через прямой вызов balanceOf (резервный метод)
 const fetchTokensDirectBalance = async (accountAddress, ethProvider) => {
   if (!ethProvider || !accountAddress) return [];
-
   try {
     console.log('Используется резервный метод получения токенов');
     const tokens = [];
-
     try {
       const polBalance = await ethProvider.getBalance(accountAddress);
       // Используем BigNumber из ethers v5 для сравнения
@@ -316,7 +287,6 @@ const fetchTokensDirectBalance = async (accountAddress, ethProvider) => {
     } catch (error) {
       console.warn('Ошибка при получении баланса POL в резервном методе:', error.message);
     }
-
     // Здесь можно добавить вызовы balanceOf для известных адресов токенов
     // Например, для USDC, USDT и т.д., если Etherscan API недоступен
     const knownTokens = [
@@ -325,7 +295,6 @@ const fetchTokensDirectBalance = async (accountAddress, ethProvider) => {
       { address: '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619', name: 'Wrapped Ether', symbol: 'WETH', decimals: 18 },
       // Добавьте другие известные токены по необходимости
     ];
-
     for (const token of knownTokens) {
       try {
         const tokenContract = new ethers.Contract(token.address, ERC20_ABI, ethProvider);
@@ -343,19 +312,16 @@ const fetchTokensDirectBalance = async (accountAddress, ethProvider) => {
         console.warn(`Ошибка при получении баланса для ${token.symbol}:`, error.message);
       }
     }
-
     return tokens;
   } catch (error) {
     console.warn('Не удалось получить токены через резервный метод:', error.message);
     return [];
   }
 };
-
 // Основная функция обновления токенов и кэширования
 const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setLoading, setError, updateIntervalMinutes = 0) => {
   // Определяем минимальный интервал обновления (5 минут по умолчанию или значение из админки)
   const minInterval = updateIntervalMinutes <= 0 ? 5 : updateIntervalMinutes;
-
   if (!canPerformBackgroundUpdate(accountAddress, minInterval)) {
     console.log(`Фоновое обновление пропущено: последнее обновление было менее ${minInterval} минут назад.`);
     // Даже если фоновое обновление пропущено, мы всё равно можем показать кэш
@@ -365,12 +331,9 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
     }
     return;
   }
-
   console.log('Начинаем фоновое обновление токенов...');
   setError(null); // Сбрасываем ошибку перед новой попыткой
-
   let tokenList = [];
-
   try {
     // Попытка получить токены через Etherscan V2 API
     try {
@@ -383,7 +346,6 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
       console.warn("Ошибка при вызове Etherscan V2 API, пробуем резервный метод:", apiError.message);
       tokenList = await fetchTokensDirectBalance(accountAddress, ethProvider);
     }
-
     // Преобразуем данные токенов в формат для отображения
     const processedTokens = tokenList
       .filter(token => {
@@ -401,7 +363,6 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
           const balanceBN = ethers.BigNumber.from(tokenInfo.balance);
           // Используем formatUnits из ethers v5
           const formattedBalance = ethers.utils.formatUnits(balanceBN, tokenInfo.tokenDecimal);
-
           return {
             contractAddress: tokenInfo.contractAddress,
             name: tokenInfo.tokenName,
@@ -416,7 +377,6 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
         }
       })
       .filter(Boolean); // Убираем null значения
-
     // Получаем цены для токенов
     if (processedTokens.length > 0) {
       try {
@@ -428,10 +388,8 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
             tokenPriceMap[address] = KNOWN_TOKENS_MAP[address];
           }
         });
-
         // Получаем цены для известных токенов
         const addressToPrice = await fetchMultipleTokenPricesWithFallback(tokenPriceMap);
-
         // Обновляем цены в processedTokens
         processedTokens.forEach(token => {
           const address = token.contractAddress.toLowerCase();
@@ -452,12 +410,10 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
         // Если не удалось получить цены, оставляем value = '0.00'
       }
     }
-
     // Сохраняем в состояние и кэш
     setTokens(processedTokens);
     saveTokensToCache(accountAddress, processedTokens);
     saveLastUpdateTime(accountAddress);
-
   } catch (err) {
     console.error("Критическая ошибка при получении балансов токенов:", err);
     // Не устанавливаем ошибку в состояние, если у нас есть кэш, чтобы не перезаписывать отображаемые данные
@@ -476,14 +432,12 @@ const updateTokensAndCache = async (accountAddress, ethProvider, setTokens, setL
     // }
   }
 };
-
 const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
   const { provider, account, signer } = useWeb3(); // signer добавлен
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const intervalRef = useRef(null); // useRef для хранения ID интервала
-
   // Функция для обновления токенов с учетом кэширования
   const handleRefresh = async () => {
     if (!account || !provider) return;
@@ -491,7 +445,6 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
     setError(null);
     await updateTokensAndCache(account, provider, setTokens, setLoading, setError, updateIntervalMinutes);
   };
-
   // Эффект для инициализации: сначала из кэша, потом обновление
   useEffect(() => {
     let isMounted = true;
@@ -503,32 +456,26 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
         }
         return;
       }
-
       // 1. Попробуем загрузить из кэша
       const cachedTokens = getCachedTokens(account);
       if (cachedTokens && isMounted) {
         setTokens(cachedTokens);
         setLoading(false); // Показываем кэшированные данные сразу
       }
-
       // 2. Запускаем обновление в фоне
       await updateTokensAndCache(account, provider, setTokens, setLoading, setError, updateIntervalMinutes);
     };
-
     // Очищаем предыдущий интервал
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
-
     initializeTokens();
-
     // Устанавливаем новый интервал, если updateIntervalMinutes > 0
     if (updateIntervalMinutes > 0) {
       intervalRef.current = setInterval(() => {
         updateTokensAndCache(account, provider, setTokens, setLoading, setError, updateIntervalMinutes);
       }, updateIntervalMinutes * 60 * 1000);
     }
-
     // Функция очистки
     return () => {
       isMounted = false;
@@ -538,7 +485,6 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
       }
     };
   }, [provider, account, signer, updateIntervalMinutes]); // Добавлены signer и updateIntervalMinutes в зависимости
-
   // Функция для открытия адреса токена в Polygonscan
   const openInPolygonscan = (address) => {
     if (address && address !== '0x0000000000000000000000000000000000000000') {
@@ -546,7 +492,6 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
       window.open(url, '_blank', 'noopener,noreferrer');
     }
   };
-
   // Функция для копирования адреса токена в буфер обмена
   const copyTokenAddress = async (address, symbol) => {
     if (!address) return;
@@ -558,30 +503,25 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
       console.error('Ошибка при копировании адреса токена: ', err);
     }
   };
-
   // Функция для форматирования адреса
   const formatAddress = (address) => {
     if (!address) return '';
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
-
   // Вычисляем общий баланс
   const totalValue = tokens.reduce((sum, token) => {
     const value = parseFloat(token.value);
     return isNaN(value) ? sum : sum + value;
   }, 0);
-
   // Функции-заглушки для обмена и сжигания
   const handleSwap = (token) => {
     console.log("Обмен токена:", token);
     alert(`Функция обмена для ${token.symbol} будет реализована`);
   };
-
   const handleBurn = (token) => {
     console.log("Сжечь токен:", token);
     alert(`Функция сжигания для ${token.symbol} будет реализована`);
   };
-
   if (loading && tokens.length === 0) { // Показываем спиннер только если нет кэшированных данных
     return (
       <div className="flex justify-center items-center h-64">
@@ -589,7 +529,6 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
       </div>
     );
   }
-
   if (error && tokens.length === 0) { // Показываем ошибку только если нет кэшированных данных
     return (
       <div className="bg-red-900 bg-opacity-30 border border-red-700 text-red-300 px-4 py-3 rounded relative" role="alert">
@@ -598,7 +537,6 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
       </div>
     );
   }
-
   return (
     <div className="bg-gray-800 bg-opacity-50 rounded-xl shadow-lg overflow-hidden border border-gray-700">
       {/* Заголовок с адресом кошелька и общим балансом */}
@@ -617,7 +555,6 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
           </div>
         </div>
       </div>
-
       {/* Список токенов */}
       <div className="overflow-x-auto">
         {tokens.length === 0 ? (
@@ -631,6 +568,7 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Токен</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Баланс</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Цена</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Сумма</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Действия</th>
               </tr>
             </thead>
@@ -651,6 +589,9 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-white">{token.balance}</div>
                     <div className="text-xs text-gray-500 font-mono">{formatAddress(token.contractAddress)}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
+                    {parseFloat(token.value).toFixed(2)} $
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                     {parseFloat(token.value).toFixed(2)} $
@@ -689,7 +630,6 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
           </table>
         )}
       </div>
-
       {/* Футер с информацией об обновлении */}
       <div className="px-6 py-4 bg-gray-750 text-xs text-gray-500 border-t border-gray-700">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
@@ -710,5 +650,4 @@ const WalletTokens = ({ updateIntervalMinutes, isAdmin }) => {
     </div>
   );
 };
-
 export default WalletTokens;
