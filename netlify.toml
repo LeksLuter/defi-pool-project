@@ -2,24 +2,15 @@
   command = "cd frontend && npm install --legacy-peer-deps && npm run build"
   publish = "frontend/dist"
 
-[template]
-  incoming-hooks = ["neon"]
-
-[[plugins]]
-  package = "@netlify/plugin-neon"
-
-# Установка переменных окружения для сборки
 [build.environment]
   NODE_VERSION = "18"
   NPM_FLAGS = "--legacy-peer-deps"
 
-# Настройка перенаправления для клиентского роутинга
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-# Опционально: можно добавить заголовки для безопасности и кэширования
 [[headers]]
   for = "/*"
   [headers.values]
