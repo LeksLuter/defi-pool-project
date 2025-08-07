@@ -1,9 +1,22 @@
 [build]
-command = "cd frontend && npm install --legacy-peer-deps && npm run build"
-publish = "frontend/dist"
+  command = "cd frontend && npm install --legacy-peer-deps && npm run build"
+  publish = "frontend/dist"
+
+# Установка переменных окружения для сборки
+[build.environment]
+  NODE_VERSION = "18"
+  NPM_FLAGS = "--legacy-peer-deps"
 
 # Настройка перенаправления для клиентского роутинга
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+
+# Опционально: можно добавить заголовки для безопасности и кэширования
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
