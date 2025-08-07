@@ -1,4 +1,8 @@
-const ADMIN_CONFIG_KEY = 'adminConfig';
+const BACKEND_URL = 'https://securedefisystem.netlify.app/'; // или относительный путь
+
+
+// === КЛЮЧ ДЛЯ ХРАНЕНИЯ КОНФИГУРАЦИИ АДМИНИСТРАТОРА В localStorage ===
+const ADMIN_CONFIG_KEY = 'defiPool_adminConfig';
 
 // === ДЕФОЛТНАЯ КОНФИГУРАЦИЯ ===
 const DEFAULT_ADMIN_CONFIG = {
@@ -21,47 +25,45 @@ const DEFAULT_ADMIN_CONFIG = {
   // Интервал обновления токенов в минутах
   updateIntervalMinutes: 10,
 };
-// === КОНЕЦ ДЕФОЛТНОЙ КОНФИГУРАЦИИ ===
 
 /**
  * Загружает конфигурацию администратора.
- * Сначала пытается загрузить с бэкенда (заглушка, требует реализации с передачей адреса),
+ * Сначала пытается загрузить с бэкенда (реализация для Netlify Functions с Neon),
  * в случае ошибки или отсутствия - из localStorage.
  * Если в localStorage нет данных, возвращает дефолтную конфигурацию.
  * @param {string} [adminAddress] - Адрес администратора (для будущей интеграции с бэкендом).
  * @returns {Promise<Object>} Объект конфигурации.
  */
 export const loadAdminConfig = async (adminAddress) => {
-  // 1. Загрузка с бэкенда (заглушка)
-  // В реальной реализации здесь был бы fetch запрос к /api/admin/config
-  // с заголовком 'X-Admin-Address: adminAddress'
-  // и логика обработки ответа.
-  // Пока что этот блок закомментирован или упрощен.
-  /*
+  // 1. Загрузка с бэкенда (реализация для Netlify Functions)
   if (adminAddress) {
     try {
       console.log(`[adminConfig] Попытка загрузки конфигурации с сервера для ${adminAddress}...`);
-      const response = await fetch(`/api/admin/config`, {
+
+      // Используем относительный путь для Netlify Functions
+      const response = await fetch(`/.netlify/functions/getConfig`, {
         method: 'GET',
         headers: {
-          'X-Admin-Address': adminAddress
+          'X-Admin-Address': adminAddress,
+          'Content-Type': 'application/json'
         }
       });
+
       if (response.ok) {
         const serverConfig = await response.json();
-        console.log("[adminConfig] Конфигурация успешно загружена с сервера.");
-        return serverConfig;
+        console.log("[adminConfig] Конфигурация успешно загружена с сервера (Netlify Function).");
+        // Объединяем с дефолтной конфигурацией на случай, если какие-то поля отсутствуют
+        return { ...DEFAULT_ADMIN_CONFIG, ...serverConfig };
       } else {
         console.warn(`[adminConfig] Сервер вернул ошибку при загрузке конфига: ${response.status} ${response.statusText}`);
       }
     } catch (e) {
-      console.error("[adminConfig] Ошибка сети при загрузке конфигурации с сервера:", e);
+      console.error("[adminConfig] Ошибка сети при загрузке конфигурации с сервера (Netlify Function):", e);
       // Продолжаем к локальной загрузке
     }
   } else {
     console.warn("[adminConfig] Адрес администратора не предоставлен, пропуск загрузки с сервера.");
   }
-  */
 
   // 2. Загрузка из localStorage (резервный вариант)
   try {
@@ -85,21 +87,19 @@ export const loadAdminConfig = async (adminAddress) => {
 
 /**
  * Сохраняет конфигурацию администратора.
- * Сначала пытается сохранить на бэкенде (заглушка),
+ * Сначала пытается сохранить на бэкенде (Netlify Functions),
  * затем сохраняет в localStorage.
  * @param {Object} config - Объект конфигурации для сохранения.
  * @param {string} [adminAddress] - Адрес администратора (для будущей интеграции с бэкендом).
  * @returns {Promise<void>}
  */
 export const saveAdminConfig = async (config, adminAddress) => {
-  // 1. Сохранение на бэкенде (заглушка)
-  // В реальной реализации здесь был бы fetch запрос к /api/admin/config
-  // с методом POST, заголовком 'X-Admin-Address: adminAddress' и телом config.
-  /*
+  // 1. Сохранение на бэкенде (Netlify Functions)
   if (adminAddress) {
     try {
-      console.log(`[adminConfig] Попытка сохранения конфигурации на сервере для ${adminAddress}...`);
-      const response = await fetch(`/api/admin/config`, {
+      console.log(`[adminConfig] Попытка сохранения конфигурации на сервере (Netlify Function) для ${adminAddress}...`);
+
+      const response = await fetch(`/.netlify/functions/saveConfig`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -107,22 +107,23 @@ export const saveAdminConfig = async (config, adminAddress) => {
         },
         body: JSON.stringify(config)
       });
+
       if (response.ok) {
-        console.log("[adminConfig] Конфигурация успешно сохранена на сервере.");
+        const result = await response.json();
+        console.log("[adminConfig] Конфигурация успешно сохранена на сервере (Netlify Function):", result);
       } else {
-        console.error(`[adminConfig] Ошибка при сохранении конфига на сервере: ${response.status} ${response.statusText}`);
+        console.error(`[adminConfig] Ошибка при сохранении конфига на сервере (Netlify Function): ${response.status} ${response.statusText}`);
         // Не прерываем выполнение, пробуем сохранить в localStorage
       }
     } catch (e) {
-      console.error("[adminConfig] Ошибка сети при сохранении конфигурации на сервере:", e);
+      console.error("[adminConfig] Ошибка сети при сохранении конфигурации на сервере (Netlify Function):", e);
       // Не прерываем выполнение, пробуем сохранить в localStorage
     }
   } else {
     console.warn("[adminConfig] Адрес администратора не предоставлен, пропуск сохранения на сервере.");
   }
-  */
 
-  // 2. Сохранение в localStorage
+  // 2. Сохранение в localStorage (резервный вариант)
   try {
     localStorage.setItem(ADMIN_CONFIG_KEY, JSON.stringify(config));
     console.log("[adminConfig] Конфигурация сохранена в localStorage.");
@@ -130,7 +131,7 @@ export const saveAdminConfig = async (config, adminAddress) => {
     window.dispatchEvent(new CustomEvent('adminConfigUpdated', { detail: config }));
   } catch (e) {
     console.error("[adminConfig] Ошибка при сохранении конфигурации в localStorage:", e);
-    throw new Error("Не удалось сохранить конфигурацию ни на сервере, ни в локальном хранилище.");
+    throw new Error("Не удалось сохранить конфигурацию ни на сервере (Netlify Function), ни в локальном хранилище.");
   }
 };
 

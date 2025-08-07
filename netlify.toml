@@ -2,6 +2,12 @@
   command = "cd frontend && npm install --legacy-peer-deps && npm run build"
   publish = "frontend/dist"
 
+[template]
+  incoming-hooks = ["neon"]
+
+[[plugins]]
+  package = "@netlify/plugin-neon"
+
 # Установка переменных окружения для сборки
 [build.environment]
   NODE_VERSION = "18"
