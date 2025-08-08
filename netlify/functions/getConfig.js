@@ -1,4 +1,3 @@
-// netlify/functions/getConfig.js
 exports.handler = async (event, context) => {
   try {
     console.log("=== getConfig Function Called ===");
@@ -20,10 +19,10 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Проверяем, есть ли переменные окружения
-    console.log("NEON_DATABASE_URL:", process.env.NEON_DATABASE_URL);
+    // Проверяем переменные окружения
+    console.log("NEON_DATABASE_URL:", process.env.NEON_DATABASE_URL ? "SET" : "NOT SET");
     
-    // Проверка подключения к базе данных
+    // Проверка наличия переменной окружения
     if (!process.env.NEON_DATABASE_URL) {
       console.error("NEON_DATABASE_URL не установлен");
       return {
@@ -33,7 +32,7 @@ exports.handler = async (event, context) => {
           'Access-Control-Allow-Origin': '*'
         },
         body: JSON.stringify({ 
-          error: 'База данных не настроена' 
+          error: 'База данных не настроена: NEON_DATABASE_URL отсутствует' 
         })
       };
     }
@@ -102,6 +101,8 @@ exports.handler = async (event, context) => {
     }
   } catch (error) {
     console.error("Ошибка в getConfig:", error);
+    console.error("Ошибка стек:", error.stack);
+    
     return {
       statusCode: 500,
       headers: {
