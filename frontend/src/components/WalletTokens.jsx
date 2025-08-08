@@ -1,3 +1,4 @@
+// frontend/src/components/WalletTokens.jsx
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
@@ -10,10 +11,12 @@ import { setLastUpdateTime, canPerformBackgroundUpdate } from '../services/cache
 // === ИМПОРТЫ ИЗ НОВОГО ФАЙЛА КОНФИГУРАЦИИ ===
 import { getUpdateIntervalMinutes } from '../config/adminConfig';
 // === КОНЕЦ ИМПОРТОВ ИЗ НОВОГО ФАЙЛА КОНФИГУРАЦИИ ===
+
 // === КОНСТАНТЫ ===
 const MIN_TOKEN_VALUE_USD = 0.1; // Константа для минимальной стоимости отображения
 const MIN_UPDATE_INTERVAL_MS = 30000; // 30 секунд, минимальный интервал для фонового обновления
 // === КОНЕЦ КОНСТАНТ ===
+
 const WalletTokens = () => {
   const { provider, account, signer, chainId, switchNetwork } = useWeb3();
   const [tokens, setTokens] = useState([]); // Содержит все токены, полученные из сервиса (включая отфильтрованные на UI)
@@ -22,17 +25,21 @@ const WalletTokens = () => {
   // === НОВОЕ СОСТОЯНИЕ ДЛЯ ИНТЕРВАЛА ===
   const [effectiveUpdateIntervalMinutes, setEffectiveUpdateIntervalMinutes] = useState(10); // Значение по умолчанию
   // === КОНЕЦ НОВОГО СОСТОЯНИЯ ===
+
   const intervalRef = useRef(null);
   const hasFetchedTokens = useRef(false);
   const isMountedRef = useRef(true); // Ref для отслеживания монтирования
+
   // === СОСТОЯНИЯ ДЛЯ ФИЛЬТРОВ ОТОБРАЖЕНИЯ ===
   // По умолчанию фильтры выключены (показываются все токены)
   // Эти фильтры применяются ТОЛЬКО к отображению в таблице
   const [showZeroBalance, setShowZeroBalance] = useState(false); // false = скрывать нулевые балансы (фильтр активен)
   const [showLowValue, setShowLowValue] = useState(false); // false = скрывать < $0.10 (фильтр активен)
   // === КОНЕЦ СОСТОЯНИЙ ДЛЯ ФИЛЬТРОВ ===
+
   // Состояние для фильтра сетей
   const [showMoreChains, setShowMoreChains] = useState(false);
+
   // === ЭФФЕКТ ДЛЯ ЗАГРУЗКИ ИНТЕРВАЛА ИЗ adminConfig ===
   useEffect(() => {
     const loadUpdateInterval = async () => {
@@ -45,49 +52,55 @@ const WalletTokens = () => {
         setEffectiveUpdateIntervalMinutes(10); // Значение по умолчанию
       }
     };
+
     loadUpdateInterval();
+
     // Обработчик события storage для синхронизации интервала между вкладками
     const handleStorageChange = (e) => {
-      if (e.key === 'adminConfig' && e.newValue) {
+      if (e.key === 'defiPool_adminConfig' && e.newValue) {
         try {
-          const newConfig = JSON.parse(e.newValue);
-          if (newConfig.updateIntervalMinutes !== undefined && newConfig.updateIntervalMinutes !== effectiveUpdateIntervalMinutes) {
-            console.log(`[WalletTokens] Интервал обновления синхронизирован с другой вкладкой: ${newConfig.updateIntervalMinutes} минут`);
-            setEffectiveUpdateIntervalMinutes(newConfig.updateIntervalMinutes);
-          }
+           const newConfig = JSON.parse(e.newValue);
+           if (newConfig.updateIntervalMinutes !== undefined && newConfig.updateIntervalMinutes !== effectiveUpdateIntervalMinutes) {
+               console.log(`[WalletTokens] Интервал обновления синхронизирован с другой вкладкой: ${newConfig.updateIntervalMinutes} минут`);
+               setEffectiveUpdateIntervalMinutes(newConfig.updateIntervalMinutes);
+           }
         } catch (err) {
           console.error("Ошибка при парсинге adminConfig из storage event (WalletTokens):", err);
         }
       }
     };
+
     // Обработка кастомного события adminConfigUpdated (внутри одной вкладки)
     const handleCustomEvent = (e) => {
-      try {
-        const newConfig = e.detail;
-        if (newConfig.updateIntervalMinutes !== undefined && newConfig.updateIntervalMinutes !== effectiveUpdateIntervalMinutes) {
-          console.log(`[WalletTokens] Интервал обновления обновлён через кастомное событие: ${newConfig.updateIntervalMinutes} минут`);
-          setEffectiveUpdateIntervalMinutes(newConfig.updateIntervalMinutes);
+         try {
+            const newConfig = e.detail;
+            if (newConfig.updateIntervalMinutes !== undefined && newConfig.updateIntervalMinutes !== effectiveUpdateIntervalMinutes) {
+                console.log(`[WalletTokens] Интервал обновления обновлён через кастомное событие: ${newConfig.updateIntervalMinutes} минут`);
+                setEffectiveUpdateIntervalMinutes(newConfig.updateIntervalMinutes);
+            }
+        } catch (err) {
+            console.error("Ошибка при обработке кастомного события adminConfigUpdated (WalletTokens):", err);
         }
-      } catch (err) {
-        console.error("Ошибка при обработке кастомного события adminConfigUpdated (WalletTokens):", err);
-      }
     };
+
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('adminConfigUpdated', handleCustomEvent);
+
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('adminConfigUpdated', handleCustomEvent);
     };
   }, [effectiveUpdateIntervalMinutes]); // Зависимость от effectiveUpdateIntervalMinutes нужна, чтобы правильно сравнить значения
   // === КОНЕЦ ЭФФЕКТА ===
+
   // Функция для обновления токенов
   const handleRefresh = useCallback(async () => {
     if (!account || !provider || !chainId) return;
     setLoading(true);
     setError(null);
-    // Передаем effectiveUpdateIntervalMinutes в updateTokens
-    await updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef, effectiveUpdateIntervalMinutes);
-  }, [account, provider, chainId, effectiveUpdateIntervalMinutes]); // Добавлен effectiveUpdateIntervalMinutes в зависимости
+    await updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef);
+  }, [account, provider, chainId]);
+
   // Основная функция обновления токенов (делегирует всю логику сервису)
   useEffect(() => {
     isMountedRef.current = true;
@@ -95,15 +108,17 @@ const WalletTokens = () => {
       if (!account || !provider || !chainId || hasFetchedTokens.current) return;
       hasFetchedTokens.current = true;
       console.log("Начальное получение токенов...");
-      // Передаем effectiveUpdateIntervalMinutes в updateTokens
-      await updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef, effectiveUpdateIntervalMinutes);
+      await updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef);
     };
+
     initializeTokens();
+
     return () => {
       isMountedRef.current = false;
       hasFetchedTokens.current = false;
     };
-  }, [account, provider, chainId, effectiveUpdateIntervalMinutes]); // Добавлен effectiveUpdateIntervalMinutes в зависимости
+  }, [account, provider, chainId]); // Убран effectiveUpdateIntervalMinutes из зависимостей, так как интервал обрабатывается отдельно
+
   // === ЭФФЕКТ ДЛЯ УПРАВЛЕНИЯ ИНТЕРВАЛОМ АВТООБНОВЛЕНИЯ ===
   useEffect(() => {
     if (!account || !provider || !chainId || effectiveUpdateIntervalMinutes <= 0) {
@@ -114,26 +129,30 @@ const WalletTokens = () => {
       }
       return;
     }
+
     const intervalMs = effectiveUpdateIntervalMinutes * 60 * 1000;
     const clampedIntervalMs = Math.max(intervalMs, MIN_UPDATE_INTERVAL_MS); // Убедимся, что интервал не меньше минимального
+
     // Очищаем предыдущий интервал, если он был
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
+
     // Устанавливаем новый интервал
     intervalRef.current = setInterval(async () => {
       if (!isMountedRef.current) return;
       console.log(`[WalletTokens] Автообновление токенов запущено (интервал: ${effectiveUpdateIntervalMinutes} минут)...`);
       // Выполняем фоновое обновление
       try {
-        // Передаем effectiveUpdateIntervalMinutes в updateTokens для фонового обновления
-        await updateTokens(account, provider, setTokens, null, null, chainId, { current: true }, effectiveUpdateIntervalMinutes); // Не устанавливаем setLoading и setError для фонового обновления
+        await updateTokens(account, provider, setTokens, null, null, chainId, { current: true }); // Не устанавливаем setLoading и setError для фонового обновления
       } catch (err) {
         console.error("[WalletTokens] Ошибка при фоновом обновлении токенов:", err);
         // Ошибки фонового обновления не отображаются пользователю, но логируются
       }
     }, clampedIntervalMs);
+
     console.log(`[WalletTokens] Интервал автообновления установлен на ${clampedIntervalMs / 1000 / 60} минут (${clampedIntervalMs} мс).`);
+
     // Очистка интервала при размонтировании или изменении зависимостей
     return () => {
       if (intervalRef.current) {
@@ -144,6 +163,7 @@ const WalletTokens = () => {
     };
   }, [account, provider, chainId, effectiveUpdateIntervalMinutes]); // Зависимость от effectiveUpdateIntervalMinutes
   // === КОНЕЦ ЭФФЕКТА ===
+
   // === ЛОГИКА ФИЛЬТРА СЕТЕЙ ===
   const visibleChains = useMemo(() => {
     const allChains = Object.entries(SUPPORTED_CHAINS);
@@ -154,6 +174,7 @@ const WalletTokens = () => {
     return allChains.filter(([id]) => [1, 137, 56, 43114, 250].includes(parseInt(id)));
   }, [showMoreChains]);
   // === КОНЕЦ ЛОГИКИ ФИЛЬТРА СЕТЕЙ ===
+
   // === ЛОГИКА ФИЛЬТРАЦИИ ТОКЕНОВ ДЛЯ ОТОБРАЖЕНИЯ ===
   const filteredTokens = useMemo(() => {
     // Проверяем, что tokens - это массив
@@ -161,7 +182,9 @@ const WalletTokens = () => {
       console.warn("[WalletTokens] tokens не является массивом:", tokens);
       return [];
     }
+
     let result = [...tokens];
+
     // Фильтр по балансу (если showZeroBalance false, скрываем нулевые балансы)
     if (!showZeroBalance) {
       result = result.filter(token => {
@@ -175,6 +198,7 @@ const WalletTokens = () => {
         }
       });
     }
+
     // Фильтр по стоимости (если showLowValue false, скрываем токены < $0.10)
     if (!showLowValue) {
       result = result.filter(token => {
@@ -192,6 +216,7 @@ const WalletTokens = () => {
         }
       });
     }
+
     // Сортировка: сначала по стоимости (убывание), затем по символу (возрастание)
     result.sort((a, b) => {
       try {
@@ -199,12 +224,15 @@ const WalletTokens = () => {
         const bBalanceFormatted = parseFloat(ethers.utils.formatUnits(b.balance, b.decimals));
         const aPriceUSD = parseFloat(a.priceUSD) || 0;
         const bPriceUSD = parseFloat(b.priceUSD) || 0;
+
         const aValueUSD = aBalanceFormatted * aPriceUSD;
         const bValueUSD = bBalanceFormatted * bPriceUSD;
+
         // Сортировка по стоимости (убывание)
         if (bValueUSD !== aValueUSD) {
           return bValueUSD - aValueUSD;
         }
+
         // Если стоимость одинаковая, сортируем по символу (возрастание)
         return a.symbol.localeCompare(b.symbol);
       } catch (err) {
@@ -212,14 +240,17 @@ const WalletTokens = () => {
         return 0; // Не меняем порядок в случае ошибки
       }
     });
+
     return result;
   }, [tokens, showZeroBalance, showLowValue]);
   // === КОНЕЦ ЛОГИКИ ФИЛЬТРАЦИИ ТОКЕНОВ ===
+
   // === ОБРАБОТЧИКИ ФИЛЬТРОВ ===
   const toggleZeroBalanceFilter = () => setShowZeroBalance(prev => !prev);
   const toggleLowValueFilter = () => setShowLowValue(prev => !prev);
   const toggleChainsFilter = () => setShowMoreChains(prev => !prev);
   // === КОНЕЦ ОБРАБОТЧИКОВ ФИЛЬТРОВ ===
+
   // === ОБРАБОТЧИК КОПИРОВАНИЯ АДРЕСА ===
   const copyToClipboard = async (text) => {
     try {
@@ -229,6 +260,7 @@ const WalletTokens = () => {
     }
   };
   // === КОНЕЦ ОБРАБОТЧИКА КОПИРОВАНИЯ ===
+
   // === ОБРАБОТЧИК ОТКРЫТИЯ В ЭКСПЛОРЕРЕ ===
   const openInExplorer = (address, tokenChainId) => {
     if (address && tokenChainId) {
@@ -249,8 +281,7 @@ const WalletTokens = () => {
     }
   };
   // === КОНЕЦ ОБРАБОТЧИКА ОТКРЫТИЯ В ЭКСПЛОРЕРЕ ===
-  // Получаем информацию о текущей сети
-  const currentNetwork = useMemo(() => SUPPORTED_CHAINS[chainId], [chainId]);
+
   // === РЕНДЕР СОСТОЯНИЙ ЗАГРУЗКИ И ОШИБКИ ===
   if (loading && tokens.length === 0) {
     return (
@@ -279,6 +310,7 @@ const WalletTokens = () => {
       </div>
     );
   }
+
   if (error) {
     return (
       <div className="min-h-screen py-8 px-4 bg-gradient-to-br from-gray-900 to-indigo-900 text-white">
@@ -311,6 +343,7 @@ const WalletTokens = () => {
     );
   }
   // === КОНЕЦ РЕНДЕРА СОСТОЯНИЙ ===
+
   return (
     <div className="min-h-screen py-8 px-4 bg-gradient-to-br from-gray-900 to-indigo-900 text-white">
       <div className="container mx-auto max-w-6xl">
@@ -329,66 +362,7 @@ const WalletTokens = () => {
           </div>
         </div>
         {/* === КОНЕЦ ЗАГОЛОВКА === */}
-        {/* === БЛОК ИНФОРМАЦИИ О КОШЕЛЬКЕ === */}
-        {account && (
-          <div className="mb-6 p-4 bg-gray-800 bg-opacity-30 border border-gray-700 rounded-xl">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-              <div>
-                <div className="text-sm text-gray-400">Адрес кошелька</div>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-sm break-all">{account}</span>
-                  <button
-                    onClick={() => copyToClipboard(account)}
-                    className="text-indigo-400 hover:text-indigo-300"
-                    title="Копировать адрес"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
-                      <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <div>
-                <div className="text-sm text-gray-400">Подключена сеть</div>
-                <div className="font-medium">
-                  {currentNetwork ? `${currentNetwork.name} (ID: ${chainId})` : `Неизвестная сеть (ID: ${chainId})`}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-        {/* === КОНЕЦ БЛОКА ИНФОРМАЦИИ О КОШЕЛЬКЕ === */}
-        {/* === СПИСОК СЕТЕЙ === */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold mb-4">Поддерживаемые сети</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-            {visibleChains.map(([chainId, chainData]) => (
-              <button
-                key={chainId}
-                onClick={() => switchNetwork(parseInt(chainId))}
-                disabled={parseInt(chainId) === chainId} // Сравнение с текущим chainId из контекста
-                className={`p-4 rounded-xl border transition text-center ${parseInt(chainId) === chainId ? 'bg-indigo-900 bg-opacity-50 border-indigo-500' : 'bg-gray-800 bg-opacity-50 border-gray-700 hover:border-gray-500'}`}
-              >
-                <div className="text-lg font-medium">{chainData.name}</div>
-                <div className="text-xs text-gray-400">ID: {chainId}</div>
-              </button>
-            ))}
-            {/* Кнопка "Больше/Меньше сетей" внутри сетки */}
-            <button
-              onClick={toggleChainsFilter}
-              className="p-4 rounded-xl border bg-gray-800 bg-opacity-50 border-gray-700 hover:border-gray-500 transition text-center flex flex-col items-center justify-center"
-            >
-              <div className="text-lg font-medium">
-                {showMoreChains ? 'Меньше' : 'Больше'}
-              </div>
-              <div className="text-xs text-gray-400">
-                сетей
-              </div>
-            </button>
-          </div>
-        </div>
-        {/* === КОНЕЦ СПИСКА СЕТЕЙ === */}
+
         {/* === ФИЛЬТРЫ === */}
         <div className="flex flex-wrap items-center gap-2 mb-6 p-4 bg-gray-800 bg-opacity-30 border border-gray-700 rounded-xl">
           <button
@@ -403,8 +377,15 @@ const WalletTokens = () => {
           >
             {showLowValue ? 'Показать все' : 'Скрыть <$0.10'}
           </button>
+          <button
+            onClick={toggleChainsFilter}
+            className={`px-3 py-1 text-sm rounded-full transition ${showMoreChains ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+          >
+            {showMoreChains ? 'Меньше сетей' : 'Больше сетей'}
+          </button>
         </div>
         {/* === КОНЕЦ ФИЛЬТРОВ === */}
+
         {/* === ТАБЛИЦА ТОКЕНОВ === */}
         <div className="overflow-x-auto rounded-xl border border-gray-700">
           <table className="min-w-full divide-y divide-gray-700">
@@ -431,9 +412,11 @@ const WalletTokens = () => {
                     totalValueUSD = totalValueNum;
                     totalValueFormatted = `$${totalValueNum.toFixed(2)}`;
                   }
+
                   // Получаем информацию о сети
                   const chainInfo = SUPPORTED_CHAINS[token.chainId];
                   const chainName = chainInfo ? chainInfo.shortName : `Chain ${token.chainId}`;
+
                   return (
                     <tr key={`${token.contractAddress}-${token.chainId}`} className="hover:bg-gray-750 transition">
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -497,8 +480,28 @@ const WalletTokens = () => {
           </table>
         </div>
         {/* === КОНЕЦ ТАБЛИЦЫ === */}
+
+        {/* === СПИСОК СЕТЕЙ === */}
+        <div className="mt-8">
+          <h2 className="text-2xl font-bold mb-4">Поддерживаемые сети</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+            {visibleChains.map(([chainId, chainData]) => (
+              <button
+                key={chainId}
+                onClick={() => switchNetwork(parseInt(chainId))}
+                disabled={chainId == chainId} // Сравнение с текущим chainId из контекста
+                className={`p-4 rounded-xl border transition text-center ${chainId == chainId ? 'bg-indigo-900 bg-opacity-50 border-indigo-500' : 'bg-gray-800 bg-opacity-50 border-gray-700 hover:border-gray-500'}`}
+              >
+                <div className="text-lg font-medium">{chainData.name}</div>
+                <div className="text-xs text-gray-400">ID: {chainId}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* === КОНЕЦ СПИСКА СЕТЕЙ === */}
       </div>
     </div>
   );
 };
+
 export default WalletTokens;

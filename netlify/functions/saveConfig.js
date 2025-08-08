@@ -1,10 +1,14 @@
+// netlify/functions/saveConfig.js
 const { Client } = require('pg');
 
 exports.handler = async (event, context) => {
   try {
     console.log("=== saveConfig Function Called ===");
+    console.log("Headers:", event.headers);
+    console.log("Body:", event.body);
     
-    const adminAddress = event.headers['x-admin-address'];
+    const adminAddress = event.headers['x-admin-Address'];
+    console.log("Admin Address:", adminAddress);
     
     if (!adminAddress) {
       return {
@@ -74,6 +78,8 @@ exports.handler = async (event, context) => {
     };
   } catch (error) {
     console.error("Ошибка в saveConfig:", error);
+    console.error("Стек ошибки:", error.stack);
+    
     return {
       statusCode: 500,
       headers: {
@@ -81,7 +87,8 @@ exports.handler = async (event, context) => {
         'Access-Control-Allow-Origin': '*'
       },
       body: JSON.stringify({ 
-        error: 'Внутренняя ошибка сервера: ' + error.message 
+        error: 'Внутренняя ошибка сервера: ' + error.message,
+        stack: error.stack
       })
     };
   }
