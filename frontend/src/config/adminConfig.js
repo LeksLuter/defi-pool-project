@@ -1,6 +1,6 @@
 // frontend/src/config/adminConfig.js
 
-// === КЛЮЧ ДЛЯ ХРАНЕНИЯ КОНФИГУРАЦИИ АДМИНИСТРАТОРА В localStorage ===
+// === КЛЮЧ ДЛЯ ХРАНЕНИЯ КОНФИГУРАЦИИ АДМИНИСТРАТОРА В localStorage (резерв) ===
 const ADMIN_CONFIG_KEY = 'defiPool_adminConfig';
 
 // === ДЕФОЛТНАЯ КОНФИГУРАЦИЯ ===
@@ -28,7 +28,7 @@ const DEFAULT_ADMIN_CONFIG = {
 /**
  * Загружает конфигурацию администратора.
  * Сначала пытается загрузить с бэкенда (реализация для Netlify Functions с Neon),
- * в случае ошибки или отсутствия - из localStorage.
+ * в случае ошибки - из localStorage.
  * Если в localStorage нет данных, возвращает дефолтную конфигурацию.
  * @param {string} [adminAddress] - Адрес администратора (для будущей интеграции с бэкендом).
  * @returns {Promise<Object>} Объект конфигурации.

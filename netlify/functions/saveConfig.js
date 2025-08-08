@@ -1,6 +1,12 @@
+// netlify/functions/saveConfig.js
 exports.handler = async (event, context) => {
   try {
+    console.log("=== saveConfig Function Called ===");
+    console.log("Headers:", event.headers);
+    console.log("Body:", event.body);
+    
     const adminAddress = event.headers['x-admin-address'];
+    console.log("Admin Address:", adminAddress);
     
     if (!adminAddress) {
       return {
@@ -9,21 +15,59 @@ exports.handler = async (event, context) => {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*'
         },
-        body: JSON.stringify({ error: 'Требуется заголовок X-Admin-Address' })
+        body: JSON.stringify({ 
+          error: 'Требуется заголовок X-Admin-Address' 
+        })
       };
     }
 
+    // Парсим тело запроса
     const configData = JSON.parse(event.body);
+    console.log("Config Data to Save:", configData);
     
-    // Сохраняем в Neon базу данных
-    // const neonUrl = process.env.NEON_DATABASE_URL;
-    // const { Client } = require('pg');
-    // const client = new Client(neonUrl);
-    // await client.connect();
-    // await client.query(
-    //   'INSERT INTO admin_configs (address, config) VALUES ($1, $2) ON CONFLICT (address) DO UPDATE SET config = $2',
-    //   [adminAddress, JSON.stringify(configData)]
-    // );
+    // Проверяем, есть ли переменные окружения
+    console.log("NEON_DATABASE_URL:", process.env.NEON_DATABASE_URL);
+    
+    if (!process.env.NEON_DATABASE_URL) {
+      console.error("NEON_DATABASE_URL не установлен");
+      return {
+        statusCode: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        },
+        body: JSON.stringify({ 
+          error: 'База данных не настроена' 
+        })
+      };
+    }
+
+    // Импортируем pg только если нужно
+    const { Client } = require('pg');
+    
+    // Подключение к Neon
+    const client = new Client({
+      connectionString: process.env.NEON_DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: false
+      }
+    });
+
+    await client.connect();
+    console.log("Подключение к Neon для сохранения успешно");
+
+    // Сохраняем конфигурацию в базу данных
+    await client.query(
+      `INSERT INTO admin_configs (address, config, updated_at) 
+       VALUES ($1, $2, NOW()) 
+       ON CONFLICT (address) 
+       DO UPDATE SET config = $2, updated_at = NOW()`,
+      [adminAddress, configData]
+    );
+
+    await client.end();
+
+    console.log("Конфигурация успешно сохранена в базе для адреса:", adminAddress);
     
     return {
       statusCode: 200,
@@ -31,16 +75,22 @@ exports.handler = async (event, context) => {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
       },
-      body: JSON.stringify({ message: 'Конфигурация сохранена' })
+      body: JSON.stringify({ 
+        message: 'Конфигурация сохранена в базе данных',
+        address: adminAddress
+      })
     };
   } catch (error) {
+    console.error("Ошибка в saveConfig:", error);
     return {
       statusCode: 500,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
       },
-      body: JSON.stringify({ error: 'Внутренняя ошибка сервера' })
+      body: JSON.stringify({ 
+        error: 'Внутренняя ошибка сервера: ' + error.message 
+      })
     };
   }
 };

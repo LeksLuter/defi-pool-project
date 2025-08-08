@@ -1,16 +1,16 @@
+// frontend/src/components/AdminPanel.jsx
 import React, { useState, useEffect } from 'react';
 import { useWeb3 } from '../context/Web3Context';
-// Импортируем асинхронные функции из нового файла
-import { saveAdminConfig, loadAdminConfig, getUpdateIntervalMinutes } from '../config/adminConfig';
+import { saveAdminConfig, loadAdminConfig } from '../config/adminConfig';
 
 const AdminPanel = () => {
-  const { isAdmin, account } = useWeb3(); // Получаем адрес аккаунта
+  const { isAdmin, account } = useWeb3();
   const [servicesConfig, setServicesConfig] = useState({ tokenServices: {}, priceServices: {} });
-  const [updateInterval, setUpdateInterval] = useState(10); // Значение по умолчанию
+  const [updateInterval, setUpdateInterval] = useState(10);
   const [status, setStatus] = useState('');
-  const [isLoading, setIsLoading] = useState(false); // Состояние загрузки для операций
+  const [isLoading, setIsLoading] = useState(false);
 
-  // === ЗАГРУЗКА НАСТРОЕК ИЗ localStorage/сервера ===
+  // === ЗАГРУЗКА НАСТРОЕК ИЗ БД ===
   useEffect(() => {
     if (!isAdmin) {
       setStatus('Доступ запрещен. Только для администраторов.');
@@ -38,14 +38,14 @@ const AdminPanel = () => {
     };
 
     fetchConfig();
-  }, [isAdmin, account]); // Добавляем account в зависимости
+  }, [isAdmin, account]);
 
   // === ОБРАБОТКА СОБЫТИЙ storage ДЛЯ СИНХРОНИЗАЦИИ МЕЖДУ ВКЛАДКАМИ ===
   useEffect(() => {
     if (!isAdmin) return;
 
     const handleStorageChange = (e) => {
-      if (e.key === 'adminConfig' && e.newValue) {
+      if (e.key === 'defiPool_adminConfig' && e.newValue) {
         try {
           const newConfig = JSON.parse(e.newValue);
           setServicesConfig({
@@ -53,7 +53,7 @@ const AdminPanel = () => {
             priceServices: newConfig.priceServices || {},
           });
           setUpdateInterval(newConfig.updateIntervalMinutes || 10);
-          setStatus('Настройки синхронизированы с другой вкладкой (localStorage).');
+          setStatus('Настройки синхронизированы с другой вкладкой.');
           // Очищаем статус через 3 секунды
           setTimeout(() => setStatus(''), 3000);
         } catch (err) {
@@ -64,21 +64,21 @@ const AdminPanel = () => {
 
     window.addEventListener('storage', handleStorageChange);
 
-    // Обработка кастомного события adminConfigUpdated (внутри одной вкладки или после серверного сохранения)
+    // Обработка кастомного события adminConfigUpdated (внутри одной вкладки)
     const handleCustomEvent = (e) => {
-      try {
-        const newConfig = e.detail;
-        setServicesConfig({
-          tokenServices: newConfig.tokenServices || {},
-          priceServices: newConfig.priceServices || {},
-        });
-        setUpdateInterval(newConfig.updateIntervalMinutes || 10);
-        setStatus('Настройки обновлены.');
-        // Очищаем статус через 3 секунды
-        setTimeout(() => setStatus(''), 3000);
-      } catch (err) {
-        console.error("Ошибка при обработке кастомного события adminConfigUpdated:", err);
-      }
+        try {
+            const newConfig = e.detail;
+             setServicesConfig({
+                tokenServices: newConfig.tokenServices || {},
+                priceServices: newConfig.priceServices || {},
+            });
+            setUpdateInterval(newConfig.updateIntervalMinutes || 10);
+            setStatus('Настройки обновлены.');
+            // Очищаем статус через 3 секунды
+            setTimeout(() => setStatus(''), 3000);
+        } catch (err) {
+            console.error("Ошибка при обработке кастомного события adminConfigUpdated:", err);
+        }
     };
 
     window.addEventListener('adminConfigUpdated', handleCustomEvent);
@@ -112,7 +112,7 @@ const AdminPanel = () => {
     if (!isNaN(value) && value > 0) {
       setUpdateInterval(value);
     } else {
-      setUpdateInterval(0); // Или установить дефолтное значение
+      setUpdateInterval(0);
     }
   };
 
@@ -140,8 +140,8 @@ const AdminPanel = () => {
   // === ФУНКЦИИ ДЛЯ СОХРАНЕНИЯ НАСТРОЕК ===
   const saveServiceSettings = async () => {
     if (!account) {
-      setStatus('Ошибка: Адрес администратора не определен.');
-      return;
+        setStatus('Ошибка: Адрес администратора не определен.');
+        return;
     }
     setIsLoading(true);
     setStatus('Сохранение настроек сервисов...');
@@ -159,14 +159,14 @@ const AdminPanel = () => {
       console.error("Ошибка при сохранении настроек сервисов:", error);
       setStatus('Ошибка при сохранении настроек сервисов.');
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
   };
 
   const saveUpdateInterval = async () => {
-    if (!account) {
-      setStatus('Ошибка: Адрес администратора не определен.');
-      return;
+     if (!account) {
+        setStatus('Ошибка: Адрес администратора не определен.');
+        return;
     }
     if (updateInterval <= 0) {
       setStatus('Пожалуйста, введите положительное значение интервала.');
@@ -176,16 +176,16 @@ const AdminPanel = () => {
     setStatus('Сохранение интервала обновления...');
     try {
       // Загружаем текущую конфигурацию, обновляем только интервал
-      const currentConfig = await loadAdminConfig(account);
-      const newConfig = { ...currentConfig, updateIntervalMinutes: updateInterval };
-      // Передаем адрес администратора
-      await saveAdminConfig(newConfig, account);
+       const currentConfig = await loadAdminConfig(account);
+       const newConfig = { ...currentConfig, updateIntervalMinutes: updateInterval };
+       // Передаем адрес администратора
+       await saveAdminConfig(newConfig, account);
       setStatus(`Настройки сохранены! Интервал обновления: ${updateInterval} минут.`);
     } catch (error) {
       console.error("Ошибка при сохранении настроек:", error);
       setStatus('Ошибка при сохранении настроек.');
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
   };
   // === КОНЕЦ ФУНКЦИЙ ДЛЯ СОХРАНЕНИЯ НАСТРОЕК ===
@@ -233,7 +233,7 @@ const AdminPanel = () => {
                     onClick={() => toggleTokenService(serviceName)}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isEnabled ? 'bg-green-500' : 'bg-gray-600'}`}
                     aria-pressed={isEnabled}
-                    disabled={isLoading} // Блокируем кнопки во время загрузки
+                    disabled={isLoading}
                   >
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${isEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                   </button>
@@ -250,7 +250,7 @@ const AdminPanel = () => {
                     onClick={() => togglePriceService(serviceName)}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isEnabled ? 'bg-green-500' : 'bg-gray-600'}`}
                     aria-pressed={isEnabled}
-                    disabled={isLoading} // Блокируем кнопки во время загрузки
+                    disabled={isLoading}
                   >
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${isEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                   </button>
@@ -261,7 +261,7 @@ const AdminPanel = () => {
             <button
               onClick={saveServiceSettings}
               className="mt-6 w-full px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white font-medium rounded-lg transition disabled:opacity-50"
-              disabled={isLoading} // Блокируем кнопку во время загрузки
+              disabled={isLoading}
             >
               {isLoading ? 'Сохранение...' : 'Сохранить настройки сервисов'}
             </button>
@@ -286,14 +286,14 @@ const AdminPanel = () => {
                 value={updateInterval}
                 onChange={handleIntervalChange}
                 className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-                disabled={isLoading} // Блокируем поле во время загрузки
+                disabled={isLoading}
               />
             </div>
 
             <button
               onClick={saveUpdateInterval}
               className="w-full px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-medium rounded-lg transition disabled:opacity-50"
-              disabled={isLoading || updateInterval <= 0} // Блокируем кнопку во время загрузки или при невалидном значении
+              disabled={isLoading || updateInterval <= 0}
             >
               {isLoading ? 'Сохранение...' : 'Сохранить интервал'}
             </button>
@@ -307,14 +307,14 @@ const AdminPanel = () => {
               <button
                 onClick={handleDeployFactory}
                 className="px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-medium rounded-lg transition disabled:opacity-50"
-                disabled={isLoading} // Блокируем кнопку во время загрузки
+                disabled={isLoading}
               >
                 Деплой PoolFactory
               </button>
               <button
                 onClick={handleDeployVault}
                 className="px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-medium rounded-lg transition disabled:opacity-50"
-                disabled={isLoading} // Блокируем кнопку во время загрузки
+                disabled={isLoading}
               >
                 Деплой TokenVault
               </button>
