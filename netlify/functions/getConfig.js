@@ -22,7 +22,6 @@ exports.handler = async (event, context) => {
     // Проверяем переменные окружения
     console.log("NEON_DATABASE_URL:", process.env.NEON_DATABASE_URL ? "SET" : "NOT SET");
     
-    // Проверка наличия переменной окружения
     if (!process.env.NEON_DATABASE_URL) {
       console.error("NEON_DATABASE_URL не установлен");
       return {
@@ -33,6 +32,21 @@ exports.handler = async (event, context) => {
         },
         body: JSON.stringify({ 
           error: 'База данных не настроена: NEON_DATABASE_URL отсутствует' 
+        })
+      };
+    }
+
+    // Проверка формата адреса
+    if (!adminAddress.startsWith('0x') || adminAddress.length !== 42) {
+      console.warn("Некорректный адрес администратора:", adminAddress);
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        },
+        body: JSON.stringify({ 
+          error: 'Некорректный адрес администратора' 
         })
       };
     }
@@ -101,7 +115,7 @@ exports.handler = async (event, context) => {
     }
   } catch (error) {
     console.error("Ошибка в getConfig:", error);
-    console.error("Ошибка стек:", error.stack);
+    console.error("Стек ошибки:", error.stack);
     
     return {
       statusCode: 500,
@@ -110,7 +124,8 @@ exports.handler = async (event, context) => {
         'Access-Control-Allow-Origin': '*'
       },
       body: JSON.stringify({ 
-        error: 'Внутренняя ошибка сервера: ' + error.message 
+        error: 'Внутренняя ошибка сервера: ' + error.message,
+        stack: error.stack
       })
     };
   }
