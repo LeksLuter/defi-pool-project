@@ -1,12 +1,10 @@
-// netlify/functions/saveConfig.js
+const { Client } = require('pg');
+
 exports.handler = async (event, context) => {
   try {
     console.log("=== saveConfig Function Called ===");
-    console.log("Headers:", event.headers);
-    console.log("Body:", event.body);
     
     const adminAddress = event.headers['x-admin-address'];
-    console.log("Admin Address:", adminAddress);
     
     if (!adminAddress) {
       return {
@@ -24,10 +22,7 @@ exports.handler = async (event, context) => {
     // Парсим тело запроса
     const configData = JSON.parse(event.body);
     console.log("Config Data to Save:", configData);
-    
-    // Проверяем, есть ли переменные окружения
-    console.log("NEON_DATABASE_URL:", process.env.NEON_DATABASE_URL);
-    
+
     if (!process.env.NEON_DATABASE_URL) {
       console.error("NEON_DATABASE_URL не установлен");
       return {
@@ -42,9 +37,6 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Импортируем pg только если нужно
-    const { Client } = require('pg');
-    
     // Подключение к Neon
     const client = new Client({
       connectionString: process.env.NEON_DATABASE_URL,
