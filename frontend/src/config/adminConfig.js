@@ -1,5 +1,4 @@
-const BACKEND_URL = 'https://securedefisystem.netlify.app/'; // или относительный путь
-
+// frontend/src/config/adminConfig.js
 
 // === КЛЮЧ ДЛЯ ХРАНЕНИЯ КОНФИГУРАЦИИ АДМИНИСТРАТОРА В localStorage ===
 const ADMIN_CONFIG_KEY = 'defiPool_adminConfig';
@@ -35,11 +34,14 @@ const DEFAULT_ADMIN_CONFIG = {
  * @returns {Promise<Object>} Объект конфигурации.
  */
 export const loadAdminConfig = async (adminAddress) => {
+  console.log("[adminConfig] Начало загрузки конфигурации");
+  console.log("[adminConfig] Адрес администратора:", adminAddress);
+  
   // 1. Загрузка с бэкенда (реализация для Netlify Functions)
   if (adminAddress) {
     try {
       console.log(`[adminConfig] Попытка загрузки конфигурации с сервера для ${adminAddress}...`);
-
+      
       // Используем относительный путь для Netlify Functions
       const response = await fetch(`/.netlify/functions/getConfig`, {
         method: 'GET',
@@ -48,14 +50,19 @@ export const loadAdminConfig = async (adminAddress) => {
           'Content-Type': 'application/json'
         }
       });
-
+      
+      console.log("[adminConfig] Ответ от сервера:", response.status, response.statusText);
+      
       if (response.ok) {
         const serverConfig = await response.json();
-        console.log("[adminConfig] Конфигурация успешно загружена с сервера (Netlify Function).");
+        console.log("[adminConfig] Конфигурация успешно загружена с сервера (Netlify Function):", serverConfig);
         // Объединяем с дефолтной конфигурацией на случай, если какие-то поля отсутствуют
-        return { ...DEFAULT_ADMIN_CONFIG, ...serverConfig };
+        const finalConfig = { ...DEFAULT_ADMIN_CONFIG, ...serverConfig };
+        console.log("[adminConfig] Финальная конфигурация:", finalConfig);
+        return finalConfig;
       } else {
         console.warn(`[adminConfig] Сервер вернул ошибку при загрузке конфига: ${response.status} ${response.statusText}`);
+        // Продолжаем к локальной загрузке
       }
     } catch (e) {
       console.error("[adminConfig] Ошибка сети при загрузке конфигурации с сервера (Netlify Function):", e);
@@ -68,11 +75,14 @@ export const loadAdminConfig = async (adminAddress) => {
   // 2. Загрузка из localStorage (резервный вариант)
   try {
     const configStr = localStorage.getItem(ADMIN_CONFIG_KEY);
+    console.log("[adminConfig] Попытка загрузки из localStorage:", configStr ? "Найдено" : "Не найдено");
     if (configStr) {
       const parsedConfig = JSON.parse(configStr);
-      console.log("[adminConfig] Конфигурация загружена из localStorage.");
+      console.log("[adminConfig] Конфигурация загружена из localStorage:", parsedConfig);
       // Объединяем с дефолтной конфигурацией, чтобы убедиться, что все поля присутствуют
-      return { ...DEFAULT_ADMIN_CONFIG, ...parsedConfig };
+      const finalConfig = { ...DEFAULT_ADMIN_CONFIG, ...parsedConfig };
+      console.log("[adminConfig] Финальная конфигурация из localStorage:", finalConfig);
+      return finalConfig;
     } else {
       console.log("[adminConfig] Конфигурация в localStorage не найдена, используем дефолтную.");
     }
@@ -94,11 +104,15 @@ export const loadAdminConfig = async (adminAddress) => {
  * @returns {Promise<void>}
  */
 export const saveAdminConfig = async (config, adminAddress) => {
+  console.log("[adminConfig] Начало сохранения конфигурации");
+  console.log("[adminConfig] Конфиг для сохранения:", config);
+  console.log("[adminConfig] Адрес администратора:", adminAddress);
+  
   // 1. Сохранение на бэкенде (Netlify Functions)
   if (adminAddress) {
     try {
       console.log(`[adminConfig] Попытка сохранения конфигурации на сервере (Netlify Function) для ${adminAddress}...`);
-
+      
       const response = await fetch(`/.netlify/functions/saveConfig`, {
         method: 'POST',
         headers: {
@@ -107,7 +121,9 @@ export const saveAdminConfig = async (config, adminAddress) => {
         },
         body: JSON.stringify(config)
       });
-
+      
+      console.log("[adminConfig] Ответ от сохранения:", response.status, response.statusText);
+      
       if (response.ok) {
         const result = await response.json();
         console.log("[adminConfig] Конфигурация успешно сохранена на сервере (Netlify Function):", result);
@@ -140,10 +156,6 @@ export const saveAdminConfig = async (config, adminAddress) => {
  * @returns {Object} Объект с настройками сервисов токенов.
  */
 export const getTokenServicesConfig = () => {
-  // В реальном приложении здесь нужно получать актуальную конфигурацию,
-  // например, из состояния контекста React или снова вызывать loadAdminConfig.
-  // Для простоты примера мы берем из localStorage напрямую,
-  // но правильнее было бы управлять этим на уровне выше (например, в AdminPanel).
   try {
     const configStr = localStorage.getItem(ADMIN_CONFIG_KEY);
     if (configStr) {
@@ -161,7 +173,6 @@ export const getTokenServicesConfig = () => {
  * @returns {Object} Объект с настройками сервисов цен.
  */
 export const getPriceServicesConfig = () => {
-  // Аналогично getTokenServicesConfig, берем из localStorage.
   try {
     const configStr = localStorage.getItem(ADMIN_CONFIG_KEY);
     if (configStr) {
@@ -179,7 +190,6 @@ export const getPriceServicesConfig = () => {
  * @returns {number} Интервал обновления в минутах.
  */
 export const getUpdateIntervalMinutes = () => {
-  // Аналогично, берем из localStorage.
   try {
     const configStr = localStorage.getItem(ADMIN_CONFIG_KEY);
     if (configStr) {
