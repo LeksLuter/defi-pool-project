@@ -13,6 +13,7 @@ const MIN_UPDATE_INTERVAL_MS = 30000;
 const WalletTokens = () => {
   const { provider, account, signer, chainId, switchNetwork } = useWeb3();
   const [tokens, setTokens] = useState([]);
+  const [allTokens, setAllTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [effectiveUpdateIntervalMinutes, setEffectiveUpdateIntervalMinutes] = useState(10);
@@ -21,9 +22,18 @@ const WalletTokens = () => {
   const hasFetchedTokens = useRef(false);
   const isMountedRef = useRef(true);
   
-  const [showZeroBalance, setShowZeroBalance] = useState(false);
-  const [showLowValue, setShowLowValue] = useState(false);
-  const [showAllChains, setShowAllChains] = useState(false);
+  // Фильтры
+  const [showZeroBalance, setShowZeroBalance] = useState(true);
+  const [showLowValue, setShowLowValue] = useState(true);
+  const [selectedChains, setSelectedChains] = useState(new Set());
+  const [showAllNetworks, setShowAllNetworks] = useState(false);
+
+  // Инициализация выбранных сетей только текущей сетью
+  useEffect(() => {
+    if (chainId) {
+      setSelectedChains(new Set([chainId]));
+    }
+  }, [chainId]);
 
   // Загрузка интервала обновления
   useEffect(() => {
@@ -32,27 +42,10 @@ const WalletTokens = () => {
         const intervalMinutes = await getUpdateIntervalMinutes();
         setEffectiveUpdateIntervalMinutes(intervalMinutes);
       } catch (error) {
-        console.error('Ошибка при загрузке интервала обновления:', error);
         setEffectiveUpdateIntervalMinutes(10);
       }
     };
     loadUpdateInterval();
-
-    const handleStorageChange = (e) => {
-      if (e.key === 'defiPool_adminConfig' && e.newValue) {
-        try {
-          const newConfig = JSON.parse(e.newValue);
-          if (newConfig.updateIntervalMinutes !== undefined) {
-            setEffectiveUpdateIntervalMinutes(newConfig.updateIntervalMinutes);
-          }
-        } catch (err) {
-          console.error("Ошибка при парсинге adminConfig из storage event:", err);
-        }
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   // Обновление токенов
@@ -60,8 +53,15 @@ const WalletTokens = () => {
     if (!account || !provider || !chainId) return;
     setLoading(true);
     setError(null);
-    await updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef);
-  }, [account, provider, chainId]);
+    
+    try {
+      const updatedTokens = await updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef, effectiveUpdateIntervalMinutes);
+      const finalTokens = updatedTokens || [];
+      setAllTokens(finalTokens);
+    } catch (err) {
+      setError(err.message);
+    }
+  }, [account, provider, chainId, effectiveUpdateIntervalMinutes]);
 
   // Инициализация токенов
   useEffect(() => {
@@ -69,63 +69,53 @@ const WalletTokens = () => {
     const initializeTokens = async () => {
       if (!account || !provider || !chainId || hasFetchedTokens.current) return;
       hasFetchedTokens.current = true;
-      await updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef);
+      
+      try {
+        const loadedTokens = await updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef, effectiveUpdateIntervalMinutes);
+        const finalTokens = loadedTokens || [];
+        setAllTokens(finalTokens);
+      } catch (err) {
+        setError(err.message);
+      }
     };
+    
     initializeTokens();
     
     return () => {
       isMountedRef.current = false;
       hasFetchedTokens.current = false;
     };
-  }, [account, provider, chainId]);
-
-  // Интервал автообновления
-  useEffect(() => {
-    if (!account || !provider || !chainId || effectiveUpdateIntervalMinutes <= 0) {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      return;
-    }
-
-    const intervalMs = effectiveUpdateIntervalMinutes * 60 * 1000;
-    const clampedIntervalMs = Math.max(intervalMs, MIN_UPDATE_INTERVAL_MS);
-
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-
-    intervalRef.current = setInterval(async () => {
-      if (!isMountedRef.current) return;
-      try {
-        await updateTokens(account, provider, setTokens, null, null, chainId, { current: true });
-      } catch (err) {
-        console.error("Ошибка при фоновом обновлении токенов:", err);
-      }
-    }, clampedIntervalMs);
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
   }, [account, provider, chainId, effectiveUpdateIntervalMinutes]);
 
-  // Фильтр сетей
-  const visibleChains = useMemo(() => {
-    const allChains = Object.entries(SUPPORTED_CHAINS);
-    if (showAllChains) return allChains;
-    return allChains.filter(([id]) => parseInt(id) === chainId);
-  }, [showAllChains, chainId]);
+  // Обработчики фильтров сетей
+  const handleChainToggle = (chainIdToToggle) => {
+    setSelectedChains(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(chainIdToToggle)) {
+        newSet.delete(chainIdToToggle);
+      } else {
+        newSet.add(chainIdToToggle);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleAllNetworksVisibility = () => {
+    setShowAllNetworks(prev => !prev);
+  };
 
   // Фильтрация токенов
   const filteredTokens = useMemo(() => {
-    if (!Array.isArray(tokens)) return [];
+    if (!Array.isArray(allTokens)) return [];
     
-    let result = [...tokens];
+    let result = [...allTokens];
     
+    // Фильтр по сетям
+    if (selectedChains.size > 0) {
+      result = result.filter(token => selectedChains.has(token.chainId));
+    }
+    
+    // Фильтр по балансу
     if (!showZeroBalance) {
       result = result.filter(token => {
         try {
@@ -136,6 +126,7 @@ const WalletTokens = () => {
       });
     }
     
+    // Фильтр по стоимости
     if (!showLowValue) {
       result = result.filter(token => {
         try {
@@ -149,6 +140,7 @@ const WalletTokens = () => {
       });
     }
     
+    // Сортировка
     result.sort((a, b) => {
       try {
         const aBalance = parseFloat(ethers.utils.formatUnits(a.balance, a.decimals));
@@ -166,12 +158,11 @@ const WalletTokens = () => {
     });
     
     return result;
-  }, [tokens, showZeroBalance, showLowValue]);
+  }, [allTokens, selectedChains, showZeroBalance, showLowValue]);
 
-  // Обработчики
+  // Остальные обработчики
   const toggleZeroBalanceFilter = () => setShowZeroBalance(prev => !prev);
   const toggleLowValueFilter = () => setShowLowValue(prev => !prev);
-  const toggleChainsFilter = () => setShowAllChains(prev => !prev);
 
   const copyToClipboard = async (text) => {
     try {
@@ -196,7 +187,7 @@ const WalletTokens = () => {
   };
 
   // Рендер состояний
-  if (loading && tokens.length === 0) {
+  if (loading && allTokens.length === 0) {
     return (
       <div className="min-h-screen py-8 px-4 bg-gradient-to-br from-gray-900 to-indigo-900 text-white">
         <div className="container mx-auto max-w-6xl">
@@ -289,36 +280,63 @@ const WalletTokens = () => {
           </div>
         </div>
 
+        {/* Красивый фильтр сетей */}
         <div className="mb-6 p-4 bg-gray-800 bg-opacity-30 border border-gray-700 rounded-xl">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-            {visibleChains.map(([id, chainData]) => (
-              <button
-                key={id}
-                onClick={() => switchNetwork(parseInt(id))}
-                disabled={parseInt(id) === chainId}
-                className={`p-3 rounded-xl border transition text-center ${
-                  parseInt(id) === chainId 
-                    ? 'bg-indigo-900 bg-opacity-50 border-indigo-500' 
-                    : 'bg-gray-800 bg-opacity-50 border-gray-700 hover:border-gray-500'
-                } disabled:opacity-50`}
-              >
-                <div className="text-sm font-medium">{chainData.name}</div>
-                <div className="text-xs text-gray-400">ID: {id}</div>
-              </button>
-            ))}
+          <h3 className="text-lg font-medium mb-4">Фильтр по сетям</h3>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {/* Плитки активных сетей */}
+            {Object.entries(SUPPORTED_CHAINS)
+              .filter(([id]) => showAllNetworks || selectedChains.has(parseInt(id)))
+              .map(([id, chainData]) => {
+                const isCurrent = parseInt(id) === chainId;
+                const isSelected = selectedChains.has(parseInt(id));
+
+                return (
+                  <button
+                    key={id}
+                    onClick={() => handleChainToggle(parseInt(id))}
+                    className={`p-4 rounded-xl border-2 transition-all duration-200 transform hover:scale-105 ${
+                      isSelected
+                        ? 'bg-indigo-900 bg-opacity-70 border-indigo-500 text-white shadow-lg shadow-indigo-500/20'
+                        : isCurrent
+                        ? 'bg-gray-700 border-gray-600 text-gray-300 hover:border-indigo-400'
+                        : 'bg-gray-800 bg-opacity-50 border-gray-600 text-gray-400 hover:border-gray-400'
+                    }`}
+                  >
+                    <div className="text-sm font-bold">{chainData.shortName.toUpperCase()}</div>
+                    <div className="text-xs mt-1">{chainData.name}</div>
+                    {isSelected && (
+                      <div className="absolute top-1 right-1 w-3 h-3 bg-indigo-400 rounded-full"></div>
+                    )}
+                  </button>
+                );
+              })}
+            
+            {/* Кнопка показа/скрытия сетей */}
             <button
-              onClick={toggleChainsFilter}
-              className={`p-3 rounded-xl border transition text-center ${
-                showAllChains 
-                  ? 'bg-indigo-900 bg-opacity-50 border-indigo-500' 
-                  : 'bg-gray-800 bg-opacity-50 border-gray-700 hover:border-gray-500'
+              onClick={toggleAllNetworksVisibility}
+              className={`p-4 rounded-xl border-2 transition-all duration-200 transform hover:scale-105 ${
+                showAllNetworks
+                  ? 'bg-gray-700 border-gray-500 text-gray-300'
+                  : 'bg-gray-800 bg-opacity-50 border-gray-600 text-gray-400 hover:border-gray-400'
               }`}
             >
-              <div className="text-sm font-medium">
-                {showAllChains ? 'Скрыть сети' : 'Показать все'}
+              <div className="text-sm font-bold">
+                {showAllNetworks ? 'Скрыть' : 'Показать'}
+              </div>
+              <div className="text-xs mt-1">
+                {showAllNetworks ? 'неактивные' : 'все сети'}
               </div>
             </button>
           </div>
+          
+          {/* Индикатор выбранных сетей */}
+          {selectedChains.size > 0 && (
+            <div className="mt-4 text-sm text-gray-400">
+              Выбрано сетей: {selectedChains.size}
+            </div>
+          )}
         </div>
 
         <div className="mb-6 p-4 bg-gray-800 bg-opacity-30 border border-gray-700 rounded-xl">
@@ -330,7 +348,7 @@ const WalletTokens = () => {
                 showZeroBalance ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
             >
-              {showZeroBalance ? 'Показать все' : 'Скрыть нулевые'}
+              {showZeroBalance ? 'Показывать все' : 'Скрыть нулевые'}
             </button>
             <button
               onClick={toggleLowValueFilter}
@@ -338,7 +356,7 @@ const WalletTokens = () => {
                 showLowValue ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
             >
-              {showLowValue ? 'Показать все' : 'Скрыть <$0.10'}
+              {showLowValue ? 'Показывать все' : 'Скрыть <$0.10'}
             </button>
           </div>
         </div>
@@ -371,7 +389,7 @@ const WalletTokens = () => {
                   }
 
                   const chainInfo = SUPPORTED_CHAINS[token.chainId];
-                  const chainName = chainInfo ? chainInfo.shortName : `Chain ${token.chainId}`;
+                  const chainName = chainInfo ? chainInfo.name : `Chain ${token.chainId}`;
 
                   return (
                     <tr key={`${token.contractAddress}-${token.chainId}`} className="hover:bg-gray-750 transition">
@@ -436,7 +454,7 @@ const WalletTokens = () => {
               ) : (
                 <tr>
                   <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
-                    {tokens.length === 0 ? 'Токены не найдены' : 'Все токены отфильтрованы'}
+                    {allTokens.length === 0 ? 'Токены не найдены' : 'Все токены отфильтрованы'}
                   </td>
                 </tr>
               )}
