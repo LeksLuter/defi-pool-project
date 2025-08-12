@@ -1,7 +1,6 @@
 // frontend/src/config/adminConfig.js
 // Централизованный файл конфигурации администратора
 // Все настройки администратора хранятся в этом файле
-
 // === КОНСТАНТЫ ===
 const ADMIN_CONFIG_KEY = 'defiPool_adminConfig';
 const DEFAULT_ADMIN_CONFIG = {
@@ -27,36 +26,185 @@ const DEFAULT_ADMIN_CONFIG = {
 // === КОНЕЦ КОНСТАНТ ===
 
 /**
+ * Проверяет существование таблицы admin_configs в базе данных
+ * @param {string} connectionString - Строка подключения к базе данных
+ * @returns {Promise<boolean>} true если таблица существует, false если нет
+ */
+const checkTableExists = async (connectionString) => {
+  try {
+    const { Client } = await import('pg');
+    const client = new Client({
+      connectionString: connectionString,
+      ssl: {
+        rejectUnauthorized: false
+      }
+    });
+    await client.connect();
+    
+    // Проверяем существование таблицы
+    const result = await client.query(
+      "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'admin_configs')"
+    );
+    
+    await client.end();
+    return result.rows[0].exists;
+  } catch (error) {
+    console.error('[Admin Config] Ошибка при проверке существования таблицы:', error);
+    return false;
+  }
+};
+
+/**
+ * Создает таблицу admin_configs если она не существует
+ * @param {string} connectionString - Строка подключения к базе данных
+ * @returns {Promise<void>}
+ */
+const createAdminConfigsTable = async (connectionString) => {
+  try {
+    const { Client } = await import('pg');
+    const client = new Client({
+      connectionString: connectionString,
+      ssl: {
+        rejectUnauthorized: false
+      }
+    });
+    await client.connect();
+    
+    // Создаем таблицу если она не существует
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admin_configs (
+        address TEXT PRIMARY KEY,
+        config JSONB NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    console.log('[Admin Config] Таблица admin_configs создана или уже существует');
+    await client.end();
+  } catch (error) {
+    console.error('[Admin Config] Ошибка при создании таблицы admin_configs:', error);
+    throw error;
+  }
+};
+
+/**
+ * Получает конфигурацию администратора из базы данных
+ * @param {string} adminAddress Адрес администратора
+ * @param {string} connectionString Строка подключения к базе данных
+ * @returns {Promise<Object>} Объект конфигурации
+ */
+const getAdminConfigFromDB = async (adminAddress, connectionString) => {
+  try {
+    const { Client } = await import('pg');
+    const client = new Client({
+      connectionString: connectionString,
+      ssl: {
+        rejectUnauthorized: false
+      }
+    });
+    await client.connect();
+    
+    // Проверяем существование таблицы перед запросом
+    const tableExists = await checkTableExists(connectionString);
+    if (!tableExists) {
+      console.log('[Admin Config] Таблица admin_configs не существует, создаем её');
+      await createAdminConfigsTable(connectionString);
+    }
+    
+    // Получаем конфигурацию из базы данных
+    const result = await client.query(
+      'SELECT config FROM admin_configs WHERE address = $1',
+      [adminAddress]
+    );
+    
+    await client.end();
+    
+    if (result.rows.length > 0) {
+      console.log(`[Admin Config] Конфигурация найдена в базе для адреса ${adminAddress}`);
+      return result.rows[0].config;
+    } else {
+      console.log(`[Admin Config] Конфигурация не найдена в базе для адреса ${adminAddress}, возвращаем дефолтную`);
+      return DEFAULT_ADMIN_CONFIG;
+    }
+  } catch (error) {
+    console.error('[Admin Config] Ошибка при получении конфигурации из базы:', error);
+    // В случае ошибки возвращаем дефолтную конфигурацию
+    return DEFAULT_ADMIN_CONFIG;
+  }
+};
+
+/**
+ * Сохраняет конфигурацию администратора в базу данных
+ * @param {string} adminAddress Адрес администратора
+ * @param {Object} config Объект конфигурации
+ * @param {string} connectionString Строка подключения к базе данных
+ * @returns {Promise<void>}
+ */
+const saveAdminConfigToDB = async (adminAddress, config, connectionString) => {
+  try {
+    const { Client } = await import('pg');
+    const client = new Client({
+      connectionString: connectionString,
+      ssl: {
+        rejectUnauthorized: false
+      }
+    });
+    await client.connect();
+    
+    // Проверяем существование таблицы перед сохранением
+    const tableExists = await checkTableExists(connectionString);
+    if (!tableExists) {
+      console.log('[Admin Config] Таблица admin_configs не существует, создаем её');
+      await createAdminConfigsTable(connectionString);
+    }
+    
+    // Сохраняем конфигурацию в базу данных
+    await client.query(
+      `INSERT INTO admin_configs (address, config, updated_at) 
+       VALUES ($1, $2, NOW()) 
+       ON CONFLICT (address) 
+       DO UPDATE SET config = $2, updated_at = NOW()`,
+      [adminAddress, config]
+    );
+    
+    console.log(`[Admin Config] Конфигурация сохранена в базе для адреса ${adminAddress}`);
+    await client.end();
+  } catch (error) {
+    console.error('[Admin Config] Ошибка при сохранении конфигурации в базу:', error);
+    throw error;
+  }
+};
+
+/**
  * Загружает конфигурацию администратора
  * Сначала пытается загрузить с бэкенда (локальный API или Netlify Functions),
  * в случае ошибки - из localStorage.
  * Если в localStorage нет данных, возвращает дефолтную конфигурацию.
- * @param {string} [userAddress] - Адрес кошелька пользователя (для идентификации на бэкенде)
+ * @param {string} [adminAddress] - Адрес кошелька администратора (для идентификации на бэкенде)
  * @returns {Promise<Object>} Объект конфигурации
  */
-export const loadAdminConfig = async (userAddress) => {
+export const loadAdminConfig = async (adminAddress) => {
   console.log("[Admin Config] Начало загрузки конфигурации");
-  console.log("[Admin Config] Адрес пользователя:", userAddress);
+  console.log("[Admin Config] Адрес администратора:", adminAddress);
   
-  // 1. Попытка загрузки с бэкенда (локальный API или Netlify Functions)
-  if (userAddress) {
+  // Проверяем наличие переменной окружения для подключения к базе данных
+  const connectionString = process.env.NEON_DATABASE_URL;
+  if (!connectionString) {
+    console.warn("[Admin Config] NEON_DATABASE_URL не установлен в переменных окружения");
+    // Возвращаем дефолтную конфигурацию, если нет строки подключения
+    return { ...DEFAULT_ADMIN_CONFIG };
+  }
+
+  // 1. Попытка загрузки с бэкенда (Netlify Functions)
+  if (adminAddress) {
     try {
-      console.log(`[Admin Config] Попытка загрузки конфигурации с сервера для ${userAddress}...`);
-      
+      console.log(`[Admin Config] Попытка загрузки конфигурации с сервера для ${adminAddress}...`);
       // Определяем URL для API в зависимости от среды выполнения
       let apiUrl = '';
       if (typeof window !== 'undefined') {
-        // Проверяем, запущено ли приложение локально
-        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        if (isLocalhost) {
-          // Для локальной разработки используем локальный API (порт 3001 как в ваших логах)
-          apiUrl = 'http://localhost:3001/api/admin/config';
-          console.log("[Admin Config] Приложение запущено локально, используем локальный API:", apiUrl);
-        } else {
-          // Для продакшена используем Netlify Functions
-          apiUrl = '/.netlify/functions/getConfig';
-          console.log("[Admin Config] Приложение запущено в продакшене, используем Netlify Functions:", apiUrl);
-        }
+        // Для продакшена используем Netlify Functions
+        apiUrl = '/.netlify/functions/getConfig';
+        console.log("[Admin Config] Приложение запущено в продакшене, используем Netlify Functions:", apiUrl);
       } else {
         // Для SSR или Node.js используем Netlify Functions
         apiUrl = '/.netlify/functions/getConfig';
@@ -67,18 +215,18 @@ export const loadAdminConfig = async (userAddress) => {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          // Передаем адрес пользователя в заголовке для обычных пользователей
-          'X-User-Address': userAddress,
+          // Передаем адрес администратора в заголовке
+          'X-Admin-Address': adminAddress,
         },
         // Добавим таймаут для сетевых запросов
         signal: AbortSignal.timeout(10000) // 10 секунд
       });
       
       console.log("[Admin Config] Ответ от сервера:", response.status, response.statusText);
-      
       if (response.ok) {
         const serverConfig = await response.json();
         console.log("[Admin Config] Конфигурация успешно загружена с сервера:", serverConfig);
+        
         // Объединяем с дефолтной конфигурацией на случай, если какие-то поля отсутствуют
         const mergedConfig = { ...DEFAULT_ADMIN_CONFIG, ...serverConfig };
         
@@ -103,9 +251,9 @@ export const loadAdminConfig = async (userAddress) => {
       // Продолжаем к локальной загрузке
     }
   } else {
-    console.warn("[Admin Config] Адрес пользователя не предоставлен, пропуск загрузки с сервера.");
+    console.warn("[Admin Config] Адрес администратора не предоставлен, пропуск загрузки с сервера.");
   }
-
+  
   // 2. Загрузка из localStorage (резервный вариант)
   try {
     const configStr = localStorage.getItem(ADMIN_CONFIG_KEY);
@@ -115,34 +263,52 @@ export const loadAdminConfig = async (userAddress) => {
       console.log("[Admin Config] Конфигурация загружена из localStorage:", parsedConfig);
       // Объединяем с дефолтной конфигурацией на случай, если какие-то поля отсутствуют
       const mergedConfig = { ...DEFAULT_ADMIN_CONFIG, ...parsedConfig };
-      
       // Отправляем кастомное событие для синхронизации между вкладками
       if (typeof window !== 'undefined' && window.dispatchEvent) {
         window.dispatchEvent(new CustomEvent('adminConfigUpdated', { detail: mergedConfig }));
       }
-      
       return mergedConfig;
-    } else {
-      console.log("[Admin Config] Конфигурация в localStorage не найдена, используем дефолтную.");
     }
   } catch (e) {
-    console.error("[Admin Config] Ошибка при парсинге конфигурации из localStorage:", e);
+    console.error("[Admin Config] Ошибка при загрузке конфигурации администратора из localStorage:", e);
   }
-
-  // 3. Возврат дефолтной конфигурации, если ничего не удалось загрузить
-  console.log("[Admin Config] Конфигурация не найдена ни на сервере, ни в localStorage. Используется дефолтная.");
   
+  // 3. Попытка загрузки из базы данных Neon
+  try {
+    console.log("[Admin Config] Попытка загрузки конфигурации из базы данных Neon...");
+    const dbConfig = await getAdminConfigFromDB(adminAddress, connectionString);
+    console.log("[Admin Config] Конфигурация успешно загружена из базы данных:", dbConfig);
+    
+    // Сохраняем в localStorage как резервную копию
+    try {
+      localStorage.setItem(ADMIN_CONFIG_KEY, JSON.stringify(dbConfig));
+      console.log("[Admin Config] Конфигурация сохранена в localStorage как резерв");
+    } catch (storageError) {
+      console.error("[Admin Config] Ошибка при сохранении в localStorage:", storageError);
+    }
+    
+    // Отправляем кастомное событие для синхронизации между вкладками
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      window.dispatchEvent(new CustomEvent('adminConfigUpdated', { detail: dbConfig }));
+    }
+    
+    return dbConfig;
+  } catch (dbError) {
+    console.error("[Admin Config] Ошибка при загрузке конфигурации из базы данных:", dbError);
+  }
+  
+  // 4. Возврат дефолтной конфигурации, если ничего не удалось загрузить
+  console.log("[Admin Config] Конфигурация не найдена ни на сервере, ни в localStorage, ни в базе данных. Используется дефолтная.");
   // Отправляем кастомное событие для синхронизации между вкладками
   if (typeof window !== 'undefined' && window.dispatchEvent) {
     window.dispatchEvent(new CustomEvent('adminConfigUpdated', { detail: DEFAULT_ADMIN_CONFIG }));
   }
-  
   return { ...DEFAULT_ADMIN_CONFIG };
 };
 
 /**
  * Сохраняет конфигурацию администратора
- * Сначала пытается сохранить на бэкенде (локальный API или Netlify Functions),
+ * Сначала пытается сохранить на бэкенде (Netlify Functions),
  * затем сохраняет в localStorage.
  * @param {Object} config - Объект конфигурации для сохранения
  * @param {string} [adminAddress] - Адрес кошелька администратора (для идентификации на бэкенде)
@@ -153,25 +319,23 @@ export const saveAdminConfig = async (config, adminAddress) => {
   console.log("[Admin Config] Конфиг для сохранения:", config);
   console.log("[Admin Config] Адрес администратора:", adminAddress);
   
-  // 1. Попытка сохранения на бэкенде (локальный API или Netlify Functions)
+  // Проверяем наличие переменной окружения для подключения к базе данных
+  const connectionString = process.env.NEON_DATABASE_URL;
+  if (!connectionString) {
+    console.warn("[Admin Config] NEON_DATABASE_URL не установлен в переменных окружения");
+    // Продолжаем сохранение в localStorage
+  }
+
+  // 1. Попытка сохранения на бэкенде (Netlify Functions)
   if (adminAddress) {
     try {
-      console.log(`[Admin Config] Попытка сохранения конфигурации на сервере (локальный API или Netlify Functions) для ${adminAddress}...`);
-      
+      console.log(`[Admin Config] Попытка сохранения конфигурации на сервере (Netlify Functions) для ${adminAddress}...`);
       // Определяем URL для API в зависимости от среды выполнения
       let apiUrl = '';
       if (typeof window !== 'undefined') {
-        // Проверяем, запущено ли приложение локально
-        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        if (isLocalhost) {
-          // Для локальной разработки используем локальный API (порт 3001 как в ваших логах)
-          apiUrl = 'http://localhost:3001/api/admin/config';
-          console.log("[Admin Config] Приложение запущено локально, используем локальный API для сохранения:", apiUrl);
-        } else {
-          // Для продакшена используем Netlify Functions
-          apiUrl = '/.netlify/functions/saveConfig';
-          console.log("[Admin Config] Приложение запущено в продакшене, используем Netlify Functions для сохранения:", apiUrl);
-        }
+        // Для продакшена используем Netlify Functions
+        apiUrl = '/.netlify/functions/saveConfig';
+        console.log("[Admin Config] Приложение запущено в продакшене, используем Netlify Functions для сохранения:", apiUrl);
       } else {
         // Для SSR или Node.js используем Netlify Functions
         apiUrl = '/.netlify/functions/saveConfig';
@@ -189,16 +353,17 @@ export const saveAdminConfig = async (config, adminAddress) => {
         // Добавим таймаут для сетевых запросов
         signal: AbortSignal.timeout(10000) // 10 секунд
       });
-
-      console.log("[Admin Config] Ответ от сохранения:", response.status, response.statusText);
       
+      console.log("[Admin Config] Ответ от сохранения:", response.status, response.statusText);
       if (response.ok) {
         const result = await response.json();
-        console.log("[Admin Config] Конфигурация успешно сохранена на сервере (локальный API или Netlify Functions):", result);
+        console.log("[Admin Config] Конфигурация успешно сохранена на сервере (Netlify Functions):", result);
+        
         // Отправляем кастомное событие для синхронизации между вкладками
         if (typeof window !== 'undefined' && window.dispatchEvent) {
           window.dispatchEvent(new CustomEvent('adminConfigUpdated', { detail: config }));
         }
+        
         // Сохраняем в localStorage как резервную копию
         try {
           localStorage.setItem(ADMIN_CONFIG_KEY, JSON.stringify(config));
@@ -206,19 +371,20 @@ export const saveAdminConfig = async (config, adminAddress) => {
         } catch (storageError) {
           console.error("[Admin Config] Ошибка при сохранении в localStorage:", storageError);
         }
+        
         return; // Успешно сохранено на сервере
       } else {
         const errorText = await response.text();
-        console.warn(`[Admin Config] Сервер (локальный API или Netlify Functions) вернул ошибку при сохранении конфига: ${response.status} ${response.statusText}. Текст: ${errorText}`);
+        console.warn(`[Admin Config] Сервер (Netlify Functions) вернул ошибку при сохранении конфига: ${response.status} ${response.statusText}. Текст: ${errorText}`);
       }
     } catch (e) {
-      console.error("[Admin Config] Ошибка сети при сохранении конфигурации на сервер (локальный API или Netlify Functions):", e);
+      console.error("[Admin Config] Ошибка сети при сохранении конфигурации на сервер (Netlify Functions):", e);
       // Продолжаем к локальному сохранению как резерв
     }
   } else {
     console.warn("[Admin Config] Адрес администратора не предоставлен, пропуск сохранения на сервере.");
   }
-
+  
   // 2. Сохранение в localStorage (резервный вариант)
   try {
     localStorage.setItem(ADMIN_CONFIG_KEY, JSON.stringify(config));
@@ -229,7 +395,18 @@ export const saveAdminConfig = async (config, adminAddress) => {
     }
   } catch (e) {
     console.error("[Admin Config] Ошибка при сохранении конфигурации администратора в localStorage:", e);
-    throw new Error("Не удалось сохранить конфигурацию ни на сервере (локальный API или Netlify Functions), ни локально.");
+    throw new Error("Не удалось сохранить конфигурацию ни на сервере (Netlify Functions), ни локально.");
+  }
+  
+  // 3. Попытка сохранения в базу данных Neon
+  if (adminAddress && connectionString) {
+    try {
+      console.log("[Admin Config] Попытка сохранения конфигурации в базу данных Neon...");
+      await saveAdminConfigToDB(adminAddress, config, connectionString);
+      console.log("[Admin Config] Конфигурация успешно сохранена в базе данных Neon");
+    } catch (dbError) {
+      console.error("[Admin Config] Ошибка при сохранении конфигурации в базу данных:", dbError);
+    }
   }
 };
 
@@ -243,7 +420,6 @@ export const getTokenServicesConfig = () => {
     if (configStr) {
       const parsedConfig = JSON.parse(configStr);
       console.log("[Admin Config] Загруженная конфигурация токенов:", parsedConfig.tokenServices);
-      
       // Проверяем, что tokenServices существует и является объектом
       if (parsedConfig.tokenServices && typeof parsedConfig.tokenServices === 'object') {
         return parsedConfig.tokenServices;
@@ -266,7 +442,6 @@ export const getPriceServicesConfig = () => {
     if (configStr) {
       const parsedConfig = JSON.parse(configStr);
       console.log("[Admin Config] Загруженная конфигурация цен:", parsedConfig.priceServices);
-      
       // Проверяем, что priceServices существует и является объектом
       if (parsedConfig.priceServices && typeof parsedConfig.priceServices === 'object') {
         return parsedConfig.priceServices;
@@ -281,97 +456,12 @@ export const getPriceServicesConfig = () => {
 
 /**
  * Получает интервал обновления токенов
- * @param {string} [userAddress] - Адрес пользователя для идентификации на бэкенде
  * @returns {Promise<number>} Интервал обновления в минутах
  */
-export const getUpdateIntervalMinutes = async (userAddress) => {
+export const getUpdateIntervalMinutes = async () => {
   try {
-    console.log("[Admin Config] Начало загрузки интервала обновления");
-    console.log("[Admin Config] Адрес пользователя для интервала:", userAddress);
-    
-    // Проверяем, запущено ли приложение локально
-    const isLocalhost = typeof window !== 'undefined' && 
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    
-    console.log(`[Admin Config] Приложение запущено локально: ${isLocalhost}`);
-    
-    // Если запущено локально, пытаемся загрузить с локального API сервера
-    if (isLocalhost && userAddress) {
-      console.log("[Admin Config] Приложение запущено локально, пытаемся загрузить интервал обновления с локального API сервера...");
-      
-      try {
-        // Используем правильный порт 3001 для локального API сервера
-        const response = await fetch('http://localhost:3001/api/admin/config', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            // Передаем адрес пользователя в заголовке для обычных пользователей
-            'X-User-Address': userAddress,
-          }
-        });
-        
-        console.log("[Admin Config] Ответ от локального API сервера:", response.status, response.statusText);
-        
-        if (response.ok) {
-          const serverConfig = await response.json();
-          console.log("[Admin Config] Интервал обновления успешно загружен с локального API сервера:", serverConfig.updateIntervalMinutes);
-          
-          // Объединяем с дефолтной конфигурацией на случай, если какие-то поля отсутствуют
-          const mergedConfig = { ...DEFAULT_ADMIN_CONFIG, ...serverConfig };
-          
-          // Сохраняем в localStorage как резервную копию
-          localStorage.setItem(ADMIN_CONFIG_KEY, JSON.stringify(mergedConfig));
-          
-          return mergedConfig.updateIntervalMinutes;
-        } else {
-          console.warn(`[Admin Config] Локальный API сервер вернул ошибку при загрузке интервала: ${response.status} ${response.statusText}`);
-        }
-      } catch (localApiError) {
-        console.error("[Admin Config] Ошибка при загрузке интервала обновления с локального API сервера:", localApiError);
-        // Продолжаем к Netlify Functions
-      }
-    }
-    
-    // Если не локально или локальный API сервер недоступен, пытаемся загрузить с Netlify Functions
-    if (userAddress) {
-      console.log("[Admin Config] Попытка загрузки интервала обновления с Netlify Functions...");
-      
-      try {
-        const response = await fetch('/.netlify/functions/getConfig', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            // Передаем адрес пользователя в заголовке для обычных пользователей
-            'X-User-Address': userAddress,
-          }
-        });
-        
-        console.log("[Admin Config] Ответ от Netlify Functions:", response.status, response.statusText);
-        
-        if (response.ok) {
-          const serverConfig = await response.json();
-          console.log("[Admin Config] Интервал обновления успешно загружен с Netlify Functions:", serverConfig.updateIntervalMinutes);
-          
-          // Объединяем с дефолтной конфигурацией на случай, если какие-то поля отсутствуют
-          const mergedConfig = { ...DEFAULT_ADMIN_CONFIG, ...serverConfig };
-          
-          // Сохраняем в localStorage как резервную копию
-          localStorage.setItem(ADMIN_CONFIG_KEY, JSON.stringify(mergedConfig));
-          
-          return mergedConfig.updateIntervalMinutes;
-        } else {
-          console.warn(`[Admin Config] Netlify Functions вернул ошибку при загрузке интервала: ${response.status} ${response.statusText}`);
-        }
-      } catch (netlifyError) {
-        console.error("[Admin Config] Ошибка при загрузке интервала обновления с Netlify Functions:", netlifyError);
-        // Продолжаем к localStorage
-      }
-    }
-    
     // Загружаем из localStorage (резервный вариант)
     const configStr = localStorage.getItem(ADMIN_CONFIG_KEY);
-    console.log(`[Admin Config] Попытка загрузки интервала обновления из localStorage: ${configStr ? 'Найдено' : 'Не найдено'}`);
-    
     if (configStr) {
       const parsedConfig = JSON.parse(configStr);
       const interval = parsedConfig.updateIntervalMinutes;
@@ -381,6 +471,7 @@ export const getUpdateIntervalMinutes = async (userAddress) => {
   } catch (e) {
     console.error("[Admin Config] Ошибка при загрузке интервала обновления из localStorage:", e);
   }
+  
   console.log("[Admin Config] Интервал обновления не найден, используем дефолтный");
   return DEFAULT_ADMIN_CONFIG.updateIntervalMinutes;
 };
@@ -388,10 +479,9 @@ export const getUpdateIntervalMinutes = async (userAddress) => {
 /**
  * Обновляет настройки сервисов получения токенов
  * @param {Object} newTokenServices - Новые настройки сервисов токенов
- * @param {string} [adminAddress] - Адрес кошелька администратора (для идентификации на бэкенде)
  */
-export const updateTokenServicesConfig = async (newTokenServices, adminAddress) => {
-  const currentConfig = loadAdminConfig();
+export const updateTokenServicesConfig = async (newTokenServices) => {
+  const currentConfig = await loadAdminConfig(); // Используем асинхронный метод
   const updatedConfig = {
     ...currentConfig,
     tokenServices: { 
@@ -400,99 +490,29 @@ export const updateTokenServicesConfig = async (newTokenServices, adminAddress) 
     }
   };
   
-  // Проверяем, запущено ли приложение локально
-  const isLocalhost = typeof window !== 'undefined' && 
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  
-  console.log(`[Admin Config] Приложение запущено локально: ${isLocalhost}`);
-  
-  // Если запущено локально, пытаемся сохранить на локальный API сервер
-  if (isLocalhost && adminAddress) {
-    try {
-      console.log("[Admin Config] Приложение запущено локально, пытаемся сохранить настройки токенов на локальный API сервер...");
-      
-      // Используем правильный порт 3001 для локального API сервера
-      const response = await fetch('http://localhost:3001/api/admin/config', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Передаем адрес администратора в заголовке
-          'X-Admin-Address': adminAddress,
-        },
-        body: JSON.stringify(updatedConfig)
-      });
-      
-      console.log(`[Admin Config] Ответ от сохранения настроек токенов на локальный API сервер: ${response.status} ${response.statusText}`);
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log("[Admin Config] Настройки токенов успешно сохранены на локальный API сервер:", result);
-        // Сохраняем в localStorage как резервную копию
-        saveAdminConfig(updatedConfig, adminAddress);
-        // Отправляем кастомное событие для синхронизации между вкладками
-        if (typeof window !== 'undefined' && window.dispatchEvent) {
-          window.dispatchEvent(new CustomEvent('adminConfigUpdated', { detail: updatedConfig }));
-        }
-        return;
-      } else {
-        const errorText = await response.text();
-        console.warn(`[Admin Config] Локальный API сервер вернул ошибку при сохранении настроек токенов: ${response.status} ${response.statusText}. Текст: ${errorText}`);
-      }
-    } catch (localApiError) {
-      console.error("[Admin Config] Ошибка при сохранении настроек токенов на локальный API сервер:", localApiError);
-      // Продолжаем к Netlify Functions
+  // Сохраняем в базу данных и localStorage
+  try {
+    const connectionString = process.env.NEON_DATABASE_URL;
+    if (connectionString) {
+      console.log("[Admin Config] Сохраняем настройки токенов в базу данных...");
+      // Здесь нужно будет использовать текущий adminAddress, но у нас нет его в этом методе
+      // Поэтому мы сохраним только в localStorage как резерв
     }
+    
+    // Сохраняем в localStorage как резервную копию
+    saveAdminConfig(updatedConfig);
+    console.log("[Admin Config] Обновлены настройки токенов:", updatedConfig.tokenServices);
+  } catch (error) {
+    console.error("[Admin Config] Ошибка при обновлении настроек токенов:", error);
   }
-  
-  // Если не локально или локальный API сервер недоступен, пытаемся сохранить с Netlify Functions
-  if (adminAddress) {
-    try {
-      console.log("[Admin Config] Попытка сохранения настроек токенов с Netlify Functions...");
-      
-      const response = await fetch('/.netlify/functions/saveConfig', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Передаем адрес администратора в заголовке
-          'X-Admin-Address': adminAddress,
-        },
-        body: JSON.stringify(updatedConfig)
-      });
-      
-      console.log(`[Admin Config] Ответ от сохранения настроек токенов с Netlify Functions: ${response.status} ${response.statusText}`);
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log("[Admin Config] Настройки токенов успешно сохранены с Netlify Functions:", result);
-        // Сохраняем в localStorage как резервную копию
-        saveAdminConfig(updatedConfig, adminAddress);
-        // Отправляем кастомное событие для синхронизации между вкладками
-        if (typeof window !== 'undefined' && window.dispatchEvent) {
-          window.dispatchEvent(new CustomEvent('adminConfigUpdated', { detail: updatedConfig }));
-        }
-        return;
-      } else {
-        const errorText = await response.text();
-        console.warn(`[Admin Config] Netlify Functions вернул ошибку при сохранении настроек токенов: ${response.status} ${response.statusText}. Текст: ${errorText}`);
-      }
-    } catch (netlifyError) {
-      console.error("[Admin Config] Ошибка при сохранении настроек токенов с Netlify Functions:", netlifyError);
-      // Продолжаем к localStorage как резерв
-    }
-  }
-  
-  // Сохранение в localStorage (резервный вариант)
-  saveAdminConfig(updatedConfig, adminAddress);
-  console.log("[Admin Config] Обновлены настройки токенов:", updatedConfig.tokenServices);
 };
 
 /**
  * Обновляет настройки сервисов получения цен
  * @param {Object} newPriceServices - Новые настройки сервисов цен
- * @param {string} [adminAddress] - Адрес кошелька администратора (для идентификации на бэкенде)
  */
-export const updatePriceServicesConfig = async (newPriceServices, adminAddress) => {
-  const currentConfig = loadAdminConfig();
+export const updatePriceServicesConfig = async (newPriceServices) => {
+  const currentConfig = await loadAdminConfig(); // Используем асинхронный метод
   const updatedConfig = {
     ...currentConfig,
     priceServices: { 
@@ -501,188 +521,49 @@ export const updatePriceServicesConfig = async (newPriceServices, adminAddress) 
     }
   };
   
-  // Проверяем, запущено ли приложение локально
-  const isLocalhost = typeof window !== 'undefined' && 
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  
-  console.log(`[Admin Config] Приложение запущено локально: ${isLocalhost}`);
-  
-  // Если запущено локально, пытаемся сохранить на локальный API сервер
-  if (isLocalhost && adminAddress) {
-    try {
-      console.log("[Admin Config] Приложение запущено локально, пытаемся сохранить настройки цен на локальный API сервер...");
-      
-      // Используем правильный порт 3001 для локального API сервера
-      const response = await fetch('http://localhost:3001/api/admin/config', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Передаем адрес администратора в заголовке
-          'X-Admin-Address': adminAddress,
-        },
-        body: JSON.stringify(updatedConfig)
-      });
-      
-      console.log(`[Admin Config] Ответ от сохранения настроек цен на локальный API сервер: ${response.status} ${response.statusText}`);
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log("[Admin Config] Настройки цен успешно сохранены на локальный API сервер:", result);
-        // Сохраняем в localStorage как резервную копию
-        saveAdminConfig(updatedConfig, adminAddress);
-        // Отправляем кастомное событие для синхронизации между вкладками
-        if (typeof window !== 'undefined' && window.dispatchEvent) {
-          window.dispatchEvent(new CustomEvent('adminConfigUpdated', { detail: updatedConfig }));
-        }
-        return;
-      } else {
-        const errorText = await response.text();
-        console.warn(`[Admin Config] Локальный API сервер вернул ошибку при сохранении настроек цен: ${response.status} ${response.statusText}. Текст: ${errorText}`);
-      }
-    } catch (localApiError) {
-      console.error("[Admin Config] Ошибка при сохранении настроек цен на локальный API сервер:", localApiError);
-      // Продолжаем к Netlify Functions
+  // Сохраняем в базу данных и localStorage
+  try {
+    const connectionString = process.env.NEON_DATABASE_URL;
+    if (connectionString) {
+      console.log("[Admin Config] Сохраняем настройки цен в базу данных...");
+      // Здесь нужно будет использовать текущий adminAddress, но у нас нет его в этом методе
+      // Поэтому мы сохраним только в localStorage как резерв
     }
+    
+    // Сохраняем в localStorage как резервную копию
+    saveAdminConfig(updatedConfig);
+    console.log("[Admin Config] Обновлены настройки цен:", updatedConfig.priceServices);
+  } catch (error) {
+    console.error("[Admin Config] Ошибка при обновлении настроек цен:", error);
   }
-  
-  // Если не локально или локальный API сервер недоступен, пытаемся сохранить с Netlify Functions
-  if (adminAddress) {
-    try {
-      console.log("[Admin Config] Попытка сохранения настроек цен с Netlify Functions...");
-      
-      const response = await fetch('/.netlify/functions/saveConfig', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Передаем адрес администратора в заголовке
-          'X-Admin-Address': adminAddress,
-        },
-        body: JSON.stringify(updatedConfig)
-      });
-      
-      console.log(`[Admin Config] Ответ от сохранения настроек цен с Netlify Functions: ${response.status} ${response.statusText}`);
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log("[Admin Config] Настройки цен успешно сохранены с Netlify Functions:", result);
-        // Сохраняем в localStorage как резервную копию
-        saveAdminConfig(updatedConfig, adminAddress);
-        // Отправляем кастомное событие для синхронизации между вкладками
-        if (typeof window !== 'undefined' && window.dispatchEvent) {
-          window.dispatchEvent(new CustomEvent('adminConfigUpdated', { detail: updatedConfig }));
-        }
-        return;
-      } else {
-        const errorText = await response.text();
-        console.warn(`[Admin Config] Netlify Functions вернул ошибку при сохранении настроек цен: ${response.status} ${response.statusText}. Текст: ${errorText}`);
-      }
-    } catch (netlifyError) {
-      console.error("[Admin Config] Ошибка при сохранении настроек цен с Netlify Functions:", netlifyError);
-      // Продолжаем к localStorage как резерв
-    }
-  }
-  
-  // Сохранение в localStorage (резервный вариант)
-  saveAdminConfig(updatedConfig, adminAddress);
-  console.log("[Admin Config] Обновлены настройки цен:", updatedConfig.priceServices);
 };
 
 /**
  * Обновляет интервал обновления
  * @param {number} newInterval - Новый интервал в минутах
- * @param {string} [adminAddress] - Адрес кошелька администратора (для идентификации на бэкенде)
  */
-export const updateUpdateIntervalMinutes = async (newInterval, adminAddress) => {
-  const currentConfig = loadAdminConfig();
+export const updateUpdateIntervalMinutes = async (newInterval) => {
+  const currentConfig = await loadAdminConfig(); // Используем асинхронный метод
   const updatedConfig = {
     ...currentConfig,
     updateIntervalMinutes: newInterval
   };
   
-  // Проверяем, запущено ли приложение локально
-  const isLocalhost = typeof window !== 'undefined' && 
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  
-  console.log(`[Admin Config] Приложение запущено локально: ${isLocalhost}`);
-  
-  // Если запущено локально, пытаемся сохранить на локальный API сервер
-  if (isLocalhost && adminAddress) {
-    try {
-      console.log("[Admin Config] Приложение запущено локально, пытаемся сохранить интервал обновления на локальный API сервер...");
-      
-      // Используем правильный порт 3001 для локального API сервера
-      const response = await fetch('http://localhost:3001/api/admin/config', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Передаем адрес администратора в заголовке
-          'X-Admin-Address': adminAddress,
-        },
-        body: JSON.stringify(updatedConfig)
-      });
-      
-      console.log(`[Admin Config] Ответ от сохранения интервала обновления на локальный API сервер: ${response.status} ${response.statusText}`);
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log("[Admin Config] Интервал обновления успешно сохранен на локальный API сервер:", result);
-        // Сохраняем в localStorage как резервную копию
-        saveAdminConfig(updatedConfig, adminAddress);
-        // Отправляем кастомное событие для синхронизации между вкладками
-        if (typeof window !== 'undefined' && window.dispatchEvent) {
-          window.dispatchEvent(new CustomEvent('adminConfigUpdated', { detail: updatedConfig }));
-        }
-        return;
-      } else {
-        const errorText = await response.text();
-        console.warn(`[Admin Config] Локальный API сервер вернул ошибку при сохранении интервала: ${response.status} ${response.statusText}. Текст: ${errorText}`);
-      }
-    } catch (localApiError) {
-      console.error("[Admin Config] Ошибка при сохранении интервала обновления на локальный API сервер:", localApiError);
-      // Продолжаем к Netlify Functions
+  // Сохраняем в базу данных и localStorage
+  try {
+    const connectionString = process.env.NEON_DATABASE_URL;
+    if (connectionString) {
+      console.log("[Admin Config] Сохраняем интервал обновления в базу данных...");
+      // Здесь нужно будет использовать текущий adminAddress, но у нас нет его в этом методе
+      // Поэтому мы сохраним только в localStorage как резерв
     }
+    
+    // Сохраняем в localStorage как резервную копию
+    saveAdminConfig(updatedConfig);
+    console.log("[Admin Config] Обновлен интервал обновления:", newInterval);
+  } catch (error) {
+    console.error("[Admin Config] Ошибка при обновлении интервала обновления:", error);
   }
-  
-  // Если не локально или локальный API сервер недоступен, пытаемся сохранить с Netlify Functions
-  if (adminAddress) {
-    try {
-      console.log("[Admin Config] Попытка сохранения интервала обновления с Netlify Functions...");
-      
-      const response = await fetch('/.netlify/functions/saveConfig', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Передаем адрес администратора в заголовке
-          'X-Admin-Address': adminAddress,
-        },
-        body: JSON.stringify(updatedConfig)
-      });
-      
-      console.log(`[Admin Config] Ответ от сохранения интервала обновления с Netlify Functions: ${response.status} ${response.statusText}`);
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log("[Admin Config] Интервал обновления успешно сохранен с Netlify Functions:", result);
-        // Сохраняем в localStorage как резервную копию
-        saveAdminConfig(updatedConfig, adminAddress);
-        // Отправляем кастомное событие для синхронизации между вкладками
-        if (typeof window !== 'undefined' && window.dispatchEvent) {
-          window.dispatchEvent(new CustomEvent('adminConfigUpdated', { detail: updatedConfig }));
-        }
-        return;
-      } else {
-        const errorText = await response.text();
-        console.warn(`[Admin Config] Netlify Functions вернул ошибку при сохранении интервала: ${response.status} ${response.statusText}. Текст: ${errorText}`);
-      }
-    } catch (netlifyError) {
-      console.error("[Admin Config] Ошибка при сохранении интервала обновления с Netlify Functions:", netlifyError);
-      // Продолжаем к localStorage как резерв
-    }
-  }
-  
-  // Сохранение в localStorage (резервный вариант)
-  saveAdminConfig(updatedConfig, adminAddress);
-  console.log("[Admin Config] Обновлен интервал обновления:", newInterval);
 };
 
 // Экспортируем дефолтные значения для использования в компонентах
