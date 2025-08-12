@@ -5,3 +5,4 @@ node_modules
 .gitignore
 frontend/.env
 backend/.env
+backend/api/.env

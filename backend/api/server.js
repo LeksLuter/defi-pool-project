@@ -1,7 +1,15 @@
-// netlify/functions/getConfig.js
+// backend/api/server.js
+const express = require('express');
+const cors = require('cors');
 const { Client } = require('pg');
+const path = require('path');
+require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 3001;
 
 // === КОНСТАНТЫ ===
+const ADMIN_CONFIG_KEY = 'defiPool_adminConfig';
 const DEFAULT_ADMIN_CONFIG = {
   // Настройки сервисов получения токенов
   tokenServices: {
@@ -24,11 +32,11 @@ const DEFAULT_ADMIN_CONFIG = {
 };
 // === КОНЕЦ КОНСТАНТ ===
 
-// === ФУНКЦИИ РАБОТЫ С БАЗОЙ ДАННЫХ ===
-/**
- * Подключается к базе данных Neon
- * @returns {Promise<Client>} Клиент базы данных
- */
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Подключение к Neon
 const connectToNeon = async () => {
   if (!process.env.NEON_DATABASE_URL) {
     throw new Error('NEON_DATABASE_URL не установлен в переменных окружения');
@@ -46,9 +54,7 @@ const connectToNeon = async () => {
   return client;
 };
 
-/**
- * Создает таблицу admin_configs если она не существует
- */
+// Создание таблицы admin_configs если она не существует
 const createAdminConfigsTable = async () => {
   const client = await connectToNeon();
   try {
@@ -65,11 +71,7 @@ const createAdminConfigsTable = async () => {
   }
 };
 
-/**
- * Получает конфигурацию администратора из базы данных
- * @param {string} adminAddress Адрес администратора
- * @returns {Promise<Object>} Объект конфигурации
- */
+// Получение конфигурации администратора из базы данных
 const getAdminConfigFromDB = async (adminAddress) => {
   const client = await connectToNeon();
   try {
@@ -90,12 +92,8 @@ const getAdminConfigFromDB = async (adminAddress) => {
   }
 };
 
-/**
- * Сохраняет конфигурацию администратора в базу данных
- * @param {string} adminAddress Адрес администратора
- * @param {Object} config Объект конфигурации
- */
-const saveAdminConfigToDB = async (adminAddress, config) => {
+// Сохранение конфигурации администратора в базу данных
+const saveAdminConfigToDB = async (adminAddress, configData) => {
   const client = await connectToNeon();
   try {
     await client.query(
@@ -103,14 +101,13 @@ const saveAdminConfigToDB = async (adminAddress, config) => {
        VALUES ($1, $2, NOW()) 
        ON CONFLICT (address) 
        DO UPDATE SET config = $2, updated_at = NOW()`,
-      [adminAddress, config]
+      [adminAddress, configData]
     );
     console.log(`[API Server] Конфигурация сохранена в базе для адреса ${adminAddress}`);
   } finally {
     await client.end();
   }
 };
-// === КОНЕЦ ФУНКЦИЙ РАБОТЫ С БАЗОЙ ДАННЫХ ===
 
 // === ENDPOINTS ===
 // Health check endpoint
@@ -123,14 +120,21 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// GET /api/admin/config - Получить конфигурацию администратора
+
+// GET /api/admin/config - Получить конфигурацию администратора или пользователя
 app.get('/api/admin/config', async (req, res) => {
   const adminAddress = req.headers['x-admin-address'];
+  const userAddress = req.headers['x-user-address'];
   
-  console.log(`[API Server] GET /api/admin/config called with adminAddress: ${adminAddress}`);
+  console.log(`[API Server] GET /api/admin/config called with adminAddress: ${adminAddress}, userAddress: ${userAddress}`);
   
-  if (!adminAddress) {
-    return res.status(400).json({ error: 'Требуется заголовок X-Admin-Address' });
+  // Если нет адреса администратора, но есть адрес пользователя, используем его
+  const targetAddress = adminAddress || userAddress || 'default_user';
+  
+  // Если адрес пользователя не указан, это может быть запрос от обычного пользователя
+  if (!adminAddress && !userAddress) {
+    console.log('[API Server] Запрос без адреса пользователя, возвращаем дефолтную конфигурацию');
+    return res.status(200).json(DEFAULT_ADMIN_CONFIG);
   }
 
   try {
@@ -138,9 +142,9 @@ app.get('/api/admin/config', async (req, res) => {
     await createAdminConfigsTable();
     
     // Получаем конфигурацию из базы данных
-    const config = await getAdminConfigFromDB(adminAddress);
+    const config = await getAdminConfigFromDB(targetAddress);
     
-    console.log(`[API Server] Successfully retrieved config for ${adminAddress}`);
+    console.log(`[API Server] Successfully retrieved config for ${targetAddress}`);
     res.status(200).json(config);
   } catch (error) {
     console.error('[API Server] Error retrieving config:', error);
@@ -151,20 +155,30 @@ app.get('/api/admin/config', async (req, res) => {
   }
 });
 
-// POST /api/admin/config - Сохранить конфигурацию администратора
+// POST /api/admin/config - Сохранить конфигурацию администратора или пользователя
 app.post('/api/admin/config', async (req, res) => {
   const adminAddress = req.headers['x-admin-address'];
+  const userAddress = req.headers['x-user-address'];
   const configData = req.body;
   
-  console.log(`[API Server] POST /api/admin/config called with adminAddress: ${adminAddress}`);
-  console.log('[API Server] Config ', configData);
+  console.log(`[API Server] POST /api/admin/config called with adminAddress: ${adminAddress}, userAddress: ${userAddress}`);
+  console.log('[API Server] Config data:', configData);
   
-  if (!adminAddress) {
-    return res.status(400).json({ error: 'Требуется заголовок X-Admin-Address' });
+  // Для сохранения нужен адрес администратора
+  const targetAddress = adminAddress || userAddress;
+  
+  if (!targetAddress) {
+    console.warn('[API Server] X-Admin-Address or X-User-Address header is missing');
+    return res.status(400).json({ 
+      error: 'Требуется заголовок X-Admin-Address или X-User-Address' 
+    });
   }
 
   if (!configData || typeof configData !== 'object') {
-    return res.status(400).json({ error: 'Неверный формат данных конфигурации' });
+    console.warn('[API Server] Invalid config data format');
+    return res.status(400).json({ 
+      error: 'Неверный формат данных конфигурации' 
+    });
   }
 
   try {
@@ -172,12 +186,12 @@ app.post('/api/admin/config', async (req, res) => {
     await createAdminConfigsTable();
     
     // Сохраняем конфигурацию в базу данных
-    await saveAdminConfigToDB(adminAddress, configData);
+    await saveAdminConfigToDB(targetAddress, configData);
     
-    console.log(`[API Server] Successfully saved config for ${adminAddress}`);
+    console.log(`[API Server] Конфигурация успешно сохранена в базе для адреса ${targetAddress}`);
     res.status(200).json({ 
       message: 'Конфигурация сохранена в базе данных',
-      address: adminAddress
+      address: targetAddress
     });
   } catch (error) {
     console.error('[API Server] Error saving config:', error);
@@ -204,10 +218,34 @@ app.use((err, req, res, next) => {
 });
 // === КОНЕЦ ENDPOINTS ===
 
-module.exports = { 
-  connectToNeon, 
-  createAdminConfigsTable, 
-  getAdminConfigFromDB, 
-  saveAdminConfigToDB,
-  DEFAULT_ADMIN_CONFIG
+// === ЗАПУСК СЕРВЕРА ===
+const startServer = async () => {
+  try {
+    // Проверяем наличие NEON_DATABASE_URL
+    if (!process.env.NEON_DATABASE_URL) {
+      console.warn('[API Server] WARNING: NEON_DATABASE_URL not set in environment variables');
+      console.warn('[API Server] Please set NEON_DATABASE_URL in your .env file');
+    } else {
+      console.log('[API Server] NEON_DATABASE_URL is set');
+    }
+    
+    // Создаем таблицу при запуске сервера
+    await createAdminConfigsTable();
+    
+    app.listen(PORT, () => {
+      console.log(`[API Server] Локальный API сервер запущен на порту ${PORT}`);
+      console.log(`[API Server] Health check endpoint: http://localhost:${PORT}/api/health`);
+      console.log(`[API Server] Admin config endpoints:`);
+      console.log(`[API Server]   GET  http://localhost:${PORT}/api/admin/config`);
+      console.log(`[API Server]   POST http://localhost:${PORT}/api/admin/config`);
+    });
+  } catch (error) {
+    console.error('[API Server] Failed to start server:', error);
+    process.exit(1);
+  }
 };
+
+startServer();
+// === КОНЕЦ ЗАПУСКА СЕРВЕРА ===
+
+module.exports = app;

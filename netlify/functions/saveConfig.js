@@ -2,118 +2,90 @@
 const { Client } = require('pg');
 
 exports.handler = async (event, context) => {
-  console.log("=== saveConfig Function Called ===");
-  console.log("Full Event Object:", JSON.stringify(event, null, 2)); // Логируем весь event
-
   try {
-    console.log("Headers received:", event.headers);
-    console.log("Body received:", event.body);
-
-    const adminAddress = event.headers['x-admin-address'] || event.headers['X-Admin-Address'];
-    console.log("Admin Address extracted:", adminAddress);
-
+    console.log("=== saveConfig Function Called ===");
+    console.log("Headers:", event.headers);
+    console.log("Body:", event.body);
+    
+    const adminAddress = event.headers['x-admin-address'];
+    console.log("Admin Address:", adminAddress);
+    
     if (!adminAddress) {
-      console.error("X-Admin-Address header is missing or empty");
       return {
         statusCode: 400,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Address', // Убедитесь, что заголовок разрешен
+          'Access-Control-Allow-Origin': '*'
         },
-        body: JSON.stringify({ error: 'Требуется заголовок X-Admin-Address' })
+        body: JSON.stringify({ 
+          error: 'Требуется заголовок X-Admin-Address' 
+        })
       };
     }
 
-    if (!event.body) {
-      console.error("Request body is missing");
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Address',
-        },
-        body: JSON.stringify({ error: 'Тело запроса отсутствует' })
-      };
-    }
-
-    let configData;
-    try {
-      configData = JSON.parse(event.body);
-      console.log("Parsed config data:", configData);
-    } catch (parseError) {
-      console.error("Failed to parse request body as JSON:", parseError.message);
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Address',
-        },
-        body: JSON.stringify({ error: 'Неверный формат JSON в теле запроса' })
-      };
-    }
+    // Парсим тело запроса
+    const configData = JSON.parse(event.body);
+    console.log("Config Data to Save:", configData);
 
     if (!process.env.NEON_DATABASE_URL) {
-      console.error("NEON_DATABASE_URL environment variable is not set");
+      console.error("NEON_DATABASE_URL не установлен");
       return {
         statusCode: 500,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Address',
+          'Access-Control-Allow-Origin': '*'
         },
-        body: JSON.stringify({ error: 'Серверная ошибка: База данных не настроена' })
+        body: JSON.stringify({ 
+          error: 'База данных не настроена' 
+        })
       };
     }
 
+    // Подключение к Neon
     const client = new Client({
       connectionString: process.env.NEON_DATABASE_URL,
-      ssl: { rejectUnauthorized: false }
+      ssl: {
+        rejectUnauthorized: false
+      }
     });
 
     await client.connect();
-    console.log("Connected to Neon DB");
+    console.log("Подключение к Neon для сохранения успешно");
 
-    // Логируем SQL-запрос перед выполнением
-    console.log("Executing query for address:", adminAddress);
-    const queryText = `INSERT INTO admin_configs (address, config, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (address) DO UPDATE SET config = $2, updated_at = NOW()`;
-    const queryParams = [adminAddress, configData];
-    console.log("Query text:", queryText);
-    console.log("Query params:", queryParams);
-
-    await client.query(queryText, queryParams);
+    // Сохраняем конфигурацию в базу данных
+    await client.query(
+      `INSERT INTO admin_configs (address, config, updated_at) 
+       VALUES ($1, $2, NOW()) 
+       ON CONFLICT (address) 
+       DO UPDATE SET config = $2, updated_at = NOW()`,
+      [adminAddress, configData]
+    );
 
     await client.end();
-    console.log("Configuration saved successfully for address:", adminAddress);
 
+    console.log("Конфигурация успешно сохранена в базе для адреса:", adminAddress);
+    
     return {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Address', // Добавляем разрешение заголовков
+        'Access-Control-Allow-Origin': '*'
       },
-      body: JSON.stringify({ message: 'Конфигурация сохранена в базе данных', address: adminAddress })
+      body: JSON.stringify({ 
+        message: 'Конфигурация сохранена в базе данных',
+        address: adminAddress
+      })
     };
-
   } catch (error) {
-    console.error("Detailed error in saveConfig:", error);
-    // Логируем стек вызовов для лучшего понимания ошибки
-    console.error("Error stack:", error.stack);
-
+    console.error("Ошибка в saveConfig:", error);
     return {
       statusCode: 500,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Address',
+        'Access-Control-Allow-Origin': '*'
       },
-      body: JSON.stringify({
-        error: 'Внутренняя ошибка сервера при сохранении конфигурации',
-        // Включаем детали ошибки только для отладки, не в продакшене!
-        // details: error.message // Убрать в продакшене
+      body: JSON.stringify({ 
+        error: 'Внутренняя ошибка сервера: ' + error.message 
       })
     };
   }
