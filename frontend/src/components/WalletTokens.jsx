@@ -60,8 +60,7 @@ const WalletTokens = () => {
   useEffect(() => {
     const loadUpdateInterval = async () => {
       try {
-        // При загрузке интервала используем account для идентификации пользователя
-        const intervalMinutes = await getUpdateIntervalMinutes(account);
+        const intervalMinutes = await getUpdateIntervalMinutes();
         console.log(`[WalletTokens] Загружен интервал обновления: ${intervalMinutes} минут`);
         setEffectiveUpdateIntervalMinutes(intervalMinutes);
       } catch (error) {
@@ -70,11 +69,8 @@ const WalletTokens = () => {
       }
     };
 
-    // Проверяем, что account доступен
-    if (account) {
-      loadUpdateInterval();
-    }
-  }, [account]);
+    loadUpdateInterval();
+  }, []);
   // === КОНЕЦ ЭФФЕКТА ===
 
   // Функция для обновления токенов конкретной сети
@@ -161,15 +157,14 @@ const WalletTokens = () => {
         return;
       }
       
-      // Помечаем сеть как загруженную
       loadedNetworks.current.add(chainId);
       console.log("[WalletTokens] Начальное получение токенов для текущей сети...");
       
       // Получаем токены только для текущей сети
       try {
         await updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef);
-      } catch (error) {
-        console.error("[WalletTokens] Ошибка в initializeTokens:", error);
+      } catch (err) {
+        console.error("[WalletTokens] Ошибка в initializeTokens:", err);
         // Если ошибка, пытаемся получить только для текущей сети
         updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef);
       }
@@ -208,8 +203,8 @@ const WalletTokens = () => {
       try {
         // Не показываем UI загрузки для фонового обновления
         await updateTokens(account, provider, setTokens, null, null, chainId, { current: true });
-      } catch (error) {
-        console.error("[WalletTokens] Ошибка при фоновом обновлении токенов:", error);
+      } catch (err) {
+        console.error("[WalletTokens] Ошибка при фоновом обновлении токенов:", err);
         // Ошибки фонового обновления не отображаем пользователю
       }
     }, clampedIntervalMs);
@@ -272,8 +267,8 @@ const WalletTokens = () => {
           const shouldShow = balance > 0;
           console.log(`[WalletTokens] Токен ${token.symbol} баланс: ${balance}, показать: ${shouldShow}`);
           return shouldShow;
-        } catch (error) {
-          console.error(`[WalletTokens] Ошибка при парсинге баланса токена ${token.symbol}:`, error);
+        } catch (err) {
+          console.error(`[WalletTokens] Ошибка при парсинге баланса токена ${token.symbol}:`, err);
           return true; // Если ошибка, показываем токен
         }
       });
@@ -297,8 +292,8 @@ const WalletTokens = () => {
           const shouldShow = totalValueUSD >= MIN_TOKEN_VALUE_USD;
           console.log(`[WalletTokens] Токен ${token.symbol} стоимость: $${totalValueUSD.toFixed(2)}, показать: ${shouldShow}`);
           return shouldShow;
-        } catch (error) {
-          console.error(`[WalletTokens] Ошибка при расчете стоимости токена ${token.symbol}:`, error);
+        } catch (err) {
+          console.error(`[WalletTokens] Ошибка при расчете стоимости токена ${token.symbol}:`, err);
           return true; // Если ошибка, показываем токен
         }
       });
@@ -323,8 +318,8 @@ const WalletTokens = () => {
 
         // Если стоимость одинаковая, сортируем по символу (возрастание)
         return a.symbol.localeCompare(b.symbol);
-      } catch (error) {
-        console.error("[WalletTokens] Ошибка при сортировке токенов:", error);
+      } catch (err) {
+        console.error("[WalletTokens] Ошибка при сортировке токенов:", err);
         return 0; // Не меняем порядок в случае ошибки
       }
     });
@@ -386,10 +381,10 @@ const WalletTokens = () => {
             // Помечаем сеть как загруженную
             loadedNetworks.current.add(chainIdToToggle);
           }
-        } catch (error) {
-          console.error(`[WalletTokens] Ошибка при загрузке токенов для сети ${chainIdToToggle}:`, error);
+        } catch (err) {
+          console.error(`[WalletTokens] Ошибка при загрузке токенов для сети ${chainIdToToggle}:`, err);
           if (setError && isMountedRef.current) {
-            setError(`Не удалось загрузить токены для сети ${chainIdToToggle}: ${error.message || 'Неизвестная ошибка'}`);
+            setError(`Не удалось загрузить токены для сети ${chainIdToToggle}: ${err.message || 'Неизвестная ошибка'}`);
           }
           if (setLoading && isMountedRef.current) {
             setLoading(false);
@@ -407,8 +402,8 @@ const WalletTokens = () => {
     try {
       await navigator.clipboard.writeText(text);
       console.log("[WalletTokens] Адрес скопирован в буфер обмена");
-    } catch (error) {
-      console.error('[WalletTokens] Ошибка при копировании: ', error);
+    } catch (err) {
+      console.error('[WalletTokens] Ошибка при копировании: ', err);
     }
   };
   // === КОНЕЦ ОБРАБОТЧИКА КОПИРОВАНИЯ ===
@@ -553,7 +548,7 @@ const WalletTokens = () => {
                 title="Открыть в эксплорере"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd" />
+                  <path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 10-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd" />
                 </svg>
               </button>
             </td>

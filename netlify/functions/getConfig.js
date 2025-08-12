@@ -95,7 +95,7 @@ const getAdminConfigFromDB = async (adminAddress) => {
  * @param {string} adminAddress Адрес администратора
  * @param {Object} config Объект конфигурации
  */
-const saveAdminConfigToDB = async (adminAddress, configData) => {
+const saveAdminConfigToDB = async (adminAddress, config) => {
   const client = await connectToNeon();
   try {
     await client.query(
@@ -103,7 +103,7 @@ const saveAdminConfigToDB = async (adminAddress, configData) => {
        VALUES ($1, $2, NOW()) 
        ON CONFLICT (address) 
        DO UPDATE SET config = $2, updated_at = NOW()`,
-      [adminAddress, configData]
+      [adminAddress, config]
     );
     console.log(`[API Server] Конфигурация сохранена в базе для адреса ${adminAddress}`);
   } finally {
@@ -112,82 +112,102 @@ const saveAdminConfigToDB = async (adminAddress, configData) => {
 };
 // === КОНЕЦ ФУНКЦИЙ РАБОТЫ С БАЗОЙ ДАННЫХ ===
 
-// === ОСНОВНАЯ ФУНКЦИЯ HANDLER ===
-exports.handler = async (event, context) => {
+// === ENDPOINTS ===
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  console.log('[API Server] Health check endpoint called');
+  res.status(200).json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    message: 'Локальный API сервер работает'
+  });
+});
+
+// GET /api/admin/config - Получить конфигурацию администратора
+app.get('/api/admin/config', async (req, res) => {
+  const adminAddress = req.headers['x-admin-address'];
+  
+  console.log(`[API Server] GET /api/admin/config called with adminAddress: ${adminAddress}`);
+  
+  if (!adminAddress) {
+    return res.status(400).json({ error: 'Требуется заголовок X-Admin-Address' });
+  }
+
   try {
-    console.log("=== getConfig Function Called ===");
-    console.log("Headers:", event.headers);
-    
-    const adminAddress = event.headers['x-admin-address'];
-    const userAddress = event.headers['x-user-address'];
-    
-    console.log("Admin Address:", adminAddress);
-    console.log("User Address:", userAddress);
-    
-    // Если есть адрес администратора, используем его
-    const targetAddress = adminAddress || userAddress;
-    
-    if (!targetAddress) {
-      console.warn('[API Server] X-Admin-Address or X-User-Address header is missing');
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        },
-        body: JSON.stringify({ 
-          error: 'Требуется заголовок X-Admin-Address или X-User-Address' 
-        })
-      };
-    }
-
-    // Проверяем переменные окружения
-    console.log("NEON_DATABASE_URL:", process.env.NEON_DATABASE_URL ? "SET" : "NOT SET");
-    
-    if (!process.env.NEON_DATABASE_URL) {
-      console.error("NEON_DATABASE_URL не установлен");
-      return {
-        statusCode: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        },
-        body: JSON.stringify({ 
-          error: 'База данных не настроена: NEON_DATABASE_URL отсутствует' 
-        })
-      };
-    }
-
     // Создаем таблицу если она не существует
     await createAdminConfigsTable();
     
-    // Пытаемся получить конфигурацию из базы данных
-    const result = await getAdminConfigFromDB(targetAddress);
-
-    console.log("Конфигурация найдена в базе:", result);
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      },
-      body: JSON.stringify(result)
-    };
-  } catch (error) {
-    console.error("Ошибка в getConfig:", error);
-    console.error("Стек ошибки:", error.stack);
+    // Получаем конфигурацию из базы данных
+    const config = await getAdminConfigFromDB(adminAddress);
     
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      },
-      body: JSON.stringify({ 
-        error: 'Внутренняя ошибка сервера: ' + error.message,
-        stack: error.stack
-      })
-    };
+    console.log(`[API Server] Successfully retrieved config for ${adminAddress}`);
+    res.status(200).json(config);
+  } catch (error) {
+    console.error('[API Server] Error retrieving config:', error);
+    res.status(500).json({ 
+      error: 'Внутренняя ошибка сервера при получении конфигурации',
+      details: error.message
+    });
   }
+});
+
+// POST /api/admin/config - Сохранить конфигурацию администратора
+app.post('/api/admin/config', async (req, res) => {
+  const adminAddress = req.headers['x-admin-address'];
+  const configData = req.body;
+  
+  console.log(`[API Server] POST /api/admin/config called with adminAddress: ${adminAddress}`);
+  console.log('[API Server] Config ', configData);
+  
+  if (!adminAddress) {
+    return res.status(400).json({ error: 'Требуется заголовок X-Admin-Address' });
+  }
+
+  if (!configData || typeof configData !== 'object') {
+    return res.status(400).json({ error: 'Неверный формат данных конфигурации' });
+  }
+
+  try {
+    // Создаем таблицу если она не существует
+    await createAdminConfigsTable();
+    
+    // Сохраняем конфигурацию в базу данных
+    await saveAdminConfigToDB(adminAddress, configData);
+    
+    console.log(`[API Server] Successfully saved config for ${adminAddress}`);
+    res.status(200).json({ 
+      message: 'Конфигурация сохранена в базе данных',
+      address: adminAddress
+    });
+  } catch (error) {
+    console.error('[API Server] Error saving config:', error);
+    res.status(500).json({ 
+      error: 'Внутренняя ошибка сервера при сохранении конфигурации',
+      details: error.message
+    });
+  }
+});
+
+// Обработчик для всех остальных маршрутов
+app.use('*', (req, res) => {
+  console.log(`[API Server] Route not found: ${req.originalUrl}`);
+  res.status(404).json({ error: 'Маршрут не найден' });
+});
+
+// Обработчик ошибок
+app.use((err, req, res, next) => {
+  console.error('[API Server] Unhandled error:', err);
+  res.status(500).json({ 
+    error: 'Внутренняя ошибка сервера',
+    details: err.message
+  });
+});
+// === КОНЕЦ ENDPOINTS ===
+
+module.exports = { 
+  connectToNeon, 
+  createAdminConfigsTable, 
+  getAdminConfigFromDB, 
+  saveAdminConfigToDB,
+  DEFAULT_ADMIN_CONFIG
 };
-// === КОНЕЦ ОСНОВНОЙ ФУНКЦИИ HANDLER ===
