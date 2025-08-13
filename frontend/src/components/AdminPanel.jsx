@@ -138,56 +138,56 @@ const AdminPanel = () => {
   };
 
   // === ФУНКЦИИ ДЛЯ СОХРАНЕНИЯ НАСТРОЕК ===
-  const saveServiceSettings = async () => {
-    if (!account) {
-        setStatus('Ошибка: Адрес администратора не определен.');
-        return;
-    }
-    setIsLoading(true);
-    setStatus('Сохранение настроек сервисов...');
-    try {
-      const configToSave = {
-        // Загружаем текущую конфигурацию (на случай, если интервал был изменен в другом месте)
-        ...(await loadAdminConfig(account)),
-        tokenServices: servicesConfig.tokenServices,
-        priceServices: servicesConfig.priceServices,
-      };
-      // Передаем адрес администратора
-      await saveAdminConfig(configToSave, account);
-      setStatus('Настройки сервисов сохранены!');
-    } catch (error) {
-      console.error("Ошибка при сохранении настроек сервисов:", error);
-      setStatus('Ошибка при сохранении настроек сервисов.');
-    } finally {
-        setIsLoading(false);
-    }
-  };
+const saveServiceSettings = async () => {
+  if (!account) {
+    setStatus('Ошибка: Адрес администратора не определен.');
+    return;
+  }
+  setIsLoading(true);
+  setStatus('Сохранение настроек сервисов...');
+  try {
+    const configToSave = {
+      // Загружаем текущую конфигурацию (на случай, если интервал был изменен в другом месте)
+      ...(await loadAdminConfig(account)), // Передаем адрес администратора
+      tokenServices: servicesConfig.tokenServices,
+      priceServices: servicesConfig.priceServices,
+    };
+    // Передаем адрес администратора при сохранении
+    await saveAdminConfig(configToSave, account);
+    setStatus('Настройки сервисов сохранены!');
+  } catch (error) {
+    console.error("Ошибка при сохранении настроек сервисов:", error);
+    setStatus('Ошибка при сохранении настроек сервисов.');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
-  const saveUpdateInterval = async () => {
-     if (!account) {
-        setStatus('Ошибка: Адрес администратора не определен.');
-        return;
-    }
-    if (updateInterval <= 0) {
-      setStatus('Пожалуйста, введите положительное значение интервала.');
-      return;
-    }
-    setIsLoading(true);
-    setStatus('Сохранение интервала обновления...');
-    try {
-      // Загружаем текущую конфигурацию, обновляем только интервал
-       const currentConfig = await loadAdminConfig(account);
-       const newConfig = { ...currentConfig, updateIntervalMinutes: updateInterval };
-       // Передаем адрес администратора
-       await saveAdminConfig(newConfig, account);
-      setStatus(`Настройки сохранены! Интервал обновления: ${updateInterval} минут.`);
-    } catch (error) {
-      console.error("Ошибка при сохранении настроек:", error);
-      setStatus('Ошибка при сохранении настроек.');
-    } finally {
-        setIsLoading(false);
-    }
-  };
+const saveUpdateInterval = async () => {
+  if (!account) {
+    setStatus('Ошибка: Адрес администратора не определен.');
+    return;
+  }
+  if (updateInterval <= 0) {
+    setStatus('Пожалуйста, введите положительное значение интервала.');
+    return;
+  }
+  setIsLoading(true);
+  setStatus('Сохранение интервала обновления...');
+  try {
+    // Загружаем текущую конфигурацию, обновляем только интервал
+    const currentConfig = await loadAdminConfig(account); // Передаем адрес администратора
+    const newConfig = { ...currentConfig, updateIntervalMinutes: updateInterval };
+    // Передаем адрес администратора при сохранении
+    await saveAdminConfig(newConfig, account);
+    setStatus(`Настройки сохранены! Интервал обновления: ${updateInterval} минут.`);
+  } catch (error) {
+    console.error("Ошибка при сохранении настроек:", error);
+    setStatus('Ошибка при сохранении настроек.');
+  } finally {
+    setIsLoading(false);
+  }
+};
   // === КОНЕЦ ФУНКЦИЙ ДЛЯ СОХРАНЕНИЯ НАСТРОЕК ===
 
   // Если пользователь не админ, не показываем панель
