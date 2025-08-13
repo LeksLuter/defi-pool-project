@@ -1,7 +1,7 @@
 // frontend/src/context/Web3Context.jsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-// Явно импортируем BrowserProvider из ethers.js v6
-import { BrowserProvider } from 'ethers';
+// Для ethers.js v5 используем Web3Provider
+import { ethers } from 'ethers';
 
 // Создаем контекст Web3
 const Web3Context = createContext();
@@ -52,13 +52,13 @@ export const Web3Provider = ({ children }) => {
 
       console.log('[Web3 Context] Создание провайдера ethers...');
       
-      // Создаем провайдер ethers.js v6
-      // Используем импортированный BrowserProvider напрямую
-      const web3Provider = new BrowserProvider(window.ethereum);
+      // Создаем провайдер ethers.js v5
+      // Используем ethers.providers.Web3Provider
+      const web3Provider = new ethers.providers.Web3Provider(window.ethereum);
       
       console.log('[Web3 Context] Получение signer...');
       // Получаем signer (подписывающее лицо)
-      const web3Signer = await web3Provider.getSigner();
+      const web3Signer = web3Provider.getSigner();
 
       // Обновляем состояние
       setProvider(web3Provider);
