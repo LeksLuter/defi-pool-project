@@ -1,14 +1,199 @@
 // frontend/src/components/AdminPanel.jsx
 import React, { useState, useEffect } from 'react';
 import { useWeb3 } from '../context/Web3Context';
-import { saveAdminConfig, loadAdminConfig } from '../config/adminConfig';
+import { saveAdminConfig, loadAdminConfig } from '../services/adminConfig'; // Убедитесь, что путь правильный
 
 const AdminPanel = () => {
   const { isAdmin, account } = useWeb3();
   const [servicesConfig, setServicesConfig] = useState({ tokenServices: {}, priceServices: {} });
-  const [updateInterval, setUpdateInterval] = useState(10);
+  const [updateInterval, setUpdateInterval] = useState(5); // Дефолтное значение из DEFAULT_ADMIN_CONFIG
   const [status, setStatus] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // === НОВЫЕ СОСТОЯНИЯ ДЛЯ УПРАВЛЕНИЯ АДМИНИСТРАТОРАМИ ===
+  const [adminsList, setAdminsList] = useState([]);
+  const [newAdminAddress, setNewAdminAddress] = useState('');
+  const [isLoadingAdmins, setIsLoadingAdmins] = useState(false);
+  const [adminActionStatus, setAdminActionStatus] = useState('');
+  // === КОНЕЦ НОВЫХ СОСТОЯНИЙ ===
+
+  // === ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ АДМИНИСТРАТОРАМИ ===
+
+  const fetchAdminsList = async () => {
+    if (!account) return;
+
+    setIsLoadingAdmins(true);
+    setAdminActionStatus('Загрузка списка администраторов...');
+    try {
+      console.log(`[Admin Panel] Загрузка списка администраторов для ${account}...`);
+
+      // Определяем URL для API
+      let apiUrl = '';
+      if (typeof window !== 'undefined') {
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (isLocalhost) {
+          apiUrl = 'http://localhost:3001/api/admins';
+        } else {
+          // Предполагаемая функция Netlify
+          // !!! ВАЖНО: Убедитесь, что эта Netlify Function существует
+          apiUrl = '/.netlify/functions/getAdmins';
+        }
+      } else {
+        // Для SSR
+        // !!! ВАЖНО: Убедитесь, что эта Netlify Function существует
+        apiUrl = '/.netlify/functions/getAdmins';
+      }
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Address': account,
+        },
+        signal: AbortSignal.timeout(10000)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAdminsList(data.admins || []);
+        setAdminActionStatus('Список администраторов загружен.');
+      } else if (response.status === 403) {
+        setAdminActionStatus('Ошибка: Доступ запрещен.');
+      } else {
+        const errorText = await response.text();
+        setAdminActionStatus(`Ошибка при загрузке админов: ${errorText}`);
+      }
+    } catch (e) {
+      console.error("[Admin Panel] Ошибка при загрузке списка администраторов:", e);
+      setAdminActionStatus('Ошибка сети при загрузке списка администраторов.');
+    } finally {
+      setIsLoadingAdmins(false);
+    }
+  };
+
+  const addAdmin = async () => {
+    if (!account || !newAdminAddress) {
+      setAdminActionStatus('Ошибка: Не указан адрес нового администратора.');
+      return;
+    }
+
+    setIsLoadingAdmins(true);
+    setAdminActionStatus('Добавление администратора...');
+    try {
+      console.log(`[Admin Panel] Добавление администратора ${newAdminAddress} админом ${account}...`);
+
+      // Определяем URL для API
+      let apiUrl = '';
+      if (typeof window !== 'undefined') {
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (isLocalhost) {
+          apiUrl = 'http://localhost:3001/api/admins';
+        } else {
+          // Предполагаемая функция Netlify
+          // !!! ВАЖНО: Убедитесь, что эта Netlify Function существует
+          apiUrl = '/.netlify/functions/addAdmin';
+        }
+      } else {
+        // Для SSR
+        // !!! ВАЖНО: Убедитесь, что эта Netlify Function существует
+        apiUrl = '/.netlify/functions/addAdmin';
+      }
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Address': account,
+        },
+        body: JSON.stringify({ newAdminAddress }),
+        signal: AbortSignal.timeout(10000)
+      });
+
+      if (response.ok) {
+        setAdminActionStatus(`Администратор ${newAdminAddress} успешно добавлен.`);
+        setNewAdminAddress(''); // Очищаем поле ввода
+        // Обновляем список
+        await fetchAdminsList();
+      } else if (response.status === 403) {
+        setAdminActionStatus('Ошибка: Доступ запрещен.');
+      } else {
+        const errorText = await response.text();
+        setAdminActionStatus(`Ошибка при добавлении админа: ${errorText}`);
+      }
+    } catch (e) {
+      console.error("[Admin Panel] Ошибка при добавлении администратора:", e);
+      setAdminActionStatus('Ошибка сети при добавлении администратора.');
+    } finally {
+      setIsLoadingAdmins(false);
+    }
+  };
+
+  const removeAdmin = async (addressToRemove) => {
+    if (!account || !addressToRemove) return;
+
+    const confirmRemoval = window.confirm(`Вы уверены, что хотите удалить администратора ${addressToRemove}?`);
+    if (!confirmRemoval) return;
+
+    setIsLoadingAdmins(true);
+    setAdminActionStatus(`Удаление администратора ${addressToRemove}...`);
+    try {
+      console.log(`[Admin Panel] Удаление администратора ${addressToRemove} админом ${account}...`);
+
+      // Определяем URL для API
+      let apiUrl = '';
+      if (typeof window !== 'undefined') {
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (isLocalhost) {
+          // Для локального API используем DELETE с параметром в URL
+          apiUrl = `http://localhost:3001/api/admins/${encodeURIComponent(addressToRemove)}`;
+        } else {
+          // Для Netlify Functions можно использовать query param
+          // или создать функцию, которая обрабатывает DELETE /.netlify/functions/removeAdmin/:address
+          // Здесь используем query param
+          // !!! ВАЖНО: Убедитесь, что эта Netlify Function существует и обрабатывает query param
+          apiUrl = `/.netlify/functions/removeAdmin?address=${encodeURIComponent(addressToRemove)}`;
+        }
+      } else {
+        // Для SSR
+        // !!! ВАЖНО: Убедитесь, что эта Netlify Function существует
+        apiUrl = `/.netlify/functions/removeAdmin?address=${encodeURIComponent(addressToRemove)}`;
+      }
+
+      const response = await fetch(apiUrl, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Address': account,
+        },
+        signal: AbortSignal.timeout(10000)
+      });
+
+      if (response.ok) {
+        setAdminActionStatus(`Администратор ${addressToRemove} успешно удален.`);
+        // Обновляем список
+        await fetchAdminsList();
+      } else if (response.status === 403) {
+        setAdminActionStatus('Ошибка: Доступ запрещен.');
+      } else {
+        const errorText = await response.text();
+        setAdminActionStatus(`Ошибка при удалении админа: ${errorText}`);
+      }
+    } catch (e) {
+      console.error("[Admin Panel] Ошибка при удалении администратора:", e);
+      setAdminActionStatus('Ошибка сети при удалении администратора.');
+    } finally {
+      setIsLoadingAdmins(false);
+    }
+  };
+
+  // Загружаем список админов при монтировании компонента (если пользователь админ)
+  useEffect(() => {
+    if (isAdmin) {
+      fetchAdminsList();
+    }
+  }, [isAdmin, account]); // Зависимости
+
+  // === КОНЕЦ ФУНКЦИЙ ДЛЯ УПРАВЛЕНИЯ АДМИНИСТРАТОРАМИ ===
 
   // === ЗАГРУЗКА НАСТРОЕК ИЗ БД ===
   useEffect(() => {
@@ -21,8 +206,8 @@ const AdminPanel = () => {
       setIsLoading(true);
       setStatus('Загрузка настроек...');
       try {
-        // Передаем адрес администратора
-        const config = await loadAdminConfig(account);
+        // Передаем адрес администратора и флаг, что это админка
+        const config = await loadAdminConfig(account, null, true);
         setServicesConfig({
           tokenServices: config.tokenServices,
           priceServices: config.priceServices,
@@ -31,7 +216,11 @@ const AdminPanel = () => {
         setStatus('Настройки загружены.');
       } catch (e) {
         console.error("Ошибка при загрузке конфигурации:", e);
-        setStatus('Ошибка при загрузке настроек.');
+        if (e.message && e.message.includes('Доступ запрещен')) {
+            setStatus(`Ошибка: ${e.message}`);
+        } else {
+            setStatus('Ошибка при загрузке настроек.');
+        }
       } finally {
         setIsLoading(false);
       }
@@ -39,155 +228,55 @@ const AdminPanel = () => {
 
     fetchConfig();
   }, [isAdmin, account]);
-
-  // === ОБРАБОТКА СОБЫТИЙ storage ДЛЯ СИНХРОНИЗАЦИИ МЕЖДУ ВКЛАДКАМИ ===
-  useEffect(() => {
-    if (!isAdmin) return;
-
-    const handleStorageChange = (e) => {
-      if (e.key === 'defiPool_adminConfig' && e.newValue) {
-        try {
-          const newConfig = JSON.parse(e.newValue);
-          setServicesConfig({
-            tokenServices: newConfig.tokenServices || {},
-            priceServices: newConfig.priceServices || {},
-          });
-          setUpdateInterval(newConfig.updateIntervalMinutes || 10);
-          setStatus('Настройки синхронизированы с другой вкладкой.');
-          // Очищаем статус через 3 секунды
-          setTimeout(() => setStatus(''), 3000);
-        } catch (err) {
-          console.error("Ошибка при парсинге adminConfig из storage event:", err);
-        }
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-
-    // Обработка кастомного события adminConfigUpdated (внутри одной вкладки)
-    const handleCustomEvent = (e) => {
-        try {
-            const newConfig = e.detail;
-             setServicesConfig({
-                tokenServices: newConfig.tokenServices || {},
-                priceServices: newConfig.priceServices || {},
-            });
-            setUpdateInterval(newConfig.updateIntervalMinutes || 10);
-            setStatus('Настройки обновлены.');
-            // Очищаем статус через 3 секунды
-            setTimeout(() => setStatus(''), 3000);
-        } catch (err) {
-            console.error("Ошибка при обработке кастомного события adminConfigUpdated:", err);
-        }
-    };
-
-    window.addEventListener('adminConfigUpdated', handleCustomEvent);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('adminConfigUpdated', handleCustomEvent);
-    };
-  }, [isAdmin]);
-
-  const copyToClipboard = async (text, label) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setStatus(`Адрес ${label} скопирован в буфер обмена`);
-    } catch (err) {
-      console.error('Ошибка при копировании: ', err);
-      setStatus('Ошибка при копировании адреса');
-    }
-  };
-
-  const handleDeployFactory = () => {
-    setStatus('Функция деплоя фабрики будет реализована');
-  };
-
-  const handleDeployVault = () => {
-    setStatus('Функция деплоя хранилища будет реализована');
-  };
-
-  const handleIntervalChange = (e) => {
-    const value = parseInt(e.target.value, 10);
-    if (!isNaN(value) && value > 0) {
-      setUpdateInterval(value);
-    } else {
-      setUpdateInterval(0);
-    }
-  };
-
-  // === ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ СЕРВИСАМИ ===
-  const toggleTokenService = (serviceName) => {
-    setServicesConfig(prev => ({
-      ...prev,
-      tokenServices: {
-        ...prev.tokenServices,
-        [serviceName]: !prev.tokenServices[serviceName]
-      }
-    }));
-  };
-
-  const togglePriceService = (serviceName) => {
-    setServicesConfig(prev => ({
-      ...prev,
-      priceServices: {
-        ...prev.priceServices,
-        [serviceName]: !prev.priceServices[serviceName]
-      }
-    }));
-  };
+  // === КОНЕЦ ЗАГРУЗКИ НАСТРОЕК ===
 
   // === ФУНКЦИИ ДЛЯ СОХРАНЕНИЯ НАСТРОЕК ===
-const saveServiceSettings = async () => {
-  if (!account) {
-    setStatus('Ошибка: Адрес администратора не определен.');
-    return;
-  }
-  setIsLoading(true);
-  setStatus('Сохранение настроек сервисов...');
-  try {
-    const configToSave = {
-      // Загружаем текущую конфигурацию (на случай, если интервал был изменен в другом месте)
-      ...(await loadAdminConfig(account)), // Передаем адрес администратора
-      tokenServices: servicesConfig.tokenServices,
-      priceServices: servicesConfig.priceServices,
-    };
-    // Передаем адрес администратора при сохранении
-    await saveAdminConfig(configToSave, account);
-    setStatus('Настройки сервисов сохранены!');
-  } catch (error) {
-    console.error("Ошибка при сохранении настроек сервисов:", error);
-    setStatus('Ошибка при сохранении настроек сервисов.');
-  } finally {
-    setIsLoading(false);
-  }
-};
+  const handleSaveSettings = async () => {
+    if (!isAdmin) {
+      setStatus('Доступ запрещен. Только для администраторов.');
+      return;
+    }
 
-const saveUpdateInterval = async () => {
-  if (!account) {
-    setStatus('Ошибка: Адрес администратора не определен.');
-    return;
-  }
-  if (updateInterval <= 0) {
-    setStatus('Пожалуйста, введите положительное значение интервала.');
-    return;
-  }
-  setIsLoading(true);
-  setStatus('Сохранение интервала обновления...');
-  try {
-    // Загружаем текущую конфигурацию, обновляем только интервал
-    const currentConfig = await loadAdminConfig(account); // Передаем адрес администратора
-    const newConfig = { ...currentConfig, updateIntervalMinutes: updateInterval };
-    // Передаем адрес администратора при сохранении
-    await saveAdminConfig(newConfig, account);
-    setStatus(`Настройки сохранены! Интервал обновления: ${updateInterval} минут.`);
-  } catch (error) {
-    console.error("Ошибка при сохранении настроек:", error);
-    setStatus('Ошибка при сохранении настроек.');
-  } finally {
-    setIsLoading(false);
-  }
-};
+    setIsLoading(true);
+    setStatus('Сохранение настроек...');
+
+    try {
+      // Создаем объект конфигурации из состояния компонента
+      const configToSave = {
+        tokenServices: servicesConfig.tokenServices,
+        priceServices: servicesConfig.priceServices,
+        updateIntervalMinutes: parseInt(updateInterval, 10) // Убедимся, что это число
+      };
+
+      // Передаем конфигурацию и адрес администратора
+      await saveAdminConfig(configToSave, account);
+
+      setStatus(`Настройки сохранены! Интервал обновления: ${updateInterval} минут.`);
+    } catch (error) {
+      console.error("Ошибка при сохранении настроек:", error);
+      if (error.message && error.message.includes('Доступ запрещен')) {
+          setStatus(`Ошибка: ${error.message}`);
+      } else {
+          setStatus('Ошибка при сохранении настроек.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleServiceToggle = (serviceType, serviceName) => {
+    setServicesConfig(prev => ({
+      ...prev,
+      [serviceType]: {
+        ...prev[serviceType],
+        [serviceName]: !prev[serviceType][serviceName]
+      }
+    }));
+  };
+
+  const handleUpdateIntervalChange = (e) => {
+    setUpdateInterval(e.target.value);
+  };
   // === КОНЕЦ ФУНКЦИЙ ДЛЯ СОХРАНЕНИЯ НАСТРОЕК ===
 
   // Если пользователь не админ, не показываем панель
@@ -196,8 +285,9 @@ const saveUpdateInterval = async () => {
       <div className="min-h-screen py-8 px-4 bg-gradient-to-br from-gray-900 to-indigo-900 text-white">
         <div className="container mx-auto max-w-4xl">
           <h1 className="text-3xl font-bold mb-6 text-center">Панель администратора</h1>
-          <div className="bg-red-900 bg-opacity-50 border border-red-700 rounded-xl p-6 text-center">
+          <div className="bg-red-500 text-white p-4 rounded-lg text-center">
             <p className="text-xl">Доступ запрещен. Только для администраторов.</p>
+            {status && <p className="mt-2 text-sm">{status}</p>}
           </div>
         </div>
       </div>
@@ -209,119 +299,179 @@ const saveUpdateInterval = async () => {
       <div className="container mx-auto max-w-4xl">
         <h1 className="text-3xl font-bold mb-6 text-center">Панель администратора</h1>
 
-        {(status || isLoading) && (
-          <div className="mb-6 p-4 bg-blue-900 bg-opacity-50 border border-blue-700 rounded-xl text-center">
-            <p>{status}</p>
-            {isLoading && <div className="mt-2 animate-pulse">...</div>}
+        {/* Статусная строка */}
+        {status && (
+          <div className={`mb-6 p-4 rounded-lg text-center ${
+            status.includes('Ошибка') ? 'bg-red-500' : 'bg-green-500'
+          }`}>
+            {status}
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* === УПРАВЛЕНИЕ СЕРВИСАМИ === */}
-          <div className="bg-gray-800 bg-opacity-50 border border-gray-700 rounded-xl p-6">
-            <h2 className="text-2xl font-semibold mb-4">Управление сервисами</h2>
-            <p className="text-gray-400 text-sm mb-4">
-              Включите или выключите сервисы для отладки. Изменения вступят в силу при следующем обновлении цен.
-            </p>
+        {/* Форма настроек */}
+        <div className="bg-gray-800 bg-opacity-50 backdrop-blur-sm rounded-xl shadow-2xl p-6 mb-6 border border-gray-700">
+          <h2 className="text-2xl font-semibold mb-4 text-cyan-400">Настройки сервисов</h2>
 
-            <div className="space-y-3">
-              <h3 className="font-medium text-gray-300">Сервисы получения токенов:</h3>
+          {/* Настройки сервисов токенов */}
+          <div className="mb-6">
+            <h3 className="text-xl font-medium mb-3 text-gray-300">Сервисы получения токенов</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {Object.entries(servicesConfig.tokenServices).map(([serviceName, isEnabled]) => (
                 <div key={`token-${serviceName}`} className="flex items-center justify-between p-3 bg-gray-700 bg-opacity-50 rounded-lg">
-                  <span className="text-gray-200 font-medium">{serviceName}</span>
-                  <button
-                    onClick={() => toggleTokenService(serviceName)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isEnabled ? 'bg-green-500' : 'bg-gray-600'}`}
-                    aria-pressed={isEnabled}
-                    disabled={isLoading}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${isEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                  </button>
+                  <span className="text-gray-200">{serviceName}</span>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isEnabled}
+                      onChange={() => handleServiceToggle('tokenServices', serviceName)}
+                      className="sr-only peer"
+                      disabled={isLoading}
+                    />
+                    <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                  </label>
                 </div>
               ))}
             </div>
+          </div>
 
-            <div className="space-y-3 mt-6">
-              <h3 className="font-medium text-gray-300">Сервисы получения цен:</h3>
+          {/* Настройки сервисов цен */}
+          <div className="mb-6">
+            <h3 className="text-xl font-medium mb-3 text-gray-300">Сервисы получения цен</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {Object.entries(servicesConfig.priceServices).map(([serviceName, isEnabled]) => (
                 <div key={`price-${serviceName}`} className="flex items-center justify-between p-3 bg-gray-700 bg-opacity-50 rounded-lg">
-                  <span className="text-gray-200 font-medium">{serviceName}</span>
-                  <button
-                    onClick={() => togglePriceService(serviceName)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isEnabled ? 'bg-green-500' : 'bg-gray-600'}`}
-                    aria-pressed={isEnabled}
-                    disabled={isLoading}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${isEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                  </button>
+                  <span className="text-gray-200">{serviceName}</span>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isEnabled}
+                      onChange={() => handleServiceToggle('priceServices', serviceName)}
+                      className="sr-only peer"
+                      disabled={isLoading}
+                    />
+                    <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                  </label>
                 </div>
               ))}
             </div>
+          </div>
 
-            <button
-              onClick={saveServiceSettings}
-              className="mt-6 w-full px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white font-medium rounded-lg transition disabled:opacity-50"
+          {/* Интервал обновления */}
+          <div className="mb-6">
+            <label htmlFor="updateInterval" className="block text-xl font-medium mb-2 text-gray-300">
+              Интервал обновления (минуты)
+            </label>
+            <input
+              type="number"
+              id="updateInterval"
+              value={updateInterval}
+              onChange={handleUpdateIntervalChange}
+              min="1"
+              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white"
               disabled={isLoading}
-            >
-              {isLoading ? 'Сохранение...' : 'Сохранить настройки сервисов'}
-            </button>
+            />
           </div>
-          {/* === КОНЕЦ УПРАВЛЕНИЯ СЕРВИСАМИ === */}
 
-          {/* === УПРАВЛЕНИЕ ИНТЕРВАЛОМ === */}
-          <div className="bg-gray-800 bg-opacity-50 border border-gray-700 rounded-xl p-6">
-            <h2 className="text-2xl font-semibold mb-4">Настройки обновления</h2>
-            <p className="text-gray-400 text-sm mb-4">
-              Настройте интервал автоматического обновления списка токенов и их цен.
-            </p>
-
-            <div className="mb-4">
-              <label htmlFor="updateInterval" className="block text-sm font-medium text-gray-300 mb-2">
-                Интервал обновления (минуты):
-              </label>
-              <input
-                type="number"
-                id="updateInterval"
-                min="1"
-                value={updateInterval}
-                onChange={handleIntervalChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-                disabled={isLoading}
-              />
-            </div>
-
-            <button
-              onClick={saveUpdateInterval}
-              className="w-full px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-medium rounded-lg transition disabled:opacity-50"
-              disabled={isLoading || updateInterval <= 0}
-            >
-              {isLoading ? 'Сохранение...' : 'Сохранить интервал'}
-            </button>
-          </div>
-          {/* === КОНЕЦ УПРАВЛЕНИЯ ИНТЕРВАЛОМ === */}
-
-          {/* === ДЕПЛОЙ КОНТРАКТОВ (ЗАГЛУШКИ) === */}
-          <div className="bg-gray-800 bg-opacity-50 border border-gray-700 rounded-xl p-6 md:col-span-2">
-            <h2 className="text-2xl font-semibold mb-4">Деплой контрактов</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <button
-                onClick={handleDeployFactory}
-                className="px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-medium rounded-lg transition disabled:opacity-50"
-                disabled={isLoading}
-              >
-                Деплой PoolFactory
-              </button>
-              <button
-                onClick={handleDeployVault}
-                className="px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-medium rounded-lg transition disabled:opacity-50"
-                disabled={isLoading}
-              >
-                Деплой TokenVault
-              </button>
-            </div>
-          </div>
-          {/* === КОНЕЦ ДЕПЛОЯ КОНТРАКТОВ === */}
+          {/* Кнопка сохранения */}
+          <button
+            onClick={handleSaveSettings}
+            disabled={isLoading}
+            className={`w-full py-3 px-4 rounded-lg font-medium transition ${
+              isLoading
+                ? 'bg-gray-600 cursor-not-allowed'
+                : 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 shadow-lg'
+            }`}
+          >
+            {isLoading ? 'Сохранение...' : 'Сохранить настройки'}
+          </button>
         </div>
+
+        {/* === НОВЫЙ РАЗДЕЛ: УПРАВЛЕНИЕ АДМИНИСТРАТОРАМИ === */}
+        <div className="bg-gray-800 bg-opacity-50 backdrop-blur-sm rounded-xl shadow-2xl p-6 mb-6 border border-gray-700">
+          <h2 className="text-2xl font-semibold mb-4 text-cyan-400">Управление администраторами</h2>
+          
+          {adminActionStatus && (
+            <div className={`mb-4 p-2 rounded ${
+              adminActionStatus.includes('Ошибка') ? 'bg-red-500 text-white' : 'bg-green-500 text-white'
+            }`}>
+              {adminActionStatus}
+            </div>
+          )}
+
+          <div className="mb-4">
+            <label htmlFor="newAdminAddress" className="block text-lg font-medium mb-2 text-gray-300">
+              Добавить нового администратора:
+            </label>
+            <div className="flex">
+              <input
+                type="text"
+                id="newAdminAddress"
+                value={newAdminAddress}
+                onChange={(e) => setNewAdminAddress(e.target.value)}
+                placeholder="0x..."
+                className="flex-grow px-4 py-2 bg-gray-700 border border-gray-600 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white"
+                disabled={isLoadingAdmins}
+              />
+              <button
+                onClick={addAdmin}
+                disabled={isLoadingAdmins || !newAdminAddress}
+                className={`px-4 py-2 rounded-r-lg font-medium transition ${
+                  isLoadingAdmins || !newAdminAddress
+                    ? 'bg-gray-600 cursor-not-allowed'
+                    : 'bg-green-600 hover:bg-green-700'
+                }`}
+              >
+                Добавить
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-medium mb-2 text-gray-300">Список текущих администраторов:</h3>
+            {isLoadingAdmins && adminsList.length === 0 ? (
+              <p>Загрузка...</p>
+            ) : adminsList.length > 0 ? (
+              <ul className="border border-gray-700 rounded-lg divide-y divide-gray-700">
+                {adminsList.map((adminAddr) => (
+                  <li key={adminAddr} className="flex justify-between items-center p-3 bg-gray-700 bg-opacity-30">
+                    <span className="font-mono text-sm break-all">{adminAddr}</span>
+                    {adminAddr.toLowerCase() !== account?.toLowerCase() ? ( // Не позволяем удалить себя
+                      <button
+                        onClick={() => removeAdmin(adminAddr)}
+                        disabled={isLoadingAdmins}
+                        className={`px-3 py-1 text-sm rounded transition ${
+                          isLoadingAdmins
+                            ? 'bg-gray-600 cursor-not-allowed'
+                            : 'bg-red-600 hover:bg-red-700'
+                        }`}
+                      >
+                        Удалить
+                      </button>
+                    ) : (
+                      <span className="px-3 py-1 text-gray-500 text-sm">Вы</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-500">Список администраторов пуст или не удалось загрузить.</p>
+            )}
+          </div>
+
+          <button
+            onClick={fetchAdminsList}
+            disabled={isLoadingAdmins}
+            className={`mt-4 px-4 py-2 rounded font-medium transition ${
+              isLoadingAdmins
+                ? 'bg-gray-600 cursor-not-allowed'
+                : 'bg-gray-600 hover:bg-gray-700'
+            }`}
+          >
+            Обновить список
+          </button>
+        </div>
+        {/* === КОНЕЦ НОВОГО РАЗДЕЛА === */}
+
       </div>
     </div>
   );

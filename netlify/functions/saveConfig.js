@@ -1,3 +1,4 @@
+// netlify/functions/saveConfig.js
 const { Client } = require('pg');
 
 exports.handler = async (event, context) => {
@@ -20,7 +21,6 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Парсим тело запроса
     let configData;
     try {
       configData = JSON.parse(event.body);
@@ -49,7 +49,6 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Подключение к Neon
     const client = new Client({
       connectionString: process.env.NEON_DATABASE_URL,
       ssl: { rejectUnauthorized: false },
@@ -58,27 +57,47 @@ exports.handler = async (event, context) => {
     await client.connect();
     console.log("Подключение к Neon для сохранения успешно");
 
-    // Создаем таблицу если она не существует
+    // Создаем таблицы если они не существуют
     await client.query(`
-      CREATE TABLE IF NOT EXISTS admin_configs (
-        address TEXT PRIMARY KEY,
+      CREATE TABLE IF NOT EXISTS app_config (
+        id SERIAL PRIMARY KEY,
         config JSONB NOT NULL,
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admins (
+        address TEXT PRIMARY KEY,
+        added_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
 
-    // Сохраняем конфигурацию в базу данных
+    // Проверка прав администратора
+    const adminCheckResult = await client.query('SELECT 1 FROM admins WHERE address = $1', [adminAddress]);
+    if (adminCheckResult.rows.length === 0) {
+        await client.end();
+        return {
+            statusCode: 403,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+            },
+            body: JSON.stringify({ error: 'Доступ запрещен. Адрес не является администратором.' }),
+        };
+    }
+
+    // Сохраняем конфигурацию
     await client.query(
-      `INSERT INTO admin_configs (address, config, updated_at)
-       VALUES ($1, $2, NOW())
-       ON CONFLICT (address)
-       DO UPDATE SET config = $2, updated_at = NOW()`,
-      [adminAddress, configData]
+      `INSERT INTO app_config (config, updated_at)
+       VALUES ($1, NOW())
+       ON CONFLICT (id) -- Предполагаем, что id - SERIAL PRIMARY KEY
+       DO UPDATE SET config = $1, updated_at = NOW()`,
+      [configData]
     );
 
     await client.end();
 
-    console.log("Конфигурация успешно сохранена в базе для адреса:", adminAddress);
+    console.log("Конфигурация приложения успешно сохранена в базе администратором:", adminAddress);
 
     return {
       statusCode: 200,
@@ -86,7 +105,7 @@ exports.handler = async (event, context) => {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
       },
-      body: JSON.stringify({ message: 'Конфигурация сохранена в базе данных', address: adminAddress }),
+      body: JSON.stringify({ message: 'Конфигурация приложения сохранена в базе данных', updatedBy: adminAddress }),
     };
   } catch (error) {
     console.error("Ошибка в saveConfig:", error);

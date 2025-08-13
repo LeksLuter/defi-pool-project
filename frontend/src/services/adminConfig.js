@@ -1,9 +1,12 @@
-import { DEFAULT_ADMIN_CONFIG } from '../constants';
+// frontend/src/services/adminConfig.js
+
+// Импортируем дефолтную конфигурацию из нового файла констант
+import { DEFAULT_ADMIN_CONFIG } from '../constants'; // Убедитесь, что DEFAULT_ADMIN_CONFIG определен там
 
 const ADMIN_CONFIG_KEY = 'defiPool_adminConfig';
 
 /**
- * Загружает конфигурацию администратора.
+ * Загружает глобальную конфигурацию приложения.
  * В админке использует adminAddress и основной API.
  * На других страницах использует userAddress и readonly API.
  * @param {string} [adminAddress] - Адрес кошелька администратора (для админки)
@@ -28,12 +31,12 @@ export const loadAdminConfig = async (adminAddress, userAddress, isAdminPage = f
       if (typeof window !== 'undefined') {
         const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         if (isLocalhost) {
-          apiUrl = 'http://localhost:3001/api/admin/config'; // Локальный API
+          apiUrl = 'http://localhost:3001/api/app/config'; // Локальный API для app config
         } else {
-          apiUrl = '/.netlify/functions/getConfig'; // Netlify Functions
+          apiUrl = '/.netlify/functions/getConfig'; // Netlify Functions для админки (чтение)
         }
       } else {
-        // Для SSR или других сред, используем Netlify Functions
+        // Для SSR или других сред
         apiUrl = '/.netlify/functions/getConfig';
       }
 
@@ -69,6 +72,11 @@ export const loadAdminConfig = async (adminAddress, userAddress, isAdminPage = f
       } else if (response.status === 404) {
         console.log("[Admin Config] Конфигурация на сервере не найдена (админка), будет использована дефолтная или локальная.");
         // Продолжаем к локальной загрузке
+      } else if (response.status === 403) {
+        const errorText = await response.text();
+        console.warn(`[Admin Config] Доступ запрещен (админка): ${response.status} ${response.statusText} - ${errorText}`);
+        // Можно выбросить ошибку или обработать иначе
+        throw new Error(`Доступ запрещен: ${errorText}`);
       } else {
         const errorText = await response.text();
         console.warn(`[Admin Config] Сервер вернул ошибку при загрузке конфигурации (админка): ${response.status} ${response.statusText} - ${errorText}`);
@@ -88,38 +96,18 @@ export const loadAdminConfig = async (adminAddress, userAddress, isAdminPage = f
       if (typeof window !== 'undefined') {
         const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         if (isLocalhost) {
-          // Предполагаем, что у вас есть endpoint для readonly в локальном API
-          // Например, /api/admin/config/readonly?targetAdminAddress=...
-          // !!! ВАЖНО: Вам нужно определить, чью конфигурацию вы хотите получить.
-          // Здесь используется заглушка - адрес админа по умолчанию.
-          // const DEFAULT_ADMIN_ADDRESS = "0xe00Fb1e7E860C089503D2c842C683a7A3E57b614"; // Замените на реальный
-          // apiUrl = `http://localhost:3001/api/admin/config/readonly?targetAdminAddress=${DEFAULT_ADMIN_ADDRESS}`;
-          // Для демонстрации будем использовать тот же endpoint, но с userAddress
-          // и ожидать, что сервер сам определит targetAdminAddress
-          // Лучше передавать targetAdminAddress явно
-          // Предположим, что мы хотим получить конфигурацию админа по умолчанию
-          const DEFAULT_ADMIN_ADDRESS = "0xe00Fb1e7E860C089503D2c842C683a7A3E57b614"; // Замените на реальный
-          apiUrl = `http://localhost:3001/api/admin/config/readonly?targetAdminAddress=${DEFAULT_ADMIN_ADDRESS}`;
+          apiUrl = 'http://localhost:3001/api/app/config'; // Локальный API для app config readonly
         } else {
-          // Предполагаем, что у Netlify Functions есть readonly функция
-          // const DEFAULT_ADMIN_ADDRESS = "0xe00Fb1e7E860C089503D2c842C683a7A3E57b614"; // Замените на реальный
-          // apiUrl = `/.netlify/functions/getConfigReadOnly?targetAdminAddress=${DEFAULT_ADMIN_ADDRESS}`;
-          // Для демонстрации будем использовать тот же endpoint, но с userAddress
-          // и ожидать, что сервер сам определит targetAdminAddress
-          // Лучше передавать targetAdminAddress явно
-          const DEFAULT_ADMIN_ADDRESS = "0xe00Fb1e7E860C089503D2c842C683a7A3E57b614"; // Замените на реальный
-          apiUrl = `/.netlify/functions/getConfigReadOnly?targetAdminAddress=${DEFAULT_ADMIN_ADDRESS}`;
+          apiUrl = '/.netlify/functions/getConfigReadOnly'; // Netlify Functions readonly
         }
       } else {
         // Для SSR или других сред
-        const DEFAULT_ADMIN_ADDRESS = "0xe00Fb1e7E860C089503D2c842C683a7A3E57b614"; // Замените на реальный
-        apiUrl = `/.netlify/functions/getConfigReadOnly?targetAdminAddress=${DEFAULT_ADMIN_ADDRESS}`;
+        apiUrl = '/.netlify/functions/getConfigReadOnly';
       }
 
       const headers = {
         'Content-Type': 'application/json',
         'X-User-Address': userAddress, // Используем user address для readonly
-        // 'X-Admin-Address': adminAddress, // Не передаем admin address на обычных страницах
       };
 
       const response = await fetch(apiUrl, {
@@ -181,7 +169,7 @@ export const loadAdminConfig = async (adminAddress, userAddress, isAdminPage = f
 };
 
 /**
- * Сохраняет конфигурацию администратора.
+ * Сохраняет глобальную конфигурацию приложения.
  * Должна вызываться только из админки.
  * @param {Object} config - Объект конфигурации для сохранения
  * @param {string} [adminAddress] - Адрес кошелька администратора
@@ -202,9 +190,9 @@ export const saveAdminConfig = async (config, adminAddress) => {
       if (typeof window !== 'undefined') {
         const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         if (isLocalhost) {
-          apiUrl = 'http://localhost:3001/api/admin/config'; // Локальный API
+          apiUrl = 'http://localhost:3001/api/app/config'; // Локальный API для app config
         } else {
-          apiUrl = '/.netlify/functions/saveConfig'; // Netlify Functions
+          apiUrl = '/.netlify/functions/saveConfig'; // Netlify Functions для админки
         }
       } else {
         // Для SSR или других сред
@@ -243,6 +231,10 @@ export const saveAdminConfig = async (config, adminAddress) => {
         }
 
         return; // Успешно сохранено на сервере
+      } else if (response.status === 403) {
+        const errorText = await response.text();
+        console.warn(`[Admin Config] Доступ запрещен при сохранении (админка): ${response.status} ${response.statusText} - ${errorText}`);
+        throw new Error(`Доступ запрещен при сохранении: ${errorText}`);
       } else {
         const errorText = await response.text();
         console.warn(`[Admin Config] Сервер вернул ошибку при сохранении конфигурации (админка): ${response.status} ${response.statusText} - ${errorText}`);
@@ -272,10 +264,8 @@ export const saveAdminConfig = async (config, adminAddress) => {
   }
 };
 
-// --- Остальные функции остаются без изменений ---
-
 /**
- * Загружает настройки сервисов получения токенов из localStorage.
+ * Загружает настройки сервисов получения токенов из localStorage или дефолта.
  * @returns {Object} Объект с настройками сервисов токенов.
  */
 export const getTokenServicesConfig = () => {
@@ -298,7 +288,7 @@ export const getTokenServicesConfig = () => {
 };
 
 /**
- * Загружает настройки сервисов получения цен из localStorage.
+ * Загружает настройки сервисов получения цен из localStorage или дефолта.
  * @returns {Object} Объект с настройками сервисов цен.
  */
 export const getPriceServicesConfig = () => {
@@ -321,7 +311,7 @@ export const getPriceServicesConfig = () => {
 };
 
 /**
- * Загружает интервал обновления из localStorage.
+ * Загружает интервал обновления из localStorage или дефолта.
  * @returns {number} Интервал обновления в минутах.
  */
 export const getUpdateIntervalMinutes = () => {
@@ -396,3 +386,70 @@ export const updateUpdateIntervalMinutes = async (newIntervalMinutes, adminAddre
   await saveAdminConfig(updatedConfig, adminAddress);
   console.log("[Admin Config] Обновлен интервал обновления:", updatedConfig.updateIntervalMinutes);
 };
+
+/**
+ * Проверяет, является ли адрес администратором, делая запрос к API.
+ * @param {string} address - Адрес кошелька для проверки.
+ * @returns {Promise<boolean>} true если адрес является администратором.
+ */
+export const checkIsAdmin = async (address) => {
+  if (!address) {
+    console.warn('[Admin Config] Адрес для проверки isAdmin не предоставлен');
+    return false;
+  }
+
+  try {
+    console.log(`[Admin Config] Проверка isAdmin для адреса: ${address}`);
+
+    // Определяем URL для API в зависимости от среды выполнения
+    let apiUrl = '';
+    if (typeof window !== 'undefined') {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isLocalhost) {
+        // Предполагаем, что у локального API есть endpoint для проверки
+        // Это может быть GET /api/admins/check?address=... или POST с адресом в теле
+        // Используем GET с query param для простоты
+        apiUrl = `http://localhost:3001/api/admins/check?address=${encodeURIComponent(address)}`;
+      } else {
+        // Для Netlify Functions, возможно, нужна новая функция
+        // Предположим, что у нас есть функция checkAdmin
+        apiUrl = `/.netlify/functions/checkAdmin?address=${encodeURIComponent(address)}`;
+      }
+    } else {
+      // Для SSR
+      apiUrl = `/.netlify/functions/checkAdmin?address=${encodeURIComponent(address)}`;
+    }
+
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        // Не передаем X-Admin-Address, так как мы его проверяем
+        // Для локального API можно передать X-User-Address, но это не обязательно для проверки
+      },
+      signal: AbortSignal.timeout(10000) // 10 секунд таймаут
+    });
+
+    console.log("[Admin Config] Ответ от проверки isAdmin:", response.status, response.statusText);
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log(`[Admin Config] Результат проверки isAdmin для ${address}:`, data.isAdmin);
+      return data.isAdmin === true;
+    } else if (response.status === 404) {
+      // Адрес не найден в списке админов
+      console.log(`[Admin Config] Адрес ${address} не найден в списке администраторов`);
+      return false;
+    } else {
+      const errorText = await response.text();
+      console.warn(`[Admin Config] Сервер вернул ошибку при проверке isAdmin: ${response.status} ${response.statusText} - ${errorText}`);
+      return false; // По умолчанию не админ
+    }
+  } catch (e) {
+    console.error("[Admin Config] Ошибка сети при проверке isAdmin:", e);
+    return false; // По умолчанию не админ
+  }
+};
+
+// Экспортируем дефолтные значения для использования в компонентах
+export default DEFAULT_ADMIN_CONFIG;

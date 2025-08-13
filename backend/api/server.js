@@ -1,3 +1,5 @@
+// backend/api/server.js
+
 const express = require('express');
 const cors = require('cors');
 const { Client } = require('pg');
@@ -8,8 +10,7 @@ require('dotenv').config();
 const app = express();
 
 // === КОНСТАНТЫ ===
-const ADMIN_CONFIG_KEY = 'defiPool_adminConfig';
-const DEFAULT_ADMIN_CONFIG = {
+const DEFAULT_APP_CONFIG = {
   // Настройки сервисов получения токенов
   tokenServices: {
     EtherscanV2: true,
@@ -32,7 +33,7 @@ const DEFAULT_ADMIN_CONFIG = {
 
 // === MIDDLEWARE ===
 app.use(cors());
-app.use(express.json({ limit: '10mb' })); // Увеличиваем лимит для больших конфигов
+app.use(express.json({ limit: '10mb' }));
 
 // === ФУНКЦИИ РАБОТЫ С БАЗОЙ ДАННЫХ ===
 
@@ -64,44 +65,38 @@ const connectToNeon = async (useReadOnly = false) => {
 };
 
 /**
- * Создает таблицу admin_configs если она не существует
+ * Создает таблицы app_config и admins если они не существуют
  */
-const createAdminConfigsTable = async () => {
-  const client = await connectToNeon(false); // Используем admin подключение для создания таблицы
+const createTables = async () => {
+  const client = await connectToNeon(false); // Используем admin подключение для создания таблиц
   try {
+    // Создание таблицы app_config
     await client.query(`
-      CREATE TABLE IF NOT EXISTS admin_configs (
-        address TEXT PRIMARY KEY,
+      CREATE TABLE IF NOT EXISTS app_config (
+        id SERIAL PRIMARY KEY, -- Уникальный ID для простоты
         config JSONB NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    console.log('[API Server] Таблица admin_configs создана или уже существует');
-  } finally {
-    await client.end();
-  }
-};
+    console.log('[API Server] Таблица app_config создана или уже существует');
 
-/**
- * Получает конфигурацию администратора из базы данных
- * @param {string} adminAddress Адрес администратора
- * @param {boolean} useReadOnly Использовать ли подключение только для чтения
- * @returns {Promise<Object>} Объект конфигурации
- */
-const getAdminConfigFromDB = async (adminAddress, useReadOnly = false) => {
-  const client = await connectToNeon(useReadOnly);
-  try {
-    const result = await client.query(
-      'SELECT config FROM admin_configs WHERE address = $1',
-      [adminAddress]
-    );
+    // Создание таблицы admins
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admins (
+        address TEXT PRIMARY KEY,
+        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('[API Server] Таблица admins создана или уже существует');
 
-    if (result.rows.length > 0) {
-      console.log(`[API Server] Конфигурация найдена в базе для адреса ${adminAddress}`);
-      return result.rows[0].config;
-    } else {
-      console.log(`[API Server] Конфигурация не найдена в базе для адреса ${adminAddress}, возвращаем дефолтную`);
-      return DEFAULT_ADMIN_CONFIG;
+    // Добавление дефолтной конфигурации, если её нет
+    const configResult = await client.query('SELECT COUNT(*) FROM app_config');
+    if (parseInt(configResult.rows[0].count) === 0) {
+        await client.query(
+            'INSERT INTO app_config (config) VALUES ($1)',
+            [DEFAULT_APP_CONFIG]
+        );
+        console.log('[API Server] Дефолтная конфигурация добавлена в app_config');
     }
   } finally {
     await client.end();
@@ -109,28 +104,131 @@ const getAdminConfigFromDB = async (adminAddress, useReadOnly = false) => {
 };
 
 /**
- * Сохраняет конфигурацию администратора в базу данных
- * @param {string} adminAddress Адрес администратора
- * @param {Object} configData Объект конфигурации
+ * Получает глобальную конфигурацию приложения из базы данных
+ * @param {boolean} useReadOnly Использовать ли подключение только для чтения
+ * @returns {Promise<Object>} Объект конфигурации
  */
-const saveAdminConfigToDB = async (adminAddress, configData) => {
-  // Только админ может сохранять конфигурацию, используем основное подключение
-  const client = await connectToNeon(false);
+const getAppConfigFromDB = async (useReadOnly = false) => {
+  const client = await connectToNeon(useReadOnly);
   try {
-    await client.query(
-      `INSERT INTO admin_configs (address, config, updated_at)
-       VALUES ($1, $2, NOW())
-       ON CONFLICT (address)
-       DO UPDATE SET config = $2, updated_at = NOW()`,
-      [adminAddress, configData]
-    );
-    console.log(`[API Server] Конфигурация сохранена в базе для адреса ${adminAddress}`);
+    const result = await client.query('SELECT config FROM app_config ORDER BY id DESC LIMIT 1');
+
+    if (result.rows.length > 0) {
+      console.log(`[API Server] Конфигурация приложения найдена в базе`);
+      return result.rows[0].config;
+    } else {
+      console.log(`[API Server] Конфигурация приложения не найдена в базе, возвращаем дефолтную`);
+      return DEFAULT_APP_CONFIG;
+    }
   } finally {
     await client.end();
   }
 };
 
+/**
+ * Сохраняет глобальную конфигурацию приложения в базу данных
+ * @param {Object} configData Объект конфигурации
+ */
+const saveAppConfigToDB = async (configData) => {
+  // Только админ может сохранять конфигурацию, используем основное подключение
+  const client = await connectToNeon(false);
+  try {
+    // Обновляем последнюю запись или вставляем новую, если таблица пуста
+    await client.query(
+      `INSERT INTO app_config (config, updated_at)
+       VALUES ($1, NOW())
+       ON CONFLICT (id) -- Предполагаем, что id - SERIAL PRIMARY KEY
+       DO UPDATE SET config = $1, updated_at = NOW()`,
+      [configData]
+    );
+    console.log(`[API Server] Конфигурация приложения сохранена в базе`);
+  } finally {
+    await client.end();
+  }
+};
+
+/**
+ * Проверяет, является ли адрес администратором
+ * @param {string} address Адрес кошелька
+ * @returns {Promise<boolean>} true если адрес в списке админов
+ */
+const isAdminInDB = async (address) => {
+    if (!address) return false;
+    const client = await connectToNeon(true); // Можно использовать readonly для проверки
+    try {
+        const result = await client.query('SELECT 1 FROM admins WHERE address = $1', [address]);
+        return result.rows.length > 0;
+    } finally {
+        await client.end();
+    }
+};
+
+/**
+ * Получает список всех администраторов
+ * @returns {Promise<Array>} Массив адресов администраторов
+ */
+const getAdminsFromDB = async () => {
+    const client = await connectToNeon(false); // Админ подключение для чтения списка
+    try {
+        const result = await client.query('SELECT address FROM admins ORDER BY added_at DESC');
+        return result.rows.map(row => row.address);
+    } finally {
+        await client.end();
+    }
+};
+
+/**
+ * Добавляет нового администратора
+ * @param {string} address Адрес кошелька
+ */
+const addAdminToDB = async (address) => {
+    const client = await connectToNeon(false); // Только админ может добавлять
+    try {
+        await client.query(
+            'INSERT INTO admins (address) VALUES ($1) ON CONFLICT (address) DO NOTHING',
+            [address]
+        );
+        console.log(`[API Server] Адрес ${address} добавлен в список администраторов`);
+    } finally {
+        await client.end();
+    }
+};
+
+/**
+ * Удаляет администратора
+ * @param {string} address Адрес кошелька
+ */
+const removeAdminFromDB = async (address) => {
+    const client = await connectToNeon(false); // Только админ может удалять
+    try {
+        await client.query('DELETE FROM admins WHERE address = $1', [address]);
+        console.log(`[API Server] Адрес ${address} удален из списка администраторов`);
+    } finally {
+        await client.end();
+    }
+};
+
 // === КОНЕЦ ФУНКЦИЙ РАБОТЫ С БАЗОЙ ДАННЫХ ===
+
+// === MIDDLEWARE ДЛЯ ПРОВЕРКИ АДМИНСТРАТОРА ===
+const requireAdmin = async (req, res, next) => {
+    const adminAddress = req.headers['x-admin-address'];
+    if (!adminAddress) {
+        return res.status(400).json({ error: 'Требуется заголовок X-Admin-Address' });
+    }
+    try {
+        const isAdmin = await isAdminInDB(adminAddress);
+        if (!isAdmin) {
+            return res.status(403).json({ error: 'Доступ запрещен. Адрес не является администратором.' });
+        }
+        req.adminAddress = adminAddress; // Передаем адрес дальше
+        next();
+    } catch (error) {
+        console.error('[API Server] Ошибка проверки прав администратора:', error);
+        res.status(500).json({ error: 'Внутренняя ошибка сервера при проверке прав администратора' });
+    }
+};
+// === КОНЕЦ MIDDLEWARE ===
 
 // === ENDPOINTS ===
 
@@ -144,80 +242,40 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// GET /api/admin/config - Получить конфигурацию администратора (только для админки)
-app.get('/api/admin/config', async (req, res) => {
-  const adminAddress = req.headers['x-admin-address'];
-  console.log(`[API Server] GET /api/admin/config called with adminAddress: ${adminAddress}`);
-
-  if (!adminAddress) {
-    console.warn('[API Server] X-Admin-Address header is missing');
-    return res.status(400).json({ error: 'Требуется заголовок X-Admin-Address' });
-  }
-
-  try {
-    // Создаем таблицу если она не существует
-    await createAdminConfigsTable();
-
-    // Получаем конфигурацию из базы данных (используем основное подключение)
-    const config = await getAdminConfigFromDB(adminAddress, false);
-
-    console.log(`[API Server] Successfully retrieved config for ${adminAddress}`);
-    res.status(200).json(config);
-  } catch (error) {
-    console.error('[API Server] Error retrieving config:', error);
-    res.status(500).json({
-      error: 'Внутренняя ошибка сервера при получении конфигурации',
-      details: error.message
-    });
-  }
-});
-
-// GET /api/admin/config/read-only - Получить конфигурацию администратора (для чтения обычными пользователями)
-app.get('/api/admin/config/read-only', async (req, res) => {
+// GET /api/app/config - Получить конфигурацию приложения (для чтения всеми пользователями)
+app.get('/api/app/config', async (req, res) => {
   const userAddress = req.headers['x-user-address'];
-  const targetAdminAddress = req.headers['x-target-admin-address'] || req.query.targetAdminAddress;
-
-  console.log(`[API Server] GET /api/admin/config/read-only called with userAddress: ${userAddress}, targetAdminAddress: ${targetAdminAddress}`);
+  console.log(`[API Server] GET /api/app/config called with userAddress: ${userAddress}`);
 
   if (!userAddress) {
     console.warn('[API Server] X-User-Address header is missing');
     return res.status(400).json({ error: 'Требуется заголовок X-User-Address' });
   }
 
-  if (!targetAdminAddress) {
-    console.warn('[API Server] X-Target-Admin-Address header or targetAdminAddress query param is missing');
-    return res.status(400).json({ error: 'Требуется заголовок X-Target-Admin-Address или параметр targetAdminAddress в query string' });
-  }
-
   try {
-    // Создаем таблицу если она не существует (на всякий случай, хотя это должен делать только админ)
-    await createAdminConfigsTable();
+    // Создаем таблицы если они не существуют
+    await createTables();
 
     // Получаем конфигурацию из базы данных (используем подключение только для чтения)
-    const config = await getAdminConfigFromDB(targetAdminAddress, true);
+    const config = await getAppConfigFromDB(true);
 
-    console.log(`[API Server] Successfully retrieved config (readonly) for target admin ${targetAdminAddress} by user ${userAddress}`);
+    console.log(`[API Server] Successfully retrieved app config for user ${userAddress}`);
     res.status(200).json(config);
   } catch (error) {
-    console.error('[API Server] Error retrieving config (readonly):', error);
+    console.error('[API Server] Error retrieving app config (readonly):', error);
     res.status(500).json({
-      error: 'Внутренняя ошибка сервера при получении конфигурации (readonly)',
+      error: 'Внутренняя ошибка сервера при получении конфигурации приложения (readonly)',
       details: error.message
     });
   }
 });
 
-// POST /api/admin/config - Сохранить конфигурацию администратора (только для админки)
-app.post('/api/admin/config', async (req, res) => {
-  const adminAddress = req.headers['x-admin-address'];
+// POST /api/app/config - Сохранить конфигурацию приложения (только для админки)
+app.post('/api/app/config', requireAdmin, async (req, res) => {
+  const adminAddress = req.adminAddress;
   const configData = req.body;
-  console.log(`[API Server] POST /api/admin/config called with adminAddress: ${adminAddress}`);
-  console.log('[API Server] Config data:', configData);
-
-  if (!adminAddress) {
-    console.warn('[API Server] X-Admin-Address header is missing');
-    return res.status(400).json({ error: 'Требуется заголовок X-Admin-Address' });
-  }
+  console.log(`[API Server] POST /api/app/config called with adminAddress: ${adminAddress}`);
+  console.log('[API Server] Config ', configData);
 
   if (!configData || typeof configData !== 'object') {
     console.warn('[API Server] Invalid config data format');
@@ -225,24 +283,91 @@ app.post('/api/admin/config', async (req, res) => {
   }
 
   try {
-    // Создаем таблицу если она не существует
-    await createAdminConfigsTable();
+    // Создаем таблицы если они не существуют
+    await createTables();
 
     // Сохраняем конфигурацию в базу данных (используем основное подключение)
-    await saveAdminConfigToDB(adminAddress, configData);
+    await saveAppConfigToDB(configData);
 
-    console.log(`[API Server] Successfully saved config for ${adminAddress}`);
+    console.log(`[API Server] Successfully saved app config by admin ${adminAddress}`);
     res.status(200).json({
-      message: 'Конфигурация сохранена в базе данных',
-      address: adminAddress
+      message: 'Конфигурация приложения сохранена в базе данных',
+      updatedBy: adminAddress
     });
   } catch (error) {
-    console.error('[API Server] Error saving config:', error);
+    console.error('[API Server] Error saving app config:', error);
     res.status(500).json({
-      error: 'Внутренняя ошибка сервера при сохранении конфигурации',
+      error: 'Внутренняя ошибка сервера при сохранении конфигурации приложения',
       details: error.message
     });
   }
+});
+
+// GET /api/admins - Получить список администраторов (только для админки)
+app.get('/api/admins', requireAdmin, async (req, res) => {
+    const adminAddress = req.adminAddress;
+    console.log(`[API Server] GET /api/admins called by admin: ${adminAddress}`);
+
+    try {
+         // Создаем таблицы если они не существуют
+        await createTables();
+        const admins = await getAdminsFromDB();
+        res.status(200).json({ admins });
+    } catch (error) {
+        console.error('[API Server] Error retrieving admins list:', error);
+        res.status(500).json({
+            error: 'Внутренняя ошибка сервера при получении списка администраторов',
+            details: error.message
+        });
+    }
+});
+
+// POST /api/admins - Добавить администратора (только для админки)
+app.post('/api/admins', requireAdmin, async (req, res) => {
+    const adminAddress = req.adminAddress;
+    const { newAdminAddress } = req.body;
+    console.log(`[API Server] POST /api/admins called by admin: ${adminAddress} to add: ${newAdminAddress}`);
+
+    if (!newAdminAddress) {
+        return res.status(400).json({ error: 'Требуется поле newAdminAddress в теле запроса' });
+    }
+
+    try {
+        // Создаем таблицы если они не существуют
+        await createTables();
+        await addAdminToDB(newAdminAddress);
+        res.status(200).json({ message: `Адрес ${newAdminAddress} добавлен в список администраторов` });
+    } catch (error) {
+        console.error('[API Server] Error adding admin:', error);
+        res.status(500).json({
+            error: 'Внутренняя ошибка сервера при добавлении администратора',
+            details: error.message
+        });
+    }
+});
+
+// DELETE /api/admins/:address - Удалить администратора (только для админки)
+app.delete('/api/admins/:address', requireAdmin, async (req, res) => {
+    const adminAddress = req.adminAddress;
+    const addressToRemove = req.params.address;
+    console.log(`[API Server] DELETE /api/admins/:address called by admin: ${adminAddress} to remove: ${addressToRemove}`);
+
+    if (!addressToRemove) {
+        return res.status(400).json({ error: 'Требуется адрес в URL' });
+    }
+
+    try {
+        // Создаем таблицы если они не существуют
+        await createTables();
+        await removeAdminFromDB(addressToRemove);
+        res.status(200).json({ message: `Адрес ${addressToRemove} удален из списка администраторов` });
+    } catch (error) {
+        console.error('[API Server] Error removing admin:', error);
+        res.status(500).json({
+            error: 'Внутренняя ошибка сервера при удалении администратора',
+            details: error.message
+        });
+    }
 });
 
 // Обработчик для всех остальных маршрутов
@@ -280,17 +405,20 @@ const startServer = async () => {
       console.log('[API Server] NEON_DATABASE_URL_READONLY is not set, will use NEON_DATABASE_URL for readonly operations');
     }
 
-    // Создаем таблицу при запуске сервера
-    await createAdminConfigsTable();
+    // Создаем таблицы при запуске сервера
+    await createTables();
 
     const PORT = process.env.PORT || 3001;
     app.listen(PORT, () => {
       console.log(`[API Server] Локальный API сервер запущен на порту ${PORT}`);
       console.log(`[API Server] Health check endpoint: http://localhost:${PORT}/api/health`);
-      console.log(`[API Server] Admin config endpoints:`);
-      console.log(`[API Server] GET http://localhost:${PORT}/api/admin/config`);
-      console.log(`[API Server] POST http://localhost:${PORT}/api/admin/config`);
-      console.log(`[API Server] GET http://localhost:${PORT}/api/admin/config/read-only`);
+      console.log(`[API Server] App config endpoints:`);
+      console.log(`[API Server] GET http://localhost:${PORT}/api/app/config`);
+      console.log(`[API Server] POST http://localhost:${PORT}/api/app/config`);
+      console.log(`[API Server] Admin management endpoints:`);
+      console.log(`[API Server] GET http://localhost:${PORT}/api/admins`);
+      console.log(`[API Server] POST http://localhost:${PORT}/api/admins`);
+      console.log(`[API Server] DELETE http://localhost:${PORT}/api/admins/:address`);
     });
   } catch (error) {
     console.error('[API Server] Failed to start server:', error);

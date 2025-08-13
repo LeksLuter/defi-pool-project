@@ -1,12 +1,6 @@
 // frontend/src/context/Web3Context.jsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-// Адреса администраторов
-const ADMIN_ADDRESSES = [
-  "0xe00Fb1e7E860C089503D2c842C683a7A3E57b614",
-  "0x40A7e95f9daecdeea9ae823ac234af2c616c2d10"
-  // Добавьте сюда адреса реальных администраторов
-];
 
 // Создаем контекст Web3
 const Web3Context = createContext();
@@ -28,125 +22,205 @@ export const Web3Provider = ({ children }) => {
   const [chainId, setChainId] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false); // Новое состояние для проверки админа
+  const [isAdmin, setIsAdmin] = useState(false); // Состояние для проверки админа
+  const [isCheckingAdmin, setIsCheckingAdmin] = useState(false); // Состояние загрузки проверки
 
-  // Функция подключения кошелька
+  // Функция для подключения кошелька
   const connectWallet = async () => {
-    setError(null);
-    if (typeof window.ethereum !== 'undefined') {
-      try {
-        // Запрашиваем доступ к аккаунтам
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        
-        // Создаем провайдер ethers.js
-        const web3Provider = new ethers.providers.Web3Provider(window.ethereum);
-        
-        // Получаем signer (подписывающее лицо)
-        const web3Signer = web3Provider.getSigner();
-        
-        // Получаем информацию о сети
-        const network = await web3Provider.getNetwork();
-        
-        // Устанавливаем состояние
-        setProvider(web3Provider);
-        setSigner(web3Signer);
-        setAccount(accounts[0]);
-        setChainId(network.chainId);
-        setIsConnected(true);
-        
-        // Проверяем, является ли пользователь администратором
-        setIsAdmin(ADMIN_ADDRESSES.some(addr => addr.toLowerCase() === accounts[0].toLowerCase()));
-        
-      } catch (err) {
-        console.error("Ошибка подключения к MetaMask:", err);
-        setError("Не удалось подключиться к MetaMask. Пожалуйста, попробуйте еще раз.");
+    try {
+      if (!window.ethereum) {
+        throw new Error('MetaMask не найден. Пожалуйста, установите MetaMask.');
       }
-    } else {
-      setError("Пожалуйста, установите MetaMask!");
+
+      // Запрашиваем доступ к аккаунтам
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+
+      // Создаем провайдер и подписчика
+      const web3Provider = new ethers.BrowserProvider(window.ethereum);
+      const web3Signer = await web3Provider.getSigner();
+
+      // Обновляем состояние
+      setProvider(web3Provider);
+      setSigner(web3Signer);
+      setAccount(accounts[0]);
+      setChainId(parseInt(chainIdHex, 16));
+      setIsConnected(true);
+      setError(null);
+    } catch (err) {
+      console.error("Ошибка подключения к MetaMask:", err);
+      setError(err.message || 'Ошибка подключения к MetaMask');
+      disconnectWallet();
     }
   };
 
-  // Функция отключения кошелька
+  // Функция для отключения кошелька
   const disconnectWallet = () => {
     setProvider(null);
     setSigner(null);
     setAccount(null);
     setChainId(null);
     setIsConnected(false);
-    setIsAdmin(false);
-    setError(null);
+    setIsAdmin(false); // Сбрасываем статус админа при отключении
+    setIsCheckingAdmin(false);
   };
 
-  // Обработчики событий MetaMask
-  useEffect(() => {
-    const handleAccountsChanged = (accounts) => {
-      if (accounts.length === 0) {
-        // Если аккаунты отключены
-        disconnectWallet();
+  // Функция для переключения сети
+  const switchNetwork = async (targetChainId) => {
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: ethers.toBeHex(targetChainId) }],
+      });
+    } catch (switchError) {
+      // Этот код будет выполнен, если пользователь не имеет запрошенной сети.
+      if (switchError.code === 4902) {
+        // Код ошибки 4902 означает, что сеть не добавлена в MetaMask.
+        // Здесь можно реализовать добавление сети, если необходимо.
+        console.error("Сеть не найдена в MetaMask. Пожалуйста, добавьте сеть вручную.");
+        setError("Сеть не найдена в MetaMask. Пожалуйста, добавьте сеть вручную.");
       } else {
-        // Если аккаунт изменен
-        setAccount(accounts[0]);
-        // Проверяем, является ли пользователь администратором
-        setIsAdmin(ADMIN_ADDRESSES.some(addr => addr.toLowerCase() === accounts[0].toLowerCase()));
+        console.error("Ошибка переключения сети:", switchError);
+        setError("Ошибка переключения сети.");
       }
-    };
+    }
+  };
 
-    const handleChainChanged = (_chainId) => {
-      // Перезагружаем страницу при смене сети
-      window.location.reload();
-    };
+  // Функция для проверки, является ли адрес администратором
+  const checkIsAdmin = async (userAddress) => {
+    if (!userAddress) {
+      console.warn('[Web3 Context] Адрес для проверки isAdmin не предоставлен');
+      return false;
+    }
 
-    const handleDisconnect = (error) => {
-      console.log("MetaMask отключен", error);
-      disconnectWallet();
-    };
+    setIsCheckingAdmin(true);
+    try {
+      console.log(`[Web3 Context] Проверка isAdmin для адреса: ${userAddress}`);
 
+      // Определяем URL для API в зависимости от среды выполнения
+      let apiUrl = '';
+      if (typeof window !== 'undefined') {
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (isLocalhost) {
+          // Предполагаем, что у локального API есть endpoint для проверки
+          // Это может быть GET /api/admins/check?address=... или POST с адресом в теле
+          // Используем GET с query param для простоты
+          // !!! ВАЖНО: Убедитесь, что этот endpoint существует на вашем сервере
+          apiUrl = `http://localhost:3001/api/admins/check?address=${encodeURIComponent(userAddress)}`;
+        } else {
+          // Для Netlify Functions, возможно, нужна новая функция
+          // Предположим, что у нас есть функция checkAdmin
+          // !!! ВАЖНО: Убедитесь, что эта Netlify Function существует
+          apiUrl = `/.netlify/functions/checkAdmin?address=${encodeURIComponent(userAddress)}`;
+        }
+      } else {
+        // Для SSR
+        // !!! ВАЖНО: Убедитесь, что этот endpoint существует
+        apiUrl = `/.netlify/functions/checkAdmin?address=${encodeURIComponent(userAddress)}`;
+      }
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(10000) // 10 секунд таймаут
+      });
+
+      console.log("[Web3 Context] Ответ от проверки isAdmin:", response.status, response.statusText);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`[Web3 Context] Результат проверки isAdmin для ${userAddress}:`, data.isAdmin);
+        return data.isAdmin === true;
+      } else if (response.status === 404) {
+        // Адрес не найден в списке админов
+        console.log(`[Web3 Context] Адрес ${userAddress} не найден в списке администраторов`);
+        return false;
+      } else {
+        const errorText = await response.text();
+        console.warn(`[Web3 Context] Сервер вернул ошибку при проверке isAdmin: ${response.status} ${response.statusText} - ${errorText}`);
+        return false; // По умолчанию не админ
+      }
+    } catch (e) {
+      console.error("[Web3 Context] Ошибка сети при проверке isAdmin:", e);
+      return false; // По умолчанию не админ
+    } finally {
+      setIsCheckingAdmin(false);
+    }
+  };
+
+  // Эффект для обработки изменений аккаунтов в MetaMask
+  useEffect(() => {
     if (window.ethereum) {
+      const handleAccountsChanged = (accounts) => {
+        if (accounts.length > 0) {
+          setAccount(accounts[0]);
+          // Проверка админа будет выполнена в следующем useEffect
+        } else {
+          disconnectWallet();
+        }
+      };
+
+      const handleChainChanged = (chainIdHex) => {
+        setChainId(parseInt(chainIdHex, 16));
+        // Переподключаемся при смене сети
+        connectWallet();
+      };
+
+      const handleDisconnect = () => {
+        disconnectWallet();
+      };
+
       window.ethereum.on('accountsChanged', handleAccountsChanged);
       window.ethereum.on('chainChanged', handleChainChanged);
       window.ethereum.on('disconnect', handleDisconnect);
-    }
 
-    return () => {
-      if (window.ethereum) {
-        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-        window.ethereum.removeListener('chainChanged', handleChainChanged);
-        window.ethereum.removeListener('disconnect', handleDisconnect);
-      }
-    };
+      return () => {
+        if (window.ethereum.removeListener) {
+          window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+          window.ethereum.removeListener('chainChanged', handleChainChanged);
+          window.ethereum.removeListener('disconnect', handleDisconnect);
+        }
+      };
+    }
   }, []);
 
-  // Значение контекста
-  const value = {
-    provider,
-    signer,
-    account,
-    chainId,
-    isConnected,
-    error,
-    isAdmin,
-    connectWallet,
-    disconnectWallet,
-    switchNetwork: async (targetChainId) => {
-      if (window.ethereum) {
-        try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: `0x${targetChainId.toString(16)}` }],
-          });
-        } catch (switchError) {
-          // Этот код будет выполнен, если пользователь отказался переключать сеть
-          console.error("Ошибка переключения сети:", switchError);
-        }
+  // Эффект для проверки isAdmin при изменении account
+  useEffect(() => {
+    const performIsAdminCheck = async () => {
+      if (!account) {
+        setIsAdmin(false);
+        return;
       }
-    }
-  };
+
+      try {
+        const isAdminResult = await checkIsAdmin(account);
+        setIsAdmin(isAdminResult);
+      } catch (error) {
+        console.error("Ошибка при проверке прав администратора:", error);
+        setIsAdmin(false);
+      }
+    };
+
+    performIsAdminCheck();
+  }, [account]); // Зависимость от account
 
   return (
-    <Web3Context.Provider value={value}>
+    <Web3Context.Provider value={{
+      provider,
+      signer,
+      account,
+      chainId,
+      isConnected,
+      error,
+      isAdmin, // Экспортируем isAdmin
+      isCheckingAdmin, // Экспортируем состояние проверки
+      connectWallet,
+      disconnectWallet,
+      switchNetwork,
+    }}>
       {children}
     </Web3Context.Provider>
   );
 };
-
-export default Web3Context;
