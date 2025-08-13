@@ -1,6 +1,7 @@
 // frontend/src/context/Web3Context.jsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { ethers } from 'ethers';
+// Явно импортируем BrowserProvider из ethers.js v6
+import { BrowserProvider } from 'ethers';
 
 // Создаем контекст Web3
 const Web3Context = createContext();
@@ -22,22 +23,41 @@ export const Web3Provider = ({ children }) => {
   const [chainId, setChainId] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false); // Состояние для проверки админа
-  const [isCheckingAdmin, setIsCheckingAdmin] = useState(false); // Состояние загрузки проверки
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isCheckingAdmin, setIsCheckingAdmin] = useState(false);
 
   // Функция для подключения кошелька
   const connectWallet = async () => {
     try {
-      if (!window.ethereum) {
+      // Проверяем наличие window.ethereum
+      if (typeof window === 'undefined' || !window.ethereum) {
         throw new Error('MetaMask не найден. Пожалуйста, установите MetaMask.');
       }
 
+      console.log('[Web3 Context] Запрос подключения к MetaMask...');
+      
       // Запрашиваем доступ к аккаунтам
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+      const accounts = await window.ethereum.request({ 
+        method: 'eth_requestAccounts' 
+      });
+      
+      if (!accounts || accounts.length === 0) {
+        throw new Error('Аккаунты не найдены в MetaMask');
+      }
 
-      // Создаем провайдер и подписчика
-      const web3Provider = new ethers.BrowserProvider(window.ethereum);
+      // Получаем ID текущей сети
+      const chainIdHex = await window.ethereum.request({ 
+        method: 'eth_chainId' 
+      });
+
+      console.log('[Web3 Context] Создание провайдера ethers...');
+      
+      // Создаем провайдер ethers.js v6
+      // Используем импортированный BrowserProvider напрямую
+      const web3Provider = new BrowserProvider(window.ethereum);
+      
+      console.log('[Web3 Context] Получение signer...');
+      // Получаем signer (подписывающее лицо)
       const web3Signer = await web3Provider.getSigner();
 
       // Обновляем состояние
@@ -47,36 +67,61 @@ export const Web3Provider = ({ children }) => {
       setChainId(parseInt(chainIdHex, 16));
       setIsConnected(true);
       setError(null);
+      
+      console.log('[Web3 Context] Кошелек успешно подключен:', {
+        account: accounts[0],
+        chainId: parseInt(chainIdHex, 16)
+      });
     } catch (err) {
-      console.error("Ошибка подключения к MetaMask:", err);
-      setError(err.message || 'Ошибка подключения к MetaMask');
+      console.error("[Web3 Context] Ошибка подключения к MetaMask:", err);
+      console.error("[Web3 Context] Stack trace:", err.stack);
+      
+      // Формируем понятное сообщение об ошибке
+      let errorMessage = 'Ошибка подключения к MetaMask. ';
+      if (err.code === -32002) {
+        errorMessage += 'Запрос на подключение уже отправлен. Проверьте MetaMask.';
+      } else if (err.code === 4001) {
+        errorMessage += 'Вы отменили подключение к кошельку.';
+      } else if (err.message) {
+        errorMessage += err.message;
+      } else {
+        errorMessage += 'Пожалуйста, попробуйте еще раз.';
+      }
+      
+      setError(errorMessage);
       disconnectWallet();
     }
   };
 
   // Функция для отключения кошелька
   const disconnectWallet = () => {
+    console.log('[Web3 Context] Отключение кошелька');
     setProvider(null);
     setSigner(null);
     setAccount(null);
     setChainId(null);
     setIsConnected(false);
-    setIsAdmin(false); // Сбрасываем статус админа при отключении
+    setIsAdmin(false);
     setIsCheckingAdmin(false);
+    setError(null);
   };
 
   // Функция для переключения сети
   const switchNetwork = async (targetChainId) => {
+    if (typeof window === 'undefined' || !window.ethereum) {
+      setError("MetaMask не найден");
+      return;
+    }
+    
     try {
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: ethers.toBeHex(targetChainId) }],
+        params: [{ chainId: `0x${targetChainId.toString(16)}` }],
       });
     } catch (switchError) {
       // Этот код будет выполнен, если пользователь не имеет запрошенной сети.
       if (switchError.code === 4902) {
         // Код ошибки 4902 означает, что сеть не добавлена в MetaMask.
-        // Здесь можно реализовать добавление сети, если необходимо.
         console.error("Сеть не найдена в MetaMask. Пожалуйста, добавьте сеть вручную.");
         setError("Сеть не найдена в MetaMask. Пожалуйста, добавьте сеть вручную.");
       } else {
@@ -102,20 +147,11 @@ export const Web3Provider = ({ children }) => {
       if (typeof window !== 'undefined') {
         const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         if (isLocalhost) {
-          // Предполагаем, что у локального API есть endpoint для проверки
-          // Это может быть GET /api/admins/check?address=... или POST с адресом в теле
-          // Используем GET с query param для простоты
-          // !!! ВАЖНО: Убедитесь, что этот endpoint существует на вашем сервере
           apiUrl = `http://localhost:3001/api/admins/check?address=${encodeURIComponent(userAddress)}`;
         } else {
-          // Для Netlify Functions, возможно, нужна новая функция
-          // Предположим, что у нас есть функция checkAdmin
-          // !!! ВАЖНО: Убедитесь, что эта Netlify Function существует
           apiUrl = `/.netlify/functions/checkAdmin?address=${encodeURIComponent(userAddress)}`;
         }
       } else {
-        // Для SSR
-        // !!! ВАЖНО: Убедитесь, что этот endpoint существует
         apiUrl = `/.netlify/functions/checkAdmin?address=${encodeURIComponent(userAddress)}`;
       }
 
@@ -124,7 +160,7 @@ export const Web3Provider = ({ children }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        signal: AbortSignal.timeout(10000) // 10 секунд таймаут
+        signal: AbortSignal.timeout(10000)
       });
 
       console.log("[Web3 Context] Ответ от проверки isAdmin:", response.status, response.statusText);
@@ -134,17 +170,16 @@ export const Web3Provider = ({ children }) => {
         console.log(`[Web3 Context] Результат проверки isAdmin для ${userAddress}:`, data.isAdmin);
         return data.isAdmin === true;
       } else if (response.status === 404) {
-        // Адрес не найден в списке админов
         console.log(`[Web3 Context] Адрес ${userAddress} не найден в списке администраторов`);
         return false;
       } else {
         const errorText = await response.text();
         console.warn(`[Web3 Context] Сервер вернул ошибку при проверке isAdmin: ${response.status} ${response.statusText} - ${errorText}`);
-        return false; // По умолчанию не админ
+        return false;
       }
     } catch (e) {
       console.error("[Web3 Context] Ошибка сети при проверке isAdmin:", e);
-      return false; // По умолчанию не админ
+      return false;
     } finally {
       setIsCheckingAdmin(false);
     }
@@ -152,38 +187,44 @@ export const Web3Provider = ({ children }) => {
 
   // Эффект для обработки изменений аккаунтов в MetaMask
   useEffect(() => {
-    if (window.ethereum) {
-      const handleAccountsChanged = (accounts) => {
-        if (accounts.length > 0) {
-          setAccount(accounts[0]);
-          // Проверка админа будет выполнена в следующем useEffect
-        } else {
-          disconnectWallet();
-        }
-      };
-
-      const handleChainChanged = (chainIdHex) => {
-        setChainId(parseInt(chainIdHex, 16));
-        // Переподключаемся при смене сети
-        connectWallet();
-      };
-
-      const handleDisconnect = () => {
-        disconnectWallet();
-      };
-
-      window.ethereum.on('accountsChanged', handleAccountsChanged);
-      window.ethereum.on('chainChanged', handleChainChanged);
-      window.ethereum.on('disconnect', handleDisconnect);
-
-      return () => {
-        if (window.ethereum.removeListener) {
-          window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-          window.ethereum.removeListener('chainChanged', handleChainChanged);
-          window.ethereum.removeListener('disconnect', handleDisconnect);
-        }
-      };
+    // Проверяем, что мы в браузере
+    if (typeof window === 'undefined' || !window.ethereum) {
+      return;
     }
+
+    const handleAccountsChanged = (accounts) => {
+      console.log('[Web3 Context] Аккаунты изменены:', accounts);
+      if (accounts.length > 0) {
+        setAccount(accounts[0]);
+        // Проверка админа будет выполнена в следующем useEffect
+      } else {
+        disconnectWallet();
+      }
+    };
+
+    const handleChainChanged = (chainIdHex) => {
+      console.log('[Web3 Context] Сеть изменена:', chainIdHex);
+      setChainId(parseInt(chainIdHex, 16));
+      // Переподключаемся при смене сети
+      connectWallet();
+    };
+
+    const handleDisconnect = () => {
+      console.log('[Web3 Context] MetaMask отключен');
+      disconnectWallet();
+    };
+
+    window.ethereum.on('accountsChanged', handleAccountsChanged);
+    window.ethereum.on('chainChanged', handleChainChanged);
+    window.ethereum.on('disconnect', handleDisconnect);
+
+    return () => {
+      if (window.ethereum && window.ethereum.removeListener) {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+        window.ethereum.removeListener('chainChanged', handleChainChanged);
+        window.ethereum.removeListener('disconnect', handleDisconnect);
+      }
+    };
   }, []);
 
   // Эффект для проверки isAdmin при изменении account
@@ -204,7 +245,7 @@ export const Web3Provider = ({ children }) => {
     };
 
     performIsAdminCheck();
-  }, [account]); // Зависимость от account
+  }, [account]);
 
   return (
     <Web3Context.Provider value={{
@@ -214,8 +255,8 @@ export const Web3Provider = ({ children }) => {
       chainId,
       isConnected,
       error,
-      isAdmin, // Экспортируем isAdmin
-      isCheckingAdmin, // Экспортируем состояние проверки
+      isAdmin,
+      isCheckingAdmin,
       connectWallet,
       disconnectWallet,
       switchNetwork,
