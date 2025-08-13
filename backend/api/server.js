@@ -33,7 +33,7 @@ const DEFAULT_APP_CONFIG = {
 
 // === MIDDLEWARE ===
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '10mb' })); // Увеличиваем лимит для больших конфигов
 
 // === ФУНКЦИИ РАБОТЫ С БАЗОЙ ДАННЫХ ===
 
@@ -154,9 +154,10 @@ const saveAppConfigToDB = async (configData) => {
  */
 const isAdminInDB = async (address) => {
     if (!address) return false;
-    const client = await connectToNeon(true); // Можно использовать readonly для проверки
+    // Можно использовать readonly для проверки
+    const client = await connectToNeon(true); 
     try {
-        const result = await client.query('SELECT 1 FROM admins WHERE address = $1', [address]);
+        const result = await client.query('SELECT 1 FROM admins WHERE address = $1', [address.toLowerCase()]);
         return result.rows.length > 0;
     } finally {
         await client.end();
@@ -186,7 +187,7 @@ const addAdminToDB = async (address) => {
     try {
         await client.query(
             'INSERT INTO admins (address) VALUES ($1) ON CONFLICT (address) DO NOTHING',
-            [address]
+            [address.toLowerCase()]
         );
         console.log(`[API Server] Адрес ${address} добавлен в список администраторов`);
     } finally {
@@ -201,7 +202,7 @@ const addAdminToDB = async (address) => {
 const removeAdminFromDB = async (address) => {
     const client = await connectToNeon(false); // Только админ может удалять
     try {
-        await client.query('DELETE FROM admins WHERE address = $1', [address]);
+        await client.query('DELETE FROM admins WHERE address = $1', [address.toLowerCase()]);
         console.log(`[API Server] Адрес ${address} удален из списка администраторов`);
     } finally {
         await client.end();
@@ -221,7 +222,7 @@ const requireAdmin = async (req, res, next) => {
         if (!isAdmin) {
             return res.status(403).json({ error: 'Доступ запрещен. Адрес не является администратором.' });
         }
-        req.adminAddress = adminAddress; // Передаем адрес дальше
+        req.adminAddress = adminAddress.toLowerCase(); // Передаем адрес дальше
         next();
     } catch (error) {
         console.error('[API Server] Ошибка проверки прав администратора:', error);
@@ -272,7 +273,7 @@ app.get('/api/app/config', async (req, res) => {
 
 // POST /api/app/config - Сохранить конфигурацию приложения (только для админки)
 app.post('/api/app/config', requireAdmin, async (req, res) => {
-  const adminAddress = req.adminAddress;
+  const adminAddress = req.adminAddress; // Берем из middleware
   const configData = req.body;
   console.log(`[API Server] POST /api/app/config called with adminAddress: ${adminAddress}`);
   console.log('[API Server] Config ', configData);
@@ -305,7 +306,7 @@ app.post('/api/app/config', requireAdmin, async (req, res) => {
 
 // GET /api/admins - Получить список администраторов (только для админки)
 app.get('/api/admins', requireAdmin, async (req, res) => {
-    const adminAddress = req.adminAddress;
+    const adminAddress = req.adminAddress; // Берем из middleware
     console.log(`[API Server] GET /api/admins called by admin: ${adminAddress}`);
 
     try {
@@ -322,9 +323,37 @@ app.get('/api/admins', requireAdmin, async (req, res) => {
     }
 });
 
+// GET /api/admins/check - Проверить, является ли адрес администратором (для чтения всеми)
+app.get('/api/admins/check', async (req, res) => {
+  const userAddress = req.query.address;
+  console.log(`[API Server] GET /api/admins/check called with address: ${userAddress}`);
+
+  if (!userAddress) {
+    console.warn('[API Server] address query param is missing');
+    return res.status(400).json({ error: 'Требуется параметр address в query string' });
+  }
+
+  try {
+    // Создаем таблицы если они не существуют (на всякий случай)
+    await createTables();
+
+    // Проверяем, является ли адрес админом
+    const isAdmin = await isAdminInDB(userAddress);
+
+    console.log(`[API Server] isAdmin check for ${userAddress}: ${isAdmin}`);
+    res.status(200).json({ isAdmin: isAdmin, address: userAddress });
+  } catch (error) {
+    console.error('[API Server] Error checking isAdmin:', error);
+    res.status(500).json({
+      error: 'Внутренняя ошибка сервера при проверке прав администратора',
+      details: error.message
+    });
+  }
+});
+
 // POST /api/admins - Добавить администратора (только для админки)
 app.post('/api/admins', requireAdmin, async (req, res) => {
-    const adminAddress = req.adminAddress;
+    const adminAddress = req.adminAddress; // Берем из middleware
     const { newAdminAddress } = req.body;
     console.log(`[API Server] POST /api/admins called by admin: ${adminAddress} to add: ${newAdminAddress}`);
 
@@ -348,7 +377,7 @@ app.post('/api/admins', requireAdmin, async (req, res) => {
 
 // DELETE /api/admins/:address - Удалить администратора (только для админки)
 app.delete('/api/admins/:address', requireAdmin, async (req, res) => {
-    const adminAddress = req.adminAddress;
+    const adminAddress = req.adminAddress; // Берем из middleware
     const addressToRemove = req.params.address;
     console.log(`[API Server] DELETE /api/admins/:address called by admin: ${adminAddress} to remove: ${addressToRemove}`);
 
@@ -417,6 +446,7 @@ const startServer = async () => {
       console.log(`[API Server] POST http://localhost:${PORT}/api/app/config`);
       console.log(`[API Server] Admin management endpoints:`);
       console.log(`[API Server] GET http://localhost:${PORT}/api/admins`);
+      console.log(`[API Server] GET http://localhost:${PORT}/api/admins/check`);
       console.log(`[API Server] POST http://localhost:${PORT}/api/admins`);
       console.log(`[API Server] DELETE http://localhost:${PORT}/api/admins/:address`);
     });

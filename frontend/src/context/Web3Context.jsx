@@ -1,6 +1,6 @@
 // frontend/src/context/Web3Context.jsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-// Для ethers.js v5 используем Web3Provider
+// Для ethers.js v5 используем ethers
 import { ethers } from 'ethers';
 
 // Создаем контекст Web3
@@ -23,8 +23,8 @@ export const Web3Provider = ({ children }) => {
   const [chainId, setChainId] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isCheckingAdmin, setIsCheckingAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false); // Состояние для проверки админа
+  const [isCheckingAdmin, setIsCheckingAdmin] = useState(false); // Состояние загрузки проверки
 
   // Функция для подключения кошелька
   const connectWallet = async () => {
@@ -53,7 +53,6 @@ export const Web3Provider = ({ children }) => {
       console.log('[Web3 Context] Создание провайдера ethers...');
       
       // Создаем провайдер ethers.js v5
-      // Используем ethers.providers.Web3Provider
       const web3Provider = new ethers.providers.Web3Provider(window.ethereum);
       
       console.log('[Web3 Context] Получение signer...');
@@ -101,7 +100,7 @@ export const Web3Provider = ({ children }) => {
     setAccount(null);
     setChainId(null);
     setIsConnected(false);
-    setIsAdmin(false);
+    setIsAdmin(false); // Сбрасываем статус админа при отключении
     setIsCheckingAdmin(false);
     setError(null);
   };
@@ -147,11 +146,15 @@ export const Web3Provider = ({ children }) => {
       if (typeof window !== 'undefined') {
         const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         if (isLocalhost) {
+          // Используем новый endpoint для проверки
           apiUrl = `http://localhost:3001/api/admins/check?address=${encodeURIComponent(userAddress)}`;
         } else {
+          // Для Netlify Functions, возможно, нужна новая функция
+          // Предположим, что у нас есть функция checkAdmin
           apiUrl = `/.netlify/functions/checkAdmin?address=${encodeURIComponent(userAddress)}`;
         }
       } else {
+        // Для SSR
         apiUrl = `/.netlify/functions/checkAdmin?address=${encodeURIComponent(userAddress)}`;
       }
 
@@ -160,26 +163,35 @@ export const Web3Provider = ({ children }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        signal: AbortSignal.timeout(10000)
+        signal: AbortSignal.timeout(10000) // 10 секунд таймаут
       });
 
       console.log("[Web3 Context] Ответ от проверки isAdmin:", response.status, response.statusText);
+
+      // Проверим Content-Type ответа на случай, если вернулась HTML-страница
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const responseText = await response.text(); // Читаем как текст для логирования
+        console.error(`[Web3 Context] Ожидался JSON, но получен ${contentType || 'неизвестный тип'}. Ответ (первые 500 символов):`, responseText.substring(0, 500) + '...');
+        throw new Error(`Сервер вернул неверный тип контента: ${contentType || 'неизвестный'}`);
+      }
 
       if (response.ok) {
         const data = await response.json();
         console.log(`[Web3 Context] Результат проверки isAdmin для ${userAddress}:`, data.isAdmin);
         return data.isAdmin === true;
       } else if (response.status === 404) {
+        // Адрес не найден в списке админов
         console.log(`[Web3 Context] Адрес ${userAddress} не найден в списке администраторов`);
         return false;
       } else {
         const errorText = await response.text();
         console.warn(`[Web3 Context] Сервер вернул ошибку при проверке isAdmin: ${response.status} ${response.statusText} - ${errorText}`);
-        return false;
+        return false; // По умолчанию не админ
       }
     } catch (e) {
       console.error("[Web3 Context] Ошибка сети при проверке isAdmin:", e);
-      return false;
+      return false; // По умолчанию не админ
     } finally {
       setIsCheckingAdmin(false);
     }
@@ -245,7 +257,7 @@ export const Web3Provider = ({ children }) => {
     };
 
     performIsAdminCheck();
-  }, [account]);
+  }, [account]); // Зависимость от account
 
   return (
     <Web3Context.Provider value={{
@@ -255,8 +267,8 @@ export const Web3Provider = ({ children }) => {
       chainId,
       isConnected,
       error,
-      isAdmin,
-      isCheckingAdmin,
+      isAdmin, // Экспортируем isAdmin
+      isCheckingAdmin, // Экспортируем состояние проверки
       connectWallet,
       disconnectWallet,
       switchNetwork,
