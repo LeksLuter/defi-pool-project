@@ -7,7 +7,7 @@ import * as defillamaService from './defillamaService';
 import * as alchemyService from './alchemyService';
 import { SUPPORTED_CHAINS } from '../config/supportedChains';
 import { getTokenServicesConfig, getPriceServicesConfig } from '../config/adminConfig'; // Импорт из нового файла конфигурации
-import { fetchMultipleTokenPricesWithFallback } from './priceService';
+import { fetchMultipleTokenPricesWithFallback } from './priceAggregatorService';
 import { saveTokensToCache, getCachedTokens, setLastUpdateTime } from './cacheService';
 
 // === КОНСТАНТЫ ===
