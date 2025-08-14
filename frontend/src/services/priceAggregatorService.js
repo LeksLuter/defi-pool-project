@@ -4,7 +4,7 @@ import * as coingeckoService from './coingeckoService';
 import * as coinmarketcapService from './coinmarketcapService';
 import * as alchemyService from './alchemyService';
 import * as defillamaService from './defillamaService';
-import { getPriceServicesConfig } from '../config/adminConfig';
+import { getPriceServicesConfig } from '../config/appConfig';
 import { SUPPORTED_CHAINS } from '../config/supportedChains';
 import { saveTokensToCache, getCachedTokens, isCacheExpired } from './cacheService';
 import { setLastUpdateTime, canPerformBackgroundUpdate } from './cacheService';

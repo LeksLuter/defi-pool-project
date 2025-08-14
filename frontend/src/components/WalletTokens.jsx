@@ -10,7 +10,7 @@ import { saveTokensToCache, getCachedTokens, isCacheExpired } from '../services/
 import { setLastUpdateTime, canPerformBackgroundUpdate } from '../services/cacheService';
 // === ИМПОРТЫ ИЗ НОВОГО ФАЙЛА КОНФИГУРАЦИИ ===
 // ВАЖНО: Импортируем функцию, которая теперь загружает ГЛОБАЛЬНУЮ конфигурацию
-import { getUpdateIntervalMinutes } from '../config/adminConfig';
+import { getUpdateIntervalMinutes } from '../config/appConfig';
 // === КОНЕЦ ИМПОРТОВ ИЗ НОВОГО ФАЙЛА КОНФИГУРАЦИИ ===
 
 // === КОНСТАНТЫ ===

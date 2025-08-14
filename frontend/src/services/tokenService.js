@@ -9,7 +9,7 @@ import * as defillamaService from './defillamaService';
 import { fetchMultipleTokenPricesWithFallback } from './priceAggregatorService';
 // === АДАПТАЦИЯ ПОД НОВУЮ ЛОГИКУ КОНФИГУРАЦИИ ===
 // ВАЖНО: Убедитесь, что файл frontend/src/config/adminConfig.js существует и экспортирует getTokenServicesConfig
-import { getTokenServicesConfig } from '../config/adminConfig';
+import { getTokenServicesConfig } from '../config/appConfig';
 // === КОНЕЦ АДАПТАЦИИ ===
 import { SUPPORTED_CHAINS } from '../config/supportedChains';
 import { saveTokensToCache, getCachedTokens, isCacheExpired } from './cacheService';
