@@ -9,6 +9,7 @@ import { updateTokens } from '../services/tokenService'; // Основной и�
 import { saveTokensToCache, getCachedTokens, isCacheExpired } from '../services/cacheService';
 import { setLastUpdateTime, canPerformBackgroundUpdate } from '../services/cacheService';
 // === ИМПОРТЫ ИЗ НОВОГО ФАЙЛА КОНФИГУРАЦИИ ===
+// ВАЖНО: Импортируем функцию, которая теперь загружает ГЛОБАЛЬНУЮ конфигурацию
 import { getUpdateIntervalMinutes } from '../config/adminConfig';
 // === КОНЕЦ ИМПОРТОВ ИЗ НОВОГО ФАЙЛА КОНФИГУРАЦИИ ===
 
@@ -28,7 +29,10 @@ const WalletTokens = () => {
 
   const intervalRef = useRef(null);
   const hasFetchedTokens = useRef(false);
-  const isMountedRef = useRef(true); // Ref для отслеживания монтирования
+  // === useRef ДЛЯ ОТСЛЕЖИВАНИЯ МОНТИРОВАНИЯ ===
+  // Это ключевое изменение для предотвращения обновления состояния в размонтированном компоненте
+  const isMountedRef = useRef(true);
+  // === КОНЕЦ useRef ДЛЯ ОТСЛЕЖИВАНИЯ МОНТИРОВАНИЯ ===
   const loadedNetworks = useRef(new Set()); // Ref для отслеживания уже загруженных сетей
 
   // === СОСТОЯНИЯ ДЛЯ ФИЛЬТРОВ ОТОБРАЖЕНИЯ ===
@@ -60,6 +64,8 @@ const WalletTokens = () => {
   useEffect(() => {
     const loadUpdateInterval = async () => {
       try {
+        // ВАЖНО: Теперь getUpdateIntervalMinutes() загружает ГЛОБАЛЬНУЮ конфигурацию
+        // Она сама обрабатывает загрузку из API или localStorage
         const intervalMinutes = await getUpdateIntervalMinutes();
         console.log(`[WalletTokens] Загружен интервал обновления: ${intervalMinutes} минут`);
         setEffectiveUpdateIntervalMinutes(intervalMinutes);
@@ -81,8 +87,14 @@ const WalletTokens = () => {
     }
     
     console.log(`[WalletTokens] Начинаем обновление токенов для сети ${networkChainId}...`);
-    setLoading(true);
-    setError(null);
+    // Устанавливаем loading только если компонент смонтирован
+    if (isMountedRef.current) {
+        setLoading(true);
+    }
+    // Устанавливаем setError только если компонент смонтирован
+    if (isMountedRef.current) {
+        setError(null);
+    }
     
     try {
       // Создаем локальное состояние для этой операции
@@ -90,20 +102,29 @@ const WalletTokens = () => {
       let networkLoading = true;
       let networkError = null;
 
+      // Локальные функции setState, которые проверяют isMountedRef
       const setNetworkTokens = (newTokens) => {
         networkTokens = newTokens;
       };
 
       const setNetworkLoading = (isLoading) => {
         networkLoading = isLoading;
+        // Устанавливаем loading только если компонент смонтирован
+        if (isMountedRef.current) {
+            setLoading(isLoading);
+        }
       };
 
       const setNetworkError = (err) => {
         networkError = err;
+        // Устанавливаем error только если компонент смонтирован
+        if (isMountedRef.current) {
+            setError(err);
+        }
       };
 
-      // Вызываем updateTokens для конкретной сети
-      await updateTokens(account, provider, setNetworkTokens, setNetworkLoading, setNetworkError, networkChainId, { current: true });
+      // Вызываем updateTokens для конкретной сети, передавая isMountedRef
+      await updateTokens(account, provider, setNetworkTokens, setNetworkLoading, setNetworkError, networkChainId, isMountedRef);
 
       if (networkError) {
         console.error(`[WalletTokens] Ошибка при получении токенов для сети ${networkChainId}:`, networkError);
@@ -118,9 +139,16 @@ const WalletTokens = () => {
       return networkTokens || [];
     } catch (error) {
       console.error(`[WalletTokens] Критическая ошибка при получении токенов для сети ${networkChainId}:`, error);
+      // Устанавливаем error только если компонент смонтирован
+      if (isMountedRef.current) {
+          setError(error.message || 'Неизвестная ошибка при загрузке токенов');
+      }
       return [];
     } finally {
-      setLoading(false);
+      // Устанавливаем loading в false только если компонент смонтирован
+      if (isMountedRef.current) {
+          setLoading(false);
+      }
     }
   };
 
@@ -131,20 +159,29 @@ const WalletTokens = () => {
         return;
     }
     console.log("[WalletTokens] Начинаем обновление токенов для текущей сети...");
-    setLoading(true);
-    setError(null);
+    // Устанавливаем loading только если компонент смонтирован
+    if (isMountedRef.current) {
+        setLoading(true);
+    }
+    // Устанавливаем setError только если компонент смонтирован
+    if (isMountedRef.current) {
+        setError(null);
+    }
+    // Передаем isMountedRef в updateTokens
     await updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef);
   }, [account, provider, chainId]);
 
   // Основная функция обновления токенов (делегирует всю логику сервису)
   useEffect(() => {
+    // Устанавливаем флаг монтирования в true при монтировании
     isMountedRef.current = true;
     const initializeTokens = async () => {
       // Проверяем, что у нас есть все необходимые данные
       if (!account || !provider || !chainId) {
         console.log("[WalletTokens] Пропуск инициализации токенов: нет данных", { account, provider, chainId });
         // Если данных нет, но токены уже были загружены, убираем loading
-        if (tokens.length > 0) {
+        // Устанавливаем loading только если компонент смонтирован
+        if (isMountedRef.current && tokens.length > 0) {
           setLoading(false);
         }
         return;
@@ -153,7 +190,10 @@ const WalletTokens = () => {
       // Проверяем, не загружали ли мы уже токены для этой сети
       if (loadedNetworks.current.has(chainId)) {
         console.log(`[WalletTokens] Токены для сети ${chainId} уже были загружены ранее, пропуск инициализации`);
-        setLoading(false); // Убедимся, что loading сброшен
+        // Устанавливаем loading только если компонент смонтирован
+        if (isMountedRef.current) {
+            setLoading(false); // Убедимся, что loading сброшен
+        }
         return;
       }
       
@@ -162,10 +202,16 @@ const WalletTokens = () => {
       
       // Получаем токены только для текущей сети
       try {
+        // Передаем isMountedRef в updateTokens
         await updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef);
       } catch (err) {
         console.error("[WalletTokens] Ошибка в initializeTokens:", err);
+        // Устанавливаем error только если компонент смонтирован
+        if (isMountedRef.current) {
+            setError(err.message || 'Ошибка при инициализации токенов');
+        }
         // Если ошибка, пытаемся получить только для текущей сети
+        // Передаем isMountedRef в updateTokens
         updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef);
       }
     };
@@ -173,6 +219,7 @@ const WalletTokens = () => {
     initializeTokens();
 
     return () => {
+      // Устанавливаем флаг монтирования в false при размонтировании
       isMountedRef.current = false;
       // hasFetchedTokens.current = false; // Не сбрасываем, чтобы не запрашивать снова при размонтировании
     };
@@ -198,12 +245,18 @@ const WalletTokens = () => {
     }
 
     intervalRef.current = setInterval(async () => {
-      if (!isMountedRef.current) return;
+      // Проверяем, что компонент смонтирован перед выполнением
+      if (!isMountedRef.current) {
+        console.log("[WalletTokens] Компонент размонтирован, отмена фонового обновления");
+        return;
+      }
       console.log(`[WalletTokens] Автоматическое обновление токенов (интервал: ${effectiveUpdateIntervalMinutes} минут) для сети ${chainId}`);
       try {
         // Не показываем UI загрузки для фонового обновления
-        await updateTokens(account, provider, setTokens, null, null, chainId, { current: true });
+        // Передаем isMountedRef в updateTokens, но setLoading и setError будут null
+        await updateTokens(account, provider, setTokens, null, null, chainId, isMountedRef);
       } catch (err) {
+        // Логируем ошибку, но не отображаем пользователю для фонового обновления
         console.error("[WalletTokens] Ошибка при фоновом обновлении токенов:", err);
         // Ошибки фонового обновления не отображаем пользователю
       }
@@ -362,12 +415,19 @@ const WalletTokens = () => {
       // Если сеть еще не загружалась, загружаем токены для нее
       if (!loadedNetworks.current.has(chainIdToToggle)) {
         console.log(`[WalletTokens] Сеть ${chainIdToToggle} еще не загружалась, начинаем загрузку...`);
-        setLoading(true);
-        setError(null);
+        // Устанавливаем loading только если компонент смонтирован
+        if (isMountedRef.current) {
+            setLoading(true);
+        }
+        // Устанавливаем setError только если компонент смонтирован
+        if (isMountedRef.current) {
+            setError(null);
+        }
         
         try {
           const networkTokens = await fetchTokensForNetwork(chainIdToToggle);
           
+          // Проверяем, что компонент смонтирован перед обновлением состояния
           if (isMountedRef.current) {
             // Объединяем новые токены с существующими
             setTokens(prevTokens => {
@@ -376,18 +436,20 @@ const WalletTokens = () => {
               // Добавляем новые токены этой сети
               return [...filteredTokens, ...networkTokens];
             });
-            setLoading(false);
+            // setLoading(false); // Уже устанавливается в finally fetchTokensForNetwork
             console.log(`[WalletTokens] Установлено ${networkTokens.length} токенов для сети ${chainIdToToggle}`);
             // Помечаем сеть как загруженную
             loadedNetworks.current.add(chainIdToToggle);
           }
         } catch (err) {
           console.error(`[WalletTokens] Ошибка при загрузке токенов для сети ${chainIdToToggle}:`, err);
-          if (setError && isMountedRef.current) {
-            setError(`Не удалось загрузить токены для сети ${chainIdToToggle}: ${err.message || 'Неизвестная ошибка'}`);
+          // Устанавливаем error только если компонент смонтирован
+          if (isMountedRef.current) {
+              setError(`Не удалось загрузить токены для сети ${chainIdToToggle}: ${err.message || 'Неизвестная ошибка'}`);
           }
-          if (setLoading && isMountedRef.current) {
-            setLoading(false);
+          // Устанавливаем loading в false только если компонент смонтирован
+          if (isMountedRef.current) {
+              setLoading(false);
           }
         }
       }
