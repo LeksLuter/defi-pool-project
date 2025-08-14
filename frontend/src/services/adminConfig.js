@@ -407,12 +407,9 @@ export const checkIsAdmin = async (address) => {
       const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       if (isLocalhost) {
         // Предполагаем, что у локального API есть endpoint для проверки
-        // Это может быть GET /api/admins/check?address=... или POST с адресом в теле
-        // Используем GET с query param для простоты
         apiUrl = `http://localhost:3001/api/admins/check?address=${encodeURIComponent(address)}`;
       } else {
-        // Для Netlify Functions, возможно, нужна новая функция
-        // Предположим, что у нас есть функция checkAdmin
+        // Для Netlify Functions
         apiUrl = `/.netlify/functions/checkAdmin?address=${encodeURIComponent(address)}`;
       }
     } else {
@@ -424,8 +421,6 @@ export const checkIsAdmin = async (address) => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        // Не передаем X-Admin-Address, так как мы его проверяем
-        // Для локального API можно передать X-User-Address, но это не обязательно для проверки
       },
       signal: AbortSignal.timeout(10000) // 10 секунд таймаут
     });
