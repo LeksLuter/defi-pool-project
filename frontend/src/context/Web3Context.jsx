@@ -149,8 +149,7 @@ export const Web3Provider = ({ children }) => {
           // Используем новый endpoint для проверки
           apiUrl = `http://localhost:3001/api/admins/check?address=${encodeURIComponent(userAddress)}`;
         } else {
-          // Для Netlify Functions, возможно, нужна новая функция
-          // Предположим, что у нас есть функция checkAdmin
+          // Для Netlify Functions
           apiUrl = `/.netlify/functions/checkAdmin?address=${encodeURIComponent(userAddress)}`;
         }
       } else {
