@@ -1,21 +1,28 @@
 // frontend/src/services/tokenService.js
-
 import * as etherscanV2Service from './etherscanV2Service';
 import * as coingeckoService from './coingeckoService';
 import * as coinmarketcapService from './coinmarketcapService';
-import * as defillamaService from './defillamaService';
 import * as alchemyService from './alchemyService';
-import { SUPPORTED_CHAINS } from '../config/supportedChains';
-import { getTokenServicesConfig, getPriceServicesConfig } from '../config/adminConfig'; // Импорт из нового файла конфигурации
+import * as defillamaService from './defillamaService';
+// === ИСПРАВЛЕНИЕ ПУТИ К priceAggregatorService ===
+// ВАЖНО: Убедитесь, что файл frontend/src/services/priceAggregatorService.js существует
 import { fetchMultipleTokenPricesWithFallback } from './priceAggregatorService';
-import { saveTokensToCache, getCachedTokens, setLastUpdateTime } from './cacheService';
+// === АДАПТАЦИЯ ПОД НОВУЮ ЛОГИКУ КОНФИГУРАЦИИ ===
+// ВАЖНО: Убедитесь, что файл frontend/src/config/adminConfig.js существует и экспортирует getTokenServicesConfig
+import { getTokenServicesConfig } from '../config/adminConfig';
+// === КОНЕЦ АДАПТАЦИИ ===
+import { SUPPORTED_CHAINS } from '../config/supportedChains';
+import { saveTokensToCache, getCachedTokens, isCacheExpired } from './cacheService';
+import { setLastUpdateTime, canPerformBackgroundUpdate } from './cacheService';
 
 // === КОНСТАНТЫ ===
-const MIN_UPDATE_INTERVAL_MS = 30000; // 30 секунд, минимальный интервал для фонового обновления
+const MIN_UPDATE_INTERVAL_MS = 30000;
+const CACHE_PREFIX = 'defi_pool_tokens';
+const DEFAULT_CACHE_EXPIRY_MINUTES = 5;
 // === КОНЕЦ КОНСТАНТ ===
 
 /**
- * Получает токены с балансами, используя доступные сервисы с приоритетом
+ * Получает список токенов с балансами для указанного аккаунта
  * @param {string} accountAddress Адрес кошелька пользователя
  * @param {ethers.providers.Provider} ethProvider Провайдер ethers.js
  * @param {number} chainIdValue ID сети
@@ -34,8 +41,16 @@ export const fetchTokensWithFallback = async (accountAddress, ethProvider, chain
     return [];
   }
 
-  // Получаем конфигурацию сервисов с проверкой на корректность
+  // === АДАПТАЦИЯ ПОД НОВУЮ ЛОГИКУ КОНФИГУРАЦИИ ===
+  // Получаем конфигурацию сервисов. Теперь это ГЛОБАЛЬНАЯ конфигурация, загружаемая из adminConfig.js
+  // adminConfig.js сама обрабатывает загрузку из API или localStorage
   let tokenServicesConfig = getTokenServicesConfig();
+  // === КОНЕЦ АДАПТАЦИИ ===
+  
+  // Логируем конфигурацию для отладки
+  console.log('[Token Service] Конфигурация сервисов:', tokenServicesConfig);
+  
+  // Проверяем, что конфигурация существует и является объектом
   if (!tokenServicesConfig || typeof tokenServicesConfig !== 'object') {
     console.warn('[Token Service] getTokenServicesConfig вернул некорректные данные, используем дефолтные настройки');
     tokenServicesConfig = {
@@ -57,27 +72,36 @@ export const fetchTokensWithFallback = async (accountAddress, ethProvider, chain
     { name: 'CoinMarketCap', service: coinmarketcapService },
   ];
 
-  // Фильтруем сервисы по настройкам администратора
-  const enabledServices = ALL_SERVICES.filter(service =>
-    tokenServicesConfig.tokenServices[service.name] !== false // undefined/null/true будут включены
-  );
+  // Фильтруем сервисы согласно настройкам администратора с проверкой
+  // ВАЖНО: Теперь проверяем на строгое равенство `true`
+  const enabledServices = ALL_SERVICES.filter(service => {
+    // Проверяем, что сервис включен в конфигурации
+    const isEnabled = tokenServicesConfig.tokenServices && tokenServicesConfig.tokenServices[service.name] === true;
+    console.log(`[Token Service] Сервис ${service.name} включен: ${isEnabled}`);
+    if (!isEnabled) {
+      console.log(`[Token Service] Сервис ${service.name} отключен в настройках админки.`);
+    }
+    return isEnabled;
+  });
 
-  console.log(`[Token Service] Попытка получения токенов для сети ${chainIdValue} через сервисы:`, enabledServices.map(s => s.name));
+  console.log(`[Token Service] Используются сервисы получения токенов: ${enabledServices.map(s => s.name).join(', ')}`);
 
-  // Пробуем каждый сервис по очереди
+  // Попробуем получить токены из каждого сервиса по очереди
   for (const service of enabledServices) {
     try {
-      console.log(`[Token Service] Попытка получения токенов через ${service.name}...`);
+      console.log(`[Token Service] Попытка получения токенов через ${service.name}`);
       const tokens = await service.service.fetchTokens(accountAddress, ethProvider, chainIdValue);
-
+      
       // Проверяем и корректируем данные токенов
       if (tokens && Array.isArray(tokens) && tokens.length > 0) {
         console.log(`[Token Service] Успешно получено ${tokens.length} токенов через ${service.name}`);
+        
         // Корректируем chainId для токенов, если он отсутствует
         const correctedTokens = tokens.map(token => ({
           ...token,
           chainId: token.chainId || chainIdValue
         }));
+        
         return correctedTokens;
       } else {
         console.warn(`[Token Service] Сервис ${service.name} вернул пустой или некорректный результат`);
@@ -297,3 +321,10 @@ export const updateTokens = async (
     }
   }
 };
+
+// === УДАЛЕНЫ НЕИСПОЛЬЗУЕМЫЕ ФУНКЦИИ ===
+// Функции `fetchTokensWithPrices`, `fetchAdminConfigAsReadOnly` удалены, так как:
+// 1. `fetchTokensWithPrices` дублирует логику `fetchTokensAndPrices` и `updateTokens`.
+// 2. `fetchAdminConfigAsReadOnly` больше не нужна, так как `getTokenServicesConfig` сама
+//    отвечает за загрузку ГЛОБАЛЬНОЙ конфигурации из API или localStorage.
+// === КОНЕЦ УДАЛЕННЫХ ФУНКЦИЙ ===
