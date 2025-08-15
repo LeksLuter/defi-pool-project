@@ -52,21 +52,23 @@ const WalletTokens = () => {
     if (chainId) {
       console.log(`[WalletTokens] Установка selectedChains в [${chainId}]`);
       setSelectedChains(new Set([chainId]));
-      // Добавляем текущую сеть в загруженные
-      loadedNetworks.current.add(chainId);
+      // Не добавляем chainId в loadedNetworks здесь, чтобы обеспечить первую загрузку
+      // loadedNetworks.current.add(chainId);
     } else {
       console.log("[WalletTokens] chainId пустой, очищаем selectedChains");
       setSelectedChains(new Set());
     }
   }, [chainId]);
 
-  // === ЭФФЕКТ ДЛЯ ЗАГРУЗКИ ИНТЕРВАЛА ИЗ adminConfig ===
+  // === ЭФФЕКТ ДЛЯ ЗАГРУЗКИ ИНТЕРВАЛА ИЗ appConfig ===
   useEffect(() => {
     const loadUpdateInterval = async () => {
       try {
         // ВАЖНО: Теперь getUpdateIntervalMinutes() загружает ГЛОБАЛЬНУЮ конфигурацию
         // Она сама обрабатывает загрузку из API или localStorage
-        const intervalMinutes = await getUpdateIntervalMinutes();
+        // Передаем адрес пользователя для корректной идентификации
+        console.log(`[WalletTokens] Попытка загрузки интервала обновления для пользователя: ${account}`);
+        const intervalMinutes = await getUpdateIntervalMinutes(account); // Передаем account как userAddress
         console.log(`[WalletTokens] Загружен интервал обновления: ${intervalMinutes} минут`);
         setEffectiveUpdateIntervalMinutes(intervalMinutes);
       } catch (error) {
@@ -76,7 +78,7 @@ const WalletTokens = () => {
     };
 
     loadUpdateInterval();
-  }, []);
+  }, [account]); // Добавляем account в зависимости
   // === КОНЕЦ ЭФФЕКТА ===
 
   // Функция для обновления токенов конкретной сети
@@ -159,6 +161,10 @@ const WalletTokens = () => {
         return;
     }
     console.log("[WalletTokens] Начинаем обновление токенов для текущей сети...");
+    
+    // Очищаем список загруженных сетей для принудительной перезагрузки
+    loadedNetworks.current.clear();
+    
     // Устанавливаем loading только если компонент смонтирован
     if (isMountedRef.current) {
         setLoading(true);
@@ -175,6 +181,7 @@ const WalletTokens = () => {
   useEffect(() => {
     // Устанавливаем флаг монтирования в true при монтировании
     isMountedRef.current = true;
+    
     const initializeTokens = async () => {
       // Проверяем, что у нас есть все необходимые данные
       if (!account || !provider || !chainId) {
@@ -197,13 +204,16 @@ const WalletTokens = () => {
         return;
       }
       
-      loadedNetworks.current.add(chainId);
+      // Добавляем сеть в список загруженных ДО фактической загрузки
+      // loadedNetworks.current.add(chainId); // Переносим добавление после успешной загрузки
       console.log("[WalletTokens] Начальное получение токенов для текущей сети...");
       
       // Получаем токены только для текущей сети
       try {
         // Передаем isMountedRef в updateTokens
         await updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef);
+        // Только после успешной загрузки добавляем сеть в loadedNetworks
+        loadedNetworks.current.add(chainId);
       } catch (err) {
         console.error("[WalletTokens] Ошибка в initializeTokens:", err);
         // Устанавливаем error только если компонент смонтирован
@@ -212,7 +222,16 @@ const WalletTokens = () => {
         }
         // Если ошибка, пытаемся получить только для текущей сети
         // Передаем isMountedRef в updateTokens
-        updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef);
+        try {
+          await updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef);
+          // Только после успешной загрузки добавляем сеть в loadedNetworks
+          loadedNetworks.current.add(chainId);
+        } catch (retryErr) {
+          console.error("[WalletTokens] Повторная ошибка в initializeTokens:", retryErr);
+          if (isMountedRef.current) {
+            setError(retryErr.message || 'Ошибка при повторной инициализации токенов');
+          }
+        }
       }
     };
 
@@ -499,7 +518,7 @@ const WalletTokens = () => {
       hasFetchedTokens: hasFetchedTokens.current
     });
     
-    if (loading) {
+    if (loading && tokens.length === 0) {
       return (
         <tr>
           <td colSpan="6" className="px-6 py-8">
