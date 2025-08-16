@@ -151,8 +151,12 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
                 const serverConfig = await response.json();
                 console.log("[App Config] Конфигурация успешно загружена с сервера (readonly/user):", serverConfig);
 
+                // ИСПРАВЛЕНИЕ: Обработка структуры ответа от Netlify Function
+                // Netlify Function getConfigReadOnly возвращает { config: {...} }
+                const configData = serverConfig.config ? serverConfig.config : serverConfig;
+
                 // Объединяем с дефолтной конфигурацией на случай, если какие-то поля отсутствуют
-                const mergedConfig = { ...DEFAULT_ADMIN_CONFIG, ...serverConfig };
+                const mergedConfig = { ...DEFAULT_ADMIN_CONFIG, ...configData };
 
                 // Сохраняем в localStorage как резервную копию
                 try {
@@ -459,8 +463,12 @@ export const getUpdateIntervalMinutes = async (userAddress) => {
                 });
 
                 if (response.ok) {
-                    const serverConfig = await response.json();
-                    const interval = serverConfig.updateIntervalMinutes;
+                    const serverResponse = await response.json();
+                    // --- ИСПРАВЛЕНИЕ ---
+                    // Netlify Function getConfigReadOnly возвращает { config: {...} }
+                    // Поэтому нужно брать updateIntervalMinutes из serverResponse.config
+                    const interval = serverResponse.config ? serverResponse.config.updateIntervalMinutes : serverResponse.updateIntervalMinutes;
+                    // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
                     console.log("[App Config] Интервал обновления успешно загружен с Netlify Functions:", interval);
                     return interval !== undefined ? interval : DEFAULT_ADMIN_CONFIG.updateIntervalMinutes;
                 } else {
@@ -538,4 +546,4 @@ export const updateUpdateIntervalMinutes = async (newInterval, adminAddress) => 
 // === КОНЕЦ ФУНКЦИЙ ОБНОВЛЕНИЯ ===
 
 // Экспортируем дефолтные значения для использования в компонентах
-export { DEFAULT_ADMIN_CONFIG }; 
+export { DEFAULT_ADMIN_CONFIG };
