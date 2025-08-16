@@ -1,29 +1,20 @@
 // Централизованный файл конфигурации приложения
 // Все настройки приложения хранятся в этом файле
 
+// === ЗАМЕНА КОНСТАНТ ===
+// Вместо дублирования, импортируем SUPPORTED_CHAINS из отдельного файла
+import { SUPPORTED_CHAINS } from './supportedChains'; // <-- Импорт из нового файла
 import { DEFAULT_ADMIN_CONFIG } from '../constants'; // Убедитесь, что DEFAULT_ADMIN_CONFIG определен в '../constants' с правильной структурой
 
 const ADMIN_CONFIG_KEY = 'defiPool_adminConfig';
 const LOCAL_API_BASE_URL = 'http://localhost:3001/api'; // URL для локального API сервера
 
-// === ГЛОБАЛЬНЫЕ КОНСТАНТЫ ===
-// Эти константы определены в appConfig.js и используются в других частях приложения
-export const SUPPORTED_CHAINS = {
-    1: { name: 'Ethereum', currency: 'ETH', explorer: 'https://etherscan.io' },
-    56: { name: 'Binance Smart Chain', currency: 'BNB', explorer: 'https://bscscan.com' },
-    137: { name: 'Polygon', currency: 'MATIC', explorer: 'https://polygonscan.com' },
-    43114: { name: 'Avalanche', currency: 'AVAX', explorer: 'https://snowtrace.io' },
-    250: { name: 'Fantom', currency: 'FTM', explorer: 'https://ftmscan.com' },
-    42161: { name: 'Arbitrum', currency: 'ETH', explorer: 'https://arbiscan.io' },
-    10: { name: 'Optimism', currency: 'ETH', explorer: 'https://optimistic.etherscan.io' },
-    100: { name: 'Gnosis', currency: 'xDAI', explorer: 'https://gnosisscan.io' },
-    1313161554: { name: 'Aurora', currency: 'ETH', explorer: 'https://aurorascan.dev' },
-    25: { name: 'Cronos', currency: 'CRO', explorer: 'https://cronoscan.com' }
-};
-
 // Экспортируем CACHE_DURATION_MS как константу, значение будет обновляться при загрузке конфига
 export let CACHE_DURATION_MS = DEFAULT_ADMIN_CONFIG.updateIntervalMinutes * 60 * 1000;
 console.log(`[App Config] Инициализация CACHE_DURATION_MS: ${CACHE_DURATION_MS}мс (на основе дефолтных ${DEFAULT_ADMIN_CONFIG.updateIntervalMinutes} минут)`);
+
+// SUPPORTED_CHAINS теперь экспортируются из './supportedChains.js'
+// === КОНЕЦ ЗАМЕНЫ КОНСТАНТ ===
 
 // === КОНЕЦ ГЛОБАЛЬНЫХ КОНСТАНТ ===
 
@@ -547,3 +538,6 @@ export const updateUpdateIntervalMinutes = async (newInterval, adminAddress) => 
 
 // Экспортируем дефолтные значения для использования в компонентах
 export { DEFAULT_ADMIN_CONFIG };
+
+// Экспортируем SUPPORTED_CHAINS, импортированные из supportedChains.js
+export { SUPPORTED_CHAINS };
