@@ -1,11 +1,31 @@
 // Централизованный файл конфигурации приложения
 // Все настройки приложения хранятся в этом файле
 
-// Импортируем дефолтную конфигурацию из нового файла констант
-// Убедитесь, что DEFAULT_ADMIN_CONFIG определен в '../constants' с правильной структурой
-import { DEFAULT_ADMIN_CONFIG } from '../constants';
+import { DEFAULT_ADMIN_CONFIG } from '../constants'; // Убедитесь, что DEFAULT_ADMIN_CONFIG определен в '../constants' с правильной структурой
 
 const ADMIN_CONFIG_KEY = 'defiPool_adminConfig';
+const LOCAL_API_BASE_URL = 'http://localhost:3001/api'; // URL для локального API сервера
+
+// === ГЛОБАЛЬНЫЕ КОНСТАНТЫ ===
+// Эти константы определены в appConfig.js и используются в других частях приложения
+export const SUPPORTED_CHAINS = {
+    1: { name: 'Ethereum', currency: 'ETH', explorer: 'https://etherscan.io' },
+    56: { name: 'Binance Smart Chain', currency: 'BNB', explorer: 'https://bscscan.com' },
+    137: { name: 'Polygon', currency: 'MATIC', explorer: 'https://polygonscan.com' },
+    43114: { name: 'Avalanche', currency: 'AVAX', explorer: 'https://snowtrace.io' },
+    250: { name: 'Fantom', currency: 'FTM', explorer: 'https://ftmscan.com' },
+    42161: { name: 'Arbitrum', currency: 'ETH', explorer: 'https://arbiscan.io' },
+    10: { name: 'Optimism', currency: 'ETH', explorer: 'https://optimistic.etherscan.io' },
+    100: { name: 'Gnosis', currency: 'xDAI', explorer: 'https://gnosisscan.io' },
+    1313161554: { name: 'Aurora', currency: 'ETH', explorer: 'https://aurorascan.dev' },
+    25: { name: 'Cronos', currency: 'CRO', explorer: 'https://cronoscan.com' }
+};
+
+// Экспортируем CACHE_DURATION_MS как константу, значение будет обновляться при загрузке конфига
+export let CACHE_DURATION_MS = DEFAULT_ADMIN_CONFIG.updateIntervalMinutes * 60 * 1000;
+console.log(`[App Config] Инициализация CACHE_DURATION_MS: ${CACHE_DURATION_MS}мс (на основе дефолтных ${DEFAULT_ADMIN_CONFIG.updateIntervalMinutes} минут)`);
+
+// === КОНЕЦ ГЛОБАЛЬНЫХ КОНСТАНТ ===
 
 /**
  * Загружает глобальную конфигурацию приложения.
@@ -35,7 +55,7 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
             if (typeof window !== 'undefined') {
                 const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
                 if (isLocalhost) {
-                    apiUrl = 'http://localhost:3001/api/app/config'; // Локальный API для app config (админка)
+                    apiUrl = `${LOCAL_API_BASE_URL}/app/config`; // Локальный API для app config (админка)
                 } else {
                     apiUrl = '/.netlify/functions/getConfig'; // Netlify Functions для админки (чтение/запись)
                 }
@@ -60,8 +80,10 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
             if (response.ok) {
                 const serverConfig = await response.json();
                 console.log("[App Config] Конфигурация успешно загружена с сервера (админка):", serverConfig);
+
                 // Объединяем с дефолтной конфигурацией на случай, если какие-то поля отсутствуют
                 const mergedConfig = { ...DEFAULT_ADMIN_CONFIG, ...serverConfig };
+
                 // Сохраняем в localStorage как резервную копию
                 try {
                     localStorage.setItem(ADMIN_CONFIG_KEY, JSON.stringify(mergedConfig));
@@ -69,31 +91,43 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
                 } catch (storageError) {
                     console.error("[App Config] Ошибка при сохранении в localStorage (админка):", storageError);
                 }
+
+                // Обновляем глобальную константу CACHE_DURATION_MS
+                if (typeof mergedConfig.updateIntervalMinutes === 'number' && mergedConfig.updateIntervalMinutes > 0) {
+                    CACHE_DURATION_MS = mergedConfig.updateIntervalMinutes * 60 * 1000;
+                    console.log(`[App Config] CACHE_DURATION_MS обновлено до: ${CACHE_DURATION_MS}мс (на основе ${mergedConfig.updateIntervalMinutes} минут)`);
+                }
+
                 return mergedConfig;
             } else if (response.status === 404) {
                 console.log("[App Config] Конфигурация на сервере не найдена (админка), будет использована дефолтная или локальная.");
                 // Продолжаем к локальной загрузке
+            } else if (response.status === 403) {
+                const errorText = await response.text();
+                console.warn(`[App Config] Доступ запрещен (админка): ${response.status} ${response.statusText} - ${errorText}`);
+                // Можно выбросить ошибку или обработать иначе
+                throw new Error(`Доступ запрещен: ${errorText}`);
             } else {
                 const errorText = await response.text();
-                console.warn(`[App Config] Сервер (админка) вернул ошибку при загрузке конфига: ${response.status} ${response.statusText}. Текст: ${errorText}`);
+                console.warn(`[App Config] Сервер вернул ошибку при загрузке конфигурации (админка): ${response.status} ${response.statusText} - ${errorText}`);
                 // Продолжаем к локальной загрузке
             }
         } catch (e) {
             console.error("[App Config] Ошибка сети при загрузке конфигурации с сервера (админка):", e);
             // Продолжаем к локальной загрузке
         }
-    } else if (userAddress) { // Всегда пытаемся загрузить для пользователя, если адрес есть
-        // === ЗАГРУЗКА НА ОБЫЧНЫХ СТРАНИЦАХ ИЛИ ДЛЯ ПОЛЬЗОВАТЕЛЯ В АДМИНКЕ ===
+    } else if (userAddress && !isAdminPage) {
+        // === ЗАГРУЗКА ДЛЯ ПОЛЬЗОВАТЕЛЕЙ (READONLY) ===
         try {
-            console.log(`[App Config] Попытка загрузки конфигурации с сервера (readonly) для пользователя ${userAddress}...`);
-            // Определяем URL для readonly API
+            console.log(`[App Config] Попытка загрузки конфигурации с сервера (readonly/user) для ${userAddress}...`);
+            // Определяем URL для API в зависимости от среды выполнения
             let apiUrl = '';
             if (typeof window !== 'undefined') {
                 const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
                 if (isLocalhost) {
-                    apiUrl = 'http://localhost:3001/api/app/config'; // Локальный API для readonly
+                    apiUrl = `${LOCAL_API_BASE_URL}/app/config`; // Локальный API для app config readonly
                 } else {
-                    apiUrl = '/.netlify/functions/getConfigReadOnly'; // Netlify Functions для readonly
+                    apiUrl = '/.netlify/functions/getConfigReadOnly'; // Netlify Functions readonly
                 }
             } else {
                 // Для SSR или других сред
@@ -102,7 +136,7 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
 
             const headers = {
                 'Content-Type': 'application/json',
-                'X-User-Address': userAddress, // Всегда передаем адрес пользователя
+                'X-User-Address': userAddress, // Используем user address для readonly
             };
 
             const response = await fetch(apiUrl, {
@@ -116,8 +150,10 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
             if (response.ok) {
                 const serverConfig = await response.json();
                 console.log("[App Config] Конфигурация успешно загружена с сервера (readonly/user):", serverConfig);
+
                 // Объединяем с дефолтной конфигурацией на случай, если какие-то поля отсутствуют
                 const mergedConfig = { ...DEFAULT_ADMIN_CONFIG, ...serverConfig };
+
                 // Сохраняем в localStorage как резервную копию
                 try {
                     localStorage.setItem(ADMIN_CONFIG_KEY, JSON.stringify(mergedConfig));
@@ -125,6 +161,13 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
                 } catch (storageError) {
                     console.error("[App Config] Ошибка при сохранении в localStorage (readonly/user):", storageError);
                 }
+
+                // Обновляем глобальную константу CACHE_DURATION_MS
+                if (typeof mergedConfig.updateIntervalMinutes === 'number' && mergedConfig.updateIntervalMinutes > 0) {
+                    CACHE_DURATION_MS = mergedConfig.updateIntervalMinutes * 60 * 1000;
+                    console.log(`[App Config] CACHE_DURATION_MS обновлено до: ${CACHE_DURATION_MS}мс (на основе ${mergedConfig.updateIntervalMinutes} минут)`);
+                }
+
                 return mergedConfig;
             } else if (response.status === 404) {
                 console.log("[App Config] Конфигурация на сервере не найдена (readonly/user), будет использована дефолтная или локальная.");
@@ -139,7 +182,7 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
             // Продолжаем к локальной загрузке
         }
     } else {
-        console.warn("[App Config] Адрес пользователя не предоставлен, пропуск загрузки с сервера для пользователя.");
+        console.warn("[App Config] Адрес пользователя или администратора не предоставлен, пропуск загрузки с сервера.");
     }
 
     // 2. Попытка загрузки из localStorage
@@ -149,6 +192,13 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
         if (configStr) {
             const parsedConfig = JSON.parse(configStr);
             console.log("[App Config] Конфигурация успешно загружена из localStorage:", parsedConfig);
+
+            // Обновляем глобальную константу CACHE_DURATION_MS
+            if (typeof parsedConfig.updateIntervalMinutes === 'number' && parsedConfig.updateIntervalMinutes > 0) {
+                CACHE_DURATION_MS = parsedConfig.updateIntervalMinutes * 60 * 1000;
+                console.log(`[App Config] CACHE_DURATION_MS обновлено до: ${CACHE_DURATION_MS}мс (на основе ${parsedConfig.updateIntervalMinutes} минут)`);
+            }
+
             return { ...DEFAULT_ADMIN_CONFIG, ...parsedConfig }; // Объединяем с дефолтной
         } else {
             console.log("[App Config] Конфигурация в localStorage не найдена.");
@@ -159,6 +209,11 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
 
     // 3. Возвращаем дефолтную конфигурацию
     console.log("[App Config] Используется дефолтная конфигурация");
+
+    // Обновляем глобальную константу CACHE_DURATION_MS на основе дефолта
+    CACHE_DURATION_MS = DEFAULT_ADMIN_CONFIG.updateIntervalMinutes * 60 * 1000;
+    console.log(`[App Config] CACHE_DURATION_MS установлено в дефолтное значение: ${CACHE_DURATION_MS}мс (на основе ${DEFAULT_ADMIN_CONFIG.updateIntervalMinutes} минут)`);
+
     return DEFAULT_ADMIN_CONFIG;
 };
 
@@ -184,12 +239,10 @@ export const saveAppConfig = async (config, adminAddress) => {
                 // Проверяем, запущено ли приложение локально
                 const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
                 if (isLocalhost) {
-                    // Для локальной разработки используем локальный API (порт 3001 как в ваших логах)
-                    apiUrl = 'http://localhost:3001/api/app/config';
+                    apiUrl = `${LOCAL_API_BASE_URL}/app/config`; // Локальный API для app config (админка)
                     console.log("[App Config] Приложение запущено локально, используем локальный API для сохранения:", apiUrl);
                 } else {
-                    // Для продакшена используем Netlify Functions
-                    apiUrl = '/.netlify/functions/saveConfig';
+                    apiUrl = '/.netlify/functions/saveConfig'; // Netlify Functions для админки (чтение/запись)
                     console.log("[App Config] Приложение запущено в продакшене, используем Netlify Functions для сохранения:", apiUrl);
                 }
             } else {
@@ -208,8 +261,7 @@ export const saveAppConfig = async (config, adminAddress) => {
                 method: 'POST',
                 headers: headers,
                 body: JSON.stringify(config),
-                // Добавим таймаут для сетевых запросов
-                signal: AbortSignal.timeout(10000) // 10 секунд
+                signal: AbortSignal.timeout(10000) // 10 секунд таймаут
             });
 
             console.log("[App Config] Ответ от сохранения:", response.status, response.statusText);
@@ -229,6 +281,12 @@ export const saveAppConfig = async (config, adminAddress) => {
                     console.log("[App Config] Конфигурация сохранена в localStorage как резерв (админка)");
                 } catch (storageError) {
                     console.error("[App Config] Ошибка при сохранении в localStorage (админка):", storageError);
+                }
+
+                // Обновляем глобальную константу CACHE_DURATION_MS
+                if (typeof config.updateIntervalMinutes === 'number' && config.updateIntervalMinutes > 0) {
+                    CACHE_DURATION_MS = config.updateIntervalMinutes * 60 * 1000;
+                    console.log(`[App Config] CACHE_DURATION_MS обновлено до: ${CACHE_DURATION_MS}мс (на основе ${config.updateIntervalMinutes} минут)`);
                 }
 
                 return; // Успешно сохранено на сервере
@@ -253,17 +311,31 @@ export const saveAppConfig = async (config, adminAddress) => {
     try {
         localStorage.setItem(ADMIN_CONFIG_KEY, JSON.stringify(config));
         console.log("[App Config] Конфигурация успешно сохранена в localStorage (резерв).");
+
         // Отправляем кастомное событие для синхронизации между вкладками
         if (typeof window !== 'undefined' && window.dispatchEvent) {
             window.dispatchEvent(new CustomEvent('appConfigUpdated', { detail: config }));
         }
+
+        // Обновляем глобальную константу CACHE_DURATION_MS
+        if (typeof config.updateIntervalMinutes === 'number' && config.updateIntervalMinutes > 0) {
+            CACHE_DURATION_MS = config.updateIntervalMinutes * 60 * 1000;
+            console.log(`[App Config] CACHE_DURATION_MS обновлено до: ${CACHE_DURATION_MS}мс (на основе ${config.updateIntervalMinutes} минут)`);
+        }
+
     } catch (e) {
         console.error("[App Config] Ошибка при сохранении конфигурации в localStorage:", e);
         throw new Error("Не удалось сохранить конфигурацию ни на сервере (локальный API или Netlify Functions), ни локально.");
     }
 };
 
-// Обновляем функции для получения настроек сервисов
+// === ФУНКЦИИ ДОСТУПА К КОНКРЕТНЫМ ЧАСТЯМ КОНФИГУРАЦИИ ===
+// Эти функции предоставляют удобный доступ к частям конфигурации
+
+/**
+ * Получает настройки сервисов для получения токенов.
+ * @returns {Object} Объект с настройками сервисов токенов
+ */
 export const getTokenServicesConfig = () => {
     try {
         const configStr = localStorage.getItem(ADMIN_CONFIG_KEY);
@@ -276,12 +348,17 @@ export const getTokenServicesConfig = () => {
             }
         }
     } catch (e) {
-        console.error("[App Config] Ошибка при получении tokenServices из localStorage:", e);
+        console.error("[App Config] Ошибка при загрузке настроек сервисов токенов из localStorage:", e);
     }
-    console.log("[App Config] tokenServices не найден или не является объектом, возвращаем дефолт");
+    // Если не удалось загрузить, возвращаем дефолтные настройки
+    console.log("[App Config] Используются дефолтные настройки сервисов токенов:", DEFAULT_ADMIN_CONFIG.tokenServices);
     return DEFAULT_ADMIN_CONFIG.tokenServices;
 };
 
+/**
+ * Получает настройки сервисов для получения цен.
+ * @returns {Object} Объект с настройками сервисов цен
+ */
 export const getPriceServicesConfig = () => {
     try {
         const configStr = localStorage.getItem(ADMIN_CONFIG_KEY);
@@ -294,76 +371,74 @@ export const getPriceServicesConfig = () => {
             }
         }
     } catch (e) {
-        console.error("[App Config] Ошибка при получении priceServices из localStorage:", e);
+        console.error("[App Config] Ошибка при загрузке настроек сервисов цен из localStorage:", e);
     }
-    console.log("[App Config] priceServices не найден или не является объектом, возвращаем дефолт");
+    // Если не удалось загрузить, возвращаем дефолтные настройки
+    console.log("[App Config] Используются дефолтные настройки сервисов цен:", DEFAULT_ADMIN_CONFIG.priceServices);
     return DEFAULT_ADMIN_CONFIG.priceServices;
 };
 
 /**
- * Получает интервал обновления токенов в минутах.
- * @param {string} [userAddress] - Адрес пользователя (опционально)
- * @returns {Promise<number>} Интервал обновления в минутах.
+ * Получает интервал обновления в минутах.
+ * @param {string} [userAddress] - Адрес пользователя (для readonly загрузки)
+ * @returns {Promise<number>} Интервал обновления в минутах
  */
 export const getUpdateIntervalMinutes = async (userAddress) => {
-    try {
-        // Получаем адрес пользователя, если он не передан
-        let finalUserAddress = userAddress;
+    console.log("[App Config] Начало загрузки интервала обновления...");
+    const finalUserAddress = userAddress || (typeof window !== 'undefined' ? window?.ethereum?.selectedAddress : null);
+    console.log("[App Config] Адрес пользователя для загрузки интервала:", finalUserAddress);
 
-        // Все запросы к локальному API обрабатываются в этом файле
-        const LOCAL_API_BASE_URL = 'http://localhost:3001/api'; // Порт 3001 для локального API
-
-        // Проверяем, запущено ли приложение локально
-        const isLocalhost = typeof window !== 'undefined' &&
-            (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-
+    // 1. Попытка загрузки с сервера (локальный API или Netlify Functions)
+    if (typeof window !== 'undefined') {
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         if (isLocalhost) {
             console.log("[App Config] Приложение запущено локально, пытаемся загрузить интервал обновления с локального API сервера...");
             // Используем локальный API для получения только интервала
             const headers = {
                 'Content-Type': 'application/json',
             };
-
             // Добавляем заголовок с адресом пользователя, если он есть
             if (finalUserAddress) {
                 headers['X-User-Address'] = finalUserAddress;
                 console.log(`[App Config] Добавляем заголовок X-User-Address: ${finalUserAddress}`);
             }
 
-            const response = await fetch(`${LOCAL_API_BASE_URL}/app/config`, {
-                method: 'GET',
-                headers: headers,
-                signal: AbortSignal.timeout(10000) // 10 секунд таймаут
-            });
-
-            console.log("[App Config] Ответ от локального API сервера при загрузке интервала:", response.status, response.statusText);
-
-            if (response.ok) {
-                const serverConfig = await response.json();
-                const interval = serverConfig.updateIntervalMinutes;
-                console.log("[App Config] Интервал обновления успешно загружен с локального API сервера:", interval);
-                return interval !== undefined ? interval : DEFAULT_ADMIN_CONFIG.updateIntervalMinutes;
-            } else if (response.status === 404) {
-                console.log("[App Config] Локальный API сервер вернул 404 Not Found при загрузке интервала. Пробуем загрузить всю конфигурацию.");
-                // Если отдельный endpoint не работает, попробуем загрузить всю конфигурацию
+            try {
+                // Сначала пробуем загрузить полную конфигурацию
                 const fullConfigResponse = await fetch(`${LOCAL_API_BASE_URL}/app/config`, {
                     method: 'GET',
                     headers: headers,
-                    signal: AbortSignal.timeout(10000)
+                    signal: AbortSignal.timeout(10000) // 10 секунд таймаут
                 });
+
                 if (fullConfigResponse.ok) {
-                    const fullServerConfig = await fullConfigResponse.json();
-                    const interval = fullServerConfig.updateIntervalMinutes;
+                    const fullConfig = await fullConfigResponse.json();
+                    const interval = fullConfig.updateIntervalMinutes;
                     console.log("[App Config] Интервал обновления успешно загружен с локального API сервера (полная конфигурация):", interval);
                     return interval !== undefined ? interval : DEFAULT_ADMIN_CONFIG.updateIntervalMinutes;
                 } else {
                     const errorText = await fullConfigResponse.text();
                     console.warn(`[App Config] Локальный API сервер вернул ошибку при загрузке полной конфигурации: ${fullConfigResponse.status} ${fullConfigResponse.statusText} - ${errorText}`);
                 }
-            } else {
-                const errorText = await response.text();
-                console.warn(`[App Config] Локальный API сервер вернул ошибку при загрузке интервала: ${response.status} ${response.statusText} - ${errorText}`);
+            } catch (e) {
+                console.error("[App Config] Ошибка сети при загрузке полной конфигурации с локального API сервера:", e);
             }
+
+            // Если полная конфигурация не загрузилась, пробуем получить только интервал
+            // (Предполагая, что у вас есть отдельный endpoint для этого, например /api/app/config/interval)
+            // const intervalResponse = await fetch(`${LOCAL_API_BASE_URL}/app/config/interval`, {
+            //   method: 'GET',
+            //   headers: headers,
+            //   signal: AbortSignal.timeout(10000) // 10 секунд таймаут
+            // });
+            // if (intervalResponse.ok) {
+            //   const intervalData = await intervalResponse.json();
+            //   console.log("[App Config] Интервал обновления успешно загружен с локального API сервера:", intervalData.interval);
+            //   return intervalData.interval !== undefined ? intervalData.interval : DEFAULT_ADMIN_CONFIG.updateIntervalMinutes;
+            // } else {
+            //   const errorText = await intervalResponse.text();
+            //   console.warn(`[App Config] Локальный API сервер вернул ошибку при загрузке интервала: ${intervalResponse.status} ${intervalResponse.statusText} - ${errorText}`);
+            // }
         } else {
             console.log("[App Config] Приложение запущено НЕ локально, используем Netlify Functions или localStorage.");
             // Для продакшена или других сред используем Netlify Functions или localStorage
@@ -372,68 +447,87 @@ export const getUpdateIntervalMinutes = async (userAddress) => {
                 const headers = {
                     'Content-Type': 'application/json',
                 };
-
                 // Добавляем заголовок с адресом пользователя, если он есть
                 if (finalUserAddress) {
                     headers['X-User-Address'] = finalUserAddress;
-                    console.log(`[App Config] Добавляем заголовок X-User-Address для Netlify: ${finalUserAddress}`);
                 }
 
-                // Для readonly используем специальный endpoint
                 const response = await fetch('/.netlify/functions/getConfigReadOnly', {
                     method: 'GET',
                     headers: headers,
-                    signal: AbortSignal.timeout(10000)
+                    signal: AbortSignal.timeout(10000) // 10 секунд таймаут
                 });
 
                 if (response.ok) {
                     const serverConfig = await response.json();
                     const interval = serverConfig.updateIntervalMinutes;
-                    console.log("[App Config] Интервал обновления успешно загружен с Netlify Functions (readonly):", interval);
+                    console.log("[App Config] Интервал обновления успешно загружен с Netlify Functions:", interval);
                     return interval !== undefined ? interval : DEFAULT_ADMIN_CONFIG.updateIntervalMinutes;
                 } else {
                     const errorText = await response.text();
-                    console.warn(`[App Config] Netlify Functions (readonly) вернул ошибку при загрузке конфигурации: ${response.status} ${response.statusText} - ${errorText}`);
+                    console.warn(`[App Config] Netlify Functions вернул ошибку при загрузке конфигурации: ${response.status} ${response.statusText} - ${errorText}`);
                 }
-            } catch (netlifyError) {
-                console.error("[App Config] Ошибка сети при загрузке конфигурации с Netlify Functions (readonly):", netlifyError);
+            } catch (e) {
+                console.error("[App Config] Ошибка сети при загрузке конфигурации с Netlify Functions:", e);
             }
         }
-    } catch (localApiError) {
-        console.error("[App Config] Ошибка при загрузке интервала обновления:", localApiError);
-        // Продолжаем к загрузке из localStorage
+    } else {
+        console.log("[App Config] window не определен (SSR), используем localStorage или дефолт.");
     }
 
-    // Загружаем из localStorage (резервный вариант)
-    const configStr = localStorage.getItem(ADMIN_CONFIG_KEY);
-    if (configStr) {
-        const parsedConfig = JSON.parse(configStr);
-        const interval = parsedConfig.updateIntervalMinutes;
-        console.log("[App Config] Интервал обновления из localStorage:", interval);
-        return interval !== undefined ? interval : DEFAULT_ADMIN_CONFIG.updateIntervalMinutes;
+    // 2. Загрузка из localStorage (резервный вариант)
+    try {
+        const configStr = localStorage.getItem(ADMIN_CONFIG_KEY);
+        if (configStr) {
+            const parsedConfig = JSON.parse(configStr);
+            const interval = parsedConfig.updateIntervalMinutes;
+            console.log("[App Config] Интервал обновления из localStorage:", interval);
+            return interval !== undefined ? interval : DEFAULT_ADMIN_CONFIG.updateIntervalMinutes;
+        }
+    } catch (e) {
+        console.error("[App Config] Ошибка при загрузке интервала из localStorage:", e);
     }
 
     console.log("[App Config] Интервал обновления не найден, используем дефолтный");
     return DEFAULT_ADMIN_CONFIG.updateIntervalMinutes;
 };
+// === КОНЕЦ ФУНКЦИЙ ДОСТУПА ===
 
-// Функции обновления настроек (для администраторов)
-export const updateTokenServicesConfig = async (newTokenServices, adminAddress) => {
+// === ФУНКЦИИ ОБНОВЛЕНИЯ КОНФИГУРАЦИИ (ДЛЯ АДМИНИСТРАТОРОВ) ===
+/**
+ * Обновляет настройки сервисов для получения токенов.
+ * @param {Object} newTokenServicesConfig - Новые настройки сервисов токенов
+ * @param {string} adminAddress - Адрес администратора
+ * @returns {Promise<void>}
+ */
+export const updateTokenServicesConfig = async (newTokenServicesConfig, adminAddress) => {
     const currentConfig = await loadAppConfig(adminAddress);
-    const updatedConfig = { ...currentConfig, tokenServices: newTokenServices };
+    const updatedConfig = { ...currentConfig, tokenServices: newTokenServicesConfig };
     // Сохраняем в базу данных
     await saveAppConfig(updatedConfig, adminAddress);
     console.log("[App Config] Обновлены настройки токенов:", updatedConfig.tokenServices);
 };
 
-export const updatePriceServicesConfig = async (newPriceServices, adminAddress) => {
+/**
+ * Обновляет настройки сервисов для получения цен.
+ * @param {Object} newPriceServicesConfig - Новые настройки сервисов цен
+ * @param {string} adminAddress - Адрес администратора
+ * @returns {Promise<void>}
+ */
+export const updatePriceServicesConfig = async (newPriceServicesConfig, adminAddress) => {
     const currentConfig = await loadAppConfig(adminAddress);
-    const updatedConfig = { ...currentConfig, priceServices: newPriceServices };
+    const updatedConfig = { ...currentConfig, priceServices: newPriceServicesConfig };
     // Сохраняем в базу данных
     await saveAppConfig(updatedConfig, adminAddress);
     console.log("[App Config] Обновлены настройки цен:", updatedConfig.priceServices);
 };
 
+/**
+ * Обновляет интервал обновления.
+ * @param {number} newInterval - Новый интервал обновления в минутах
+ * @param {string} adminAddress - Адрес администратора
+ * @returns {Promise<void>}
+ */
 export const updateUpdateIntervalMinutes = async (newInterval, adminAddress) => {
     const currentConfig = await loadAppConfig(adminAddress);
     const updatedConfig = { ...currentConfig, updateIntervalMinutes: newInterval };
@@ -441,6 +535,7 @@ export const updateUpdateIntervalMinutes = async (newInterval, adminAddress) => 
     await saveAppConfig(updatedConfig, adminAddress);
     console.log("[App Config] Обновлен интервал обновления:", newInterval);
 };
+// === КОНЕЦ ФУНКЦИЙ ОБНОВЛЕНИЯ ===
 
 // Экспортируем дефолтные значения для использования в компонентах
-export default DEFAULT_ADMIN_CONFIG;
+export { DEFAULT_ADMIN_CONFIG }; 

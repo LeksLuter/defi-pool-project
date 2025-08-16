@@ -1,12 +1,18 @@
-// frontend/src/components/AdminPanel.jsx
 import React, { useState, useEffect } from 'react';
 import { useWeb3 } from '../context/Web3Context';
-import { saveAdminConfig, loadAdminConfig } from '../services/adminConfig'; // Убедитесь, что путь правильный
+// ИСПРАВЛЕНО: Импорт функций для работы с конфигурацией приложения из appConfig.js
+import { loadAppConfig, saveAppConfig } from '../config/appConfig';
+// Импорт дефолтной конфигурации для инициализации
+import { DEFAULT_ADMIN_CONFIG } from '../constants';
 
 const AdminPanel = () => {
   const { isAdmin, account } = useWeb3();
-  const [servicesConfig, setServicesConfig] = useState({ tokenServices: {}, priceServices: {} });
-  const [updateInterval, setUpdateInterval] = useState(5); // Дефолтное значение из DEFAULT_ADMIN_CONFIG
+  // Инициализация состояния дефолтными значениями из DEFAULT_ADMIN_CONFIG
+  const [servicesConfig, setServicesConfig] = useState({
+    tokenServices: { ...DEFAULT_ADMIN_CONFIG.tokenServices },
+    priceServices: { ...DEFAULT_ADMIN_CONFIG.priceServices }
+  });
+  const [updateInterval, setUpdateInterval] = useState(DEFAULT_ADMIN_CONFIG.updateIntervalMinutes);
   const [status, setStatus] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -18,6 +24,8 @@ const AdminPanel = () => {
   // === КОНЕЦ НОВЫХ СОСТОЯНИЙ ===
 
   // === ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ АДМИНИСТРАТОРАМИ ===
+  // Эти функции напрямую взаимодействуют с API для управления списком админов
+  // Предполагается, что API доступен по /api/admins (локально) или через Netlify Functions
 
   const fetchAdminsList = async () => {
     if (!account) return;
@@ -32,15 +40,13 @@ const AdminPanel = () => {
       if (typeof window !== 'undefined') {
         const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         if (isLocalhost) {
-          apiUrl = 'http://localhost:3001/api/admins';
+          apiUrl = 'http://localhost:3001/api/admins'; // Локальный API сервер
         } else {
-          // Предполагаемая функция Netlify
-          // !!! ВАЖНО: Убедитесь, что эта Netlify Function существует
+          // Netlify Functions
           apiUrl = '/.netlify/functions/getAdmins';
         }
       } else {
-        // Для SSR
-        // !!! ВАЖНО: Убедитесь, что эта Netlify Function существует
+        // Для SSR или других сред, предполагаем Netlify Functions
         apiUrl = '/.netlify/functions/getAdmins';
       }
 
@@ -87,15 +93,13 @@ const AdminPanel = () => {
       if (typeof window !== 'undefined') {
         const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         if (isLocalhost) {
-          apiUrl = 'http://localhost:3001/api/admins';
+          apiUrl = 'http://localhost:3001/api/admins'; // Локальный API сервер
         } else {
-          // Предполагаемая функция Netlify
-          // !!! ВАЖНО: Убедитесь, что эта Netlify Function существует
+          // Netlify Functions
           apiUrl = '/.netlify/functions/addAdmin';
         }
       } else {
-        // Для SSR
-        // !!! ВАЖНО: Убедитесь, что эта Netlify Function существует
+        // Для SSR или других сред, предполагаем Netlify Functions
         apiUrl = '/.netlify/functions/addAdmin';
       }
 
@@ -141,32 +145,34 @@ const AdminPanel = () => {
 
       // Определяем URL для API
       let apiUrl = '';
-      if (typeof window !== 'undefined') {
-        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        if (isLocalhost) {
-          // Для локального API используем DELETE с параметром в URL
-          apiUrl = `http://localhost:3001/api/admins/${encodeURIComponent(addressToRemove)}`;
-        } else {
-          // Для Netlify Functions можно использовать query param
-          // или создать функцию, которая обрабатывает DELETE /.netlify/functions/removeAdmin/:address
-          // Здесь используем query param
-          // !!! ВАЖНО: Убедитесь, что эта Netlify Function существует и обрабатывает query param
-          apiUrl = `/.netlify/functions/removeAdmin?address=${encodeURIComponent(addressToRemove)}`;
-        }
-      } else {
-        // Для SSR
-        // !!! ВАЖНО: Убедитесь, что эта Netlify Function существует
-        apiUrl = `/.netlify/functions/removeAdmin?address=${encodeURIComponent(addressToRemove)}`;
-      }
-
-      const response = await fetch(apiUrl, {
+      let fetchOptions = {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
           'X-Admin-Address': account,
         },
         signal: AbortSignal.timeout(10000)
-      });
+      };
+
+      if (typeof window !== 'undefined') {
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (isLocalhost) {
+          // Для локального API используем DELETE с адресом в URL
+          apiUrl = `http://localhost:3001/api/admins/${encodeURIComponent(addressToRemove)}`;
+        } else {
+          // Для Netlify Functions используем query param
+          apiUrl = `/.netlify/functions/removeAdmin?address=${encodeURIComponent(addressToRemove)}`;
+        }
+      } else {
+        // Для SSR или других сред, предполагаем Netlify Functions с query param
+        apiUrl = `/.netlify/functions/removeAdmin?address=${encodeURIComponent(addressToRemove)}`;
+      }
+
+      // Для локального API тело запроса DELETE может не требоваться или обрабатывается иначе
+      // Для Netlify Functions параметр передается в URL, тело может не быть нужно
+      // Оставляем базовые опции как есть
+
+      const response = await fetch(apiUrl, fetchOptions);
 
       if (response.ok) {
         setAdminActionStatus(`Администратор ${addressToRemove} успешно удален.`);
@@ -195,10 +201,17 @@ const AdminPanel = () => {
 
   // === КОНЕЦ ФУНКЦИЙ ДЛЯ УПРАВЛЕНИЯ АДМИНИСТРАТОРАМИ ===
 
-  // === ЗАГРУЗКА НАСТРОЕК ИЗ БД ===
+  // === ЗАГРУЗКА НАСТРОЕК ИЗ БД/LocalStorage ===
   useEffect(() => {
     if (!isAdmin) {
       setStatus('Доступ запрещен. Только для администраторов.');
+      // Инициализируем состояние дефолтными значениями даже если не админ,
+      // чтобы избежать ошибок при рендере, но не показываем форму
+      setServicesConfig({
+        tokenServices: { ...DEFAULT_ADMIN_CONFIG.tokenServices },
+        priceServices: { ...DEFAULT_ADMIN_CONFIG.priceServices }
+      });
+      setUpdateInterval(DEFAULT_ADMIN_CONFIG.updateIntervalMinutes);
       return;
     }
 
@@ -206,20 +219,28 @@ const AdminPanel = () => {
       setIsLoading(true);
       setStatus('Загрузка настроек...');
       try {
-        // Передаем адрес администратора и флаг, что это админка
-        const config = await loadAdminConfig(account, null, true);
+        // Передаем адрес администратора для загрузки его конфигурации
+        // loadAppConfig теперь отвечает за загрузку всей глобальной конфигурации
+        const config = await loadAppConfig(account);
+        console.log("[Admin Panel] Загруженная конфигурация:", config);
         setServicesConfig({
-          tokenServices: config.tokenServices,
-          priceServices: config.priceServices,
+          tokenServices: { ...DEFAULT_ADMIN_CONFIG.tokenServices, ...config.tokenServices },
+          priceServices: { ...DEFAULT_ADMIN_CONFIG.priceServices, ...config.priceServices },
         });
-        setUpdateInterval(config.updateIntervalMinutes);
+        setUpdateInterval(config.updateIntervalMinutes ?? DEFAULT_ADMIN_CONFIG.updateIntervalMinutes);
         setStatus('Настройки загружены.');
       } catch (e) {
-        console.error("Ошибка при загрузке конфигурации:", e);
+        console.error("[Admin Panel] Ошибка при загрузке конфигурации:", e);
         if (e.message && e.message.includes('Доступ запрещен')) {
-            setStatus(`Ошибка: ${e.message}`);
+          setStatus(`Ошибка: ${e.message}`);
         } else {
-            setStatus('Ошибка при загрузке настроек.');
+          setStatus('Ошибка при загрузке настроек. Используются настройки по умолчанию.');
+          // В случае ошибки загрузки, используем дефолтные значения
+          setServicesConfig({
+            tokenServices: { ...DEFAULT_ADMIN_CONFIG.tokenServices },
+            priceServices: { ...DEFAULT_ADMIN_CONFIG.priceServices }
+          });
+          setUpdateInterval(DEFAULT_ADMIN_CONFIG.updateIntervalMinutes);
         }
       } finally {
         setIsLoading(false);
@@ -232,7 +253,7 @@ const AdminPanel = () => {
 
   // === ФУНКЦИИ ДЛЯ СОХРАНЕНИЯ НАСТРОЕК ===
   const handleSaveSettings = async () => {
-    if (!isAdmin) {
+    if (!isAdmin || !account) {
       setStatus('Доступ запрещен. Только для администраторов.');
       return;
     }
@@ -248,16 +269,16 @@ const AdminPanel = () => {
         updateIntervalMinutes: parseInt(updateInterval, 10) // Убедимся, что это число
       };
 
-      // Передаем конфигурацию и адрес администратора
-      await saveAdminConfig(configToSave, account);
+      // Передаем конфигурацию и адрес администратора в saveAppConfig
+      await saveAppConfig(configToSave, account);
 
-      setStatus(`Настройки сохранены! Интервал обновления: ${updateInterval} минут.`);
+      setStatus(`Настройки успешно сохранены! Интервал обновления: ${updateInterval} минут.`);
     } catch (error) {
-      console.error("Ошибка при сохранении настроек:", error);
-      if (error.message && error.message.includes('Доступ запрещен')) {
-          setStatus(`Ошибка: ${error.message}`);
+      console.error("[Admin Panel] Ошибка при сохранении настроек:", error);
+      if (error.message && (error.message.includes('Доступ запрещен') || error.message.includes('Forbidden'))) {
+        setStatus(`Ошибка: ${error.message}`);
       } else {
-          setStatus('Ошибка при сохранении настроек.');
+        setStatus('Ошибка при сохранении настроек.');
       }
     } finally {
       setIsLoading(false);
@@ -275,7 +296,10 @@ const AdminPanel = () => {
   };
 
   const handleUpdateIntervalChange = (e) => {
-    setUpdateInterval(e.target.value);
+    const value = parseInt(e.target.value, 10);
+    if (!isNaN(value) && value > 0) {
+      setUpdateInterval(value);
+    }
   };
   // === КОНЕЦ ФУНКЦИЙ ДЛЯ СОХРАНЕНИЯ НАСТРОЕК ===
 
@@ -301,9 +325,8 @@ const AdminPanel = () => {
 
         {/* Статусная строка */}
         {status && (
-          <div className={`mb-6 p-4 rounded-lg text-center ${
-            status.includes('Ошибка') ? 'bg-red-500' : 'bg-green-500'
-          }`}>
+          <div className={`mb-6 p-4 rounded-lg text-center ${status.includes('Ошибка') ? 'bg-red-500' : 'bg-green-500'
+            }`}>
             {status}
           </div>
         )}
@@ -370,30 +393,39 @@ const AdminPanel = () => {
               className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white"
               disabled={isLoading}
             />
+            <p className="mt-1 text-sm text-gray-400">
+              Текущее значение в миллисекундах: {updateInterval * 60 * 1000} мс
+            </p>
           </div>
 
           {/* Кнопка сохранения */}
           <button
             onClick={handleSaveSettings}
             disabled={isLoading}
-            className={`w-full py-3 px-4 rounded-lg font-medium transition ${
-              isLoading
+            className={`w-full py-3 px-4 rounded-lg font-medium transition ${isLoading
                 ? 'bg-gray-600 cursor-not-allowed'
                 : 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 shadow-lg'
-            }`}
+              }`}
           >
-            {isLoading ? 'Сохранение...' : 'Сохранить настройки'}
+            {isLoading ? (
+              <span className="flex items-center justify-center">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Сохранение...
+              </span>
+            ) : 'Сохранить настройки'}
           </button>
         </div>
 
         {/* === НОВЫЙ РАЗДЕЛ: УПРАВЛЕНИЕ АДМИНИСТРАТОРАМИ === */}
         <div className="bg-gray-800 bg-opacity-50 backdrop-blur-sm rounded-xl shadow-2xl p-6 mb-6 border border-gray-700">
           <h2 className="text-2xl font-semibold mb-4 text-cyan-400">Управление администраторами</h2>
-          
+
           {adminActionStatus && (
-            <div className={`mb-4 p-2 rounded ${
-              adminActionStatus.includes('Ошибка') ? 'bg-red-500 text-white' : 'bg-green-500 text-white'
-            }`}>
+            <div className={`mb-4 p-2 rounded ${adminActionStatus.includes('Ошибка') ? 'bg-red-500 text-white' : 'bg-green-500 text-white'
+              }`}>
               {adminActionStatus}
             </div>
           )}
@@ -415,12 +447,17 @@ const AdminPanel = () => {
               <button
                 onClick={addAdmin}
                 disabled={isLoadingAdmins || !newAdminAddress}
-                className={`px-4 py-2 rounded-r-lg font-medium transition ${
-                  isLoadingAdmins || !newAdminAddress
+                className={`px-4 py-2 rounded-r-lg font-medium transition flex items-center ${isLoadingAdmins || !newAdminAddress
                     ? 'bg-gray-600 cursor-not-allowed'
                     : 'bg-green-600 hover:bg-green-700'
-                }`}
+                  }`}
               >
+                {isLoadingAdmins ? (
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : null}
                 Добавить
               </button>
             </div>
@@ -439,12 +476,17 @@ const AdminPanel = () => {
                       <button
                         onClick={() => removeAdmin(adminAddr)}
                         disabled={isLoadingAdmins}
-                        className={`px-3 py-1 text-sm rounded transition ${
-                          isLoadingAdmins
+                        className={`px-3 py-1 text-sm rounded transition flex items-center ${isLoadingAdmins
                             ? 'bg-gray-600 cursor-not-allowed'
                             : 'bg-red-600 hover:bg-red-700'
-                        }`}
+                          }`}
                       >
+                        {isLoadingAdmins ? (
+                          <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                        ) : null}
                         Удалить
                       </button>
                     ) : (
@@ -461,12 +503,17 @@ const AdminPanel = () => {
           <button
             onClick={fetchAdminsList}
             disabled={isLoadingAdmins}
-            className={`mt-4 px-4 py-2 rounded font-medium transition ${
-              isLoadingAdmins
+            className={`mt-4 px-4 py-2 rounded font-medium transition flex items-center ${isLoadingAdmins
                 ? 'bg-gray-600 cursor-not-allowed'
                 : 'bg-gray-600 hover:bg-gray-700'
-            }`}
+              }`}
           >
+            {isLoadingAdmins ? (
+              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            ) : null}
             Обновить список
           </button>
         </div>

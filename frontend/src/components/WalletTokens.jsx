@@ -6,231 +6,234 @@ import { ethers } from 'ethers';
 import { SUPPORTED_CHAINS } from '../config/supportedChains';
 // === ИМПОРТЫ СЕРВИСОВ ===
 import { updateTokens } from '../services/tokenService'; // Основной импорт для получения данных
-import { saveTokensToCache, getCachedTokens, isCacheExpired } from '../services/cacheService';
-import { setLastUpdateTime, canPerformBackgroundUpdate } from '../services/cacheService';
+import { getCachedTokens, canPerformBackgroundUpdate } from '../services/cacheService'; // Импортируем canPerformBackgroundUpdate
 // === ИМПОРТЫ ИЗ НОВОГО ФАЙЛА КОНФИГУРАЦИИ ===
-// ВАЖНО: Импортируем функцию, которая теперь загружает ГЛОБАЛЬНУЮ конфигурацию
-import { getUpdateIntervalMinutes } from '../config/appConfig';
-// === КОНЕЦ ИМПОРТОВ ИЗ НОВОГО ФАЙЛА КОНФИГУРАЦИИ ===
+import { getUpdateIntervalMinutes, CACHE_DURATION_MS as DEFAULT_CACHE_DURATION_MS } from '../config/appConfig'; // Импортируем дефолтный CACHE_DURATION_MS
+// === КОНЕЦ ИМПОРТОВ ===
 
 // === КОНСТАНТЫ ===
-const MIN_TOKEN_VALUE_USD = 0.1; // Константа для минимальной стоимости отображения
-const MIN_UPDATE_INTERVAL_MS = 30000; // 30 секунд, минимальный интервал для фонового обновления
+const MIN_TOKEN_VALUE_USD = 0.1;
+const MIN_UPDATE_INTERVAL_MS = 30000; // 30 секунд
+const SELECTED_CHAINS_STORAGE_KEY = 'defiPool_selectedChains'; // Ключ для localStorage
 // === КОНЕЦ КОНСТАНТ ===
 
 const WalletTokens = () => {
   const { provider, account, signer, chainId, switchNetwork } = useWeb3();
-  const [tokens, setTokens] = useState([]); // Содержит все токены, полученные из сервиса
-  const [loading, setLoading] = useState(true);
+  const [tokens, setTokens] = useState([]); // Содержит все токены
+  const [loading, setLoading] = useState(true); // Изначально true
   const [error, setError] = useState(null);
+  
   // === СОСТОЯНИЕ ДЛЯ ИНТЕРВАЛА ===
-  const [effectiveUpdateIntervalMinutes, setEffectiveUpdateIntervalMinutes] = useState(10); // Значение по умолчанию
+  const [effectiveUpdateIntervalMinutes, setEffectiveUpdateIntervalMinutes] = useState(5); // Начальное значение
+  // === СОСТОЯНИЕ ДЛЯ ОБРАТНОГО ОТСЧЕТА ===
+  const [timeUntilNextUpdate, setTimeUntilNextUpdate] = useState(0); // В миллисекундах
+  const countdownIntervalRef = useRef(null);
+  // === КОНЕЦ СОСТОЯНИЯ ДЛЯ ОБРАТНОГО ОТСЧЕТА ===
   // === КОНЕЦ СОСТОЯНИЯ ===
 
   const intervalRef = useRef(null);
-  const hasFetchedTokens = useRef(false);
   // === useRef ДЛЯ ОТСЛЕЖИВАНИЯ МОНТИРОВАНИЯ ===
-  // Это ключевое изменение для предотвращения обновления состояния в размонтированном компоненте
   const isMountedRef = useRef(true);
   // === КОНЕЦ useRef ДЛЯ ОТСЛЕЖИВАНИЯ МОНТИРОВАНИЯ ===
   const loadedNetworks = useRef(new Set()); // Ref для отслеживания уже загруженных сетей
 
   // === СОСТОЯНИЯ ДЛЯ ФИЛЬТРОВ ОТОБРАЖЕНИЯ ===
-  // По умолчанию фильтры ВЫКЛЮЧЕНЫ (показываются все токены)
-  // false = фильтр НЕ активен = показываем всё
-  const [showZeroBalance, setShowZeroBalance] = useState(false); // false = показывать нулевые балансы
-  const [showLowValue, setShowLowValue] = useState(false); // false = показывать низкостоймостные токены
-  // === КОНЕЦ СОСТОЯНИЙ ДЛЯ ФИЛЬТРОВ ===
+  const [showZeroBalance, setShowZeroBalance] = useState(false);
+  const [showLowValue, setShowLowValue] = useState(false);
+  // === КОНЕЦ СОСТОЯНИЯ ДЛЯ ФИЛЬТРОВ ===
 
   // Состояние для фильтра сетей
-  const [selectedChains, setSelectedChains] = useState(new Set()); // Множество выбранных сетей
-  const [showInactiveNetworks, setShowInactiveNetworks] = useState(false); // Показывать неактивные сети
+  const [selectedChains, setSelectedChains] = useState(new Set());
+  const [showInactiveNetworks, setShowInactiveNetworks] = useState(false); // По умолчанию скрыть неактивные сети
 
-  // Инициализация выбранных сетей только текущей сетью
+  // --- ИНИЦИАЛИЗАЦИЯ selectedChains ---
   useEffect(() => {
-    console.log("[WalletTokens] chainId changed или компонент смонтирован:", chainId);
-    if (chainId) {
-      console.log(`[WalletTokens] Установка selectedChains в [${chainId}]`);
-      setSelectedChains(new Set([chainId]));
-      // Не добавляем chainId в loadedNetworks здесь, чтобы обеспечить первую загрузку
-      // loadedNetworks.current.add(chainId);
-    } else {
-      console.log("[WalletTokens] chainId пустой, очищаем selectedChains");
-      setSelectedChains(new Set());
+    console.log("[WalletTokens] Инициализация selectedChains...");
+    let initialChains = new Set();
+    
+    try {
+      const savedChainsStr = localStorage.getItem(SELECTED_CHAINS_STORAGE_KEY);
+      if (savedChainsStr) {
+        const savedChainsArray = JSON.parse(savedChainsStr);
+        if (Array.isArray(savedChainsArray)) {
+          initialChains = new Set(savedChainsArray);
+          console.log(`[WalletTokens] Загружены сохранённые сети из localStorage:`, Array.from(initialChains));
+        }
+      }
+    } catch (e) {
+      console.warn("[WalletTokens] Не удалось загрузить selectedChains из localStorage:", e);
     }
-  }, [chainId]);
 
-  // === ЭФФЕКТ ДЛЯ ЗАГРУЗКИ ИНТЕРВАЛА ИЗ appConfig ===
+    if (initialChains.size === 0 && chainId) {
+      initialChains.add(chainId);
+      console.log(`[WalletTokens] Установка начального selectedChains в [${chainId}]`);
+    } else if (initialChains.size === 0) {
+      console.log("[WalletTokens] Нет сохранённых сетей и chainId пустой, selectedChains остаётся пустым");
+    }
+
+    setSelectedChains(initialChains);
+  }, [chainId]);
+  // --- КОНЕЦ ИНИЦИАЛИЗАЦИИ selectedChains ---
+
+  // --- СОХРАНЕНИЕ selectedChains ---
   useEffect(() => {
+    try {
+      if (selectedChains.size > 0) {
+        localStorage.setItem(SELECTED_CHAINS_STORAGE_KEY, JSON.stringify(Array.from(selectedChains)));
+        console.log(`[WalletTokens] selectedChains сохранены в localStorage:`, Array.from(selectedChains));
+      }
+    } catch (e) {
+      console.warn("[WalletTokens] Не удалось сохранить selectedChains в localStorage:", e);
+    }
+  }, [selectedChains]);
+  // --- КОНЕЦ СОХРАНЕНИЯ selectedChains ---
+
+  // --- УПРАВЛЕНИЕ effectiveUpdateIntervalMinutes и обратным отсчетом ---
+  useEffect(() => {
+    let isCancelled = false;
+
     const loadUpdateInterval = async () => {
       try {
-        // ВАЖНО: Теперь getUpdateIntervalMinutes() загружает ГЛОБАЛЬНУЮ конфигурацию
-        // Она сама обрабатывает загрузку из API или localStorage
-        // Передаем адрес пользователя для корректной идентификации
         console.log(`[WalletTokens] Попытка загрузки интервала обновления для пользователя: ${account}`);
-        const intervalMinutes = await getUpdateIntervalMinutes(account); // Передаем account как userAddress
+        const intervalMinutes = await getUpdateIntervalMinutes(account);
         console.log(`[WalletTokens] Загружен интервал обновления: ${intervalMinutes} минут`);
-        setEffectiveUpdateIntervalMinutes(intervalMinutes);
+        if (!isCancelled && isMountedRef.current) {
+            setEffectiveUpdateIntervalMinutes(intervalMinutes);
+        }
       } catch (error) {
         console.error('[WalletTokens] Ошибка при загрузке интервала обновления:', error);
-        setEffectiveUpdateIntervalMinutes(10); // Значение по умолчанию
+        if (!isCancelled && isMountedRef.current) {
+            setEffectiveUpdateIntervalMinutes(5);
+        }
       }
     };
 
-    loadUpdateInterval();
-  }, [account]); // Добавляем account в зависимости
-  // === КОНЕЦ ЭФФЕКТА ===
-
-  // Функция для обновления токенов конкретной сети
-  const fetchTokensForNetwork = async (networkChainId) => {
-    if (!account || !provider || !networkChainId) {
-      console.log("[WalletTokens] fetchTokensForNetwork: Недостаточно данных для обновления", { account, provider, networkChainId });
-      return [];
+    if (account) {
+        loadUpdateInterval();
     }
-    
-    console.log(`[WalletTokens] Начинаем обновление токенов для сети ${networkChainId}...`);
-    // Устанавливаем loading только если компонент смонтирован
-    if (isMountedRef.current) {
-        setLoading(true);
-    }
-    // Устанавливаем setError только если компонент смонтирован
-    if (isMountedRef.current) {
-        setError(null);
-    }
-    
-    try {
-      // Создаем локальное состояние для этой операции
-      let networkTokens = [];
-      let networkLoading = true;
-      let networkError = null;
 
-      // Локальные функции setState, которые проверяют isMountedRef
-      const setNetworkTokens = (newTokens) => {
-        networkTokens = newTokens;
-      };
+    return () => {
+        isCancelled = true;
+    };
+  }, [account]);
 
-      const setNetworkLoading = (isLoading) => {
-        networkLoading = isLoading;
-        // Устанавливаем loading только если компонент смонтирован
-        if (isMountedRef.current) {
-            setLoading(isLoading);
-        }
-      };
-
-      const setNetworkError = (err) => {
-        networkError = err;
-        // Устанавливаем error только если компонент смонтирован
-        if (isMountedRef.current) {
-            setError(err);
-        }
-      };
-
-      // Вызываем updateTokens для конкретной сети, передавая isMountedRef
-      await updateTokens(account, provider, setNetworkTokens, setNetworkLoading, setNetworkError, networkChainId, isMountedRef);
-
-      if (networkError) {
-        console.error(`[WalletTokens] Ошибка при получении токенов для сети ${networkChainId}:`, networkError);
-        return [];
-      }
-
-      console.log(`[WalletTokens] Успешно получено ${networkTokens.length} токенов для сети ${networkChainId}`);
-      
-      // Помечаем сеть как загруженную
-      loadedNetworks.current.add(networkChainId);
-      
-      return networkTokens || [];
-    } catch (error) {
-      console.error(`[WalletTokens] Критическая ошибка при получении токенов для сети ${networkChainId}:`, error);
-      // Устанавливаем error только если компонент смонтирован
-      if (isMountedRef.current) {
-          setError(error.message || 'Неизвестная ошибка при загрузке токенов');
-      }
-      return [];
-    } finally {
-      // Устанавливаем loading в false только если компонент смонтирован
-      if (isMountedRef.current) {
-          setLoading(false);
-      }
-    }
-  };
-
-  // Функция для обновления токенов
-  const handleRefresh = useCallback(async () => {
-    if (!account || !provider || !chainId) {
-        console.log("[WalletTokens] handleRefresh: Недостаточно данных для обновления", { account, provider, chainId });
-        return;
-    }
-    console.log("[WalletTokens] Начинаем обновление токенов для текущей сети...");
-    
-    // Очищаем список загруженных сетей для принудительной перезагрузки
-    loadedNetworks.current.clear();
-    
-    // Устанавливаем loading только если компонент смонтирован
-    if (isMountedRef.current) {
-        setLoading(true);
-    }
-    // Устанавливаем setError только если компонент смонтирован
-    if (isMountedRef.current) {
-        setError(null);
-    }
-    // Передаем isMountedRef в updateTokens
-    await updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef);
-  }, [account, provider, chainId]);
-
-  // Основная функция обновления токенов (делегирует всю логику сервису)
+  // Эффект для управления обратным отсчетом
   useEffect(() => {
-    // Устанавливаем флаг монтирования в true при монтировании
-    isMountedRef.current = true;
-    
-    const initializeTokens = async () => {
-      // Проверяем, что у нас есть все необходимые данные
-      if (!account || !provider || !chainId) {
-        console.log("[WalletTokens] Пропуск инициализации токенов: нет данных", { account, provider, chainId });
-        // Если данных нет, но токены уже были загружены, убираем loading
-        // Устанавливаем loading только если компонент смонтирован
-        if (isMountedRef.current && tokens.length > 0) {
-          setLoading(false);
-        }
-        return;
-      }
-      
-      // Проверяем, не загружали ли мы уже токены для этой сети
-      if (loadedNetworks.current.has(chainId)) {
-        console.log(`[WalletTokens] Токены для сети ${chainId} уже были загружены ранее, пропуск инициализации`);
-        // Устанавливаем loading только если компонент смонтирован
-        if (isMountedRef.current) {
-            setLoading(false); // Убедимся, что loading сброшен
-        }
-        return;
-      }
-      
-      // Добавляем сеть в список загруженных ДО фактической загрузки
-      // loadedNetworks.current.add(chainId); // Переносим добавление после успешной загрузки
-      console.log("[WalletTokens] Начальное получение токенов для текущей сети...");
-      
-      // Получаем токены только для текущей сети
+    // Очищаем предыдущий интервал отсчета
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+    }
+
+    if (!account || !chainId) {
+      setTimeUntilNextUpdate(0);
+      return;
+    }
+
+    const updateCountdown = () => {
       try {
-        // Передаем isMountedRef в updateTokens
-        await updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef);
-        // Только после успешной загрузки добавляем сеть в loadedNetworks
-        loadedNetworks.current.add(chainId);
-      } catch (err) {
-        console.error("[WalletTokens] Ошибка в initializeTokens:", err);
-        // Устанавливаем error только если компонент смонтирован
-        if (isMountedRef.current) {
-            setError(err.message || 'Ошибка при инициализации токенов');
+        // Получаем время последнего обновления из кэша
+        const lastUpdateKey = `defiPool_lastUpdate_${account}_${chainId}`;
+        const lastUpdateStr = localStorage.getItem(lastUpdateKey);
+        
+        if (!lastUpdateStr) {
+          // Если времени обновления нет, считаем, что обновление нужно было давно
+          setTimeUntilNextUpdate(0);
+          return;
         }
-        // Если ошибка, пытаемся получить только для текущей сети
-        // Передаем isMountedRef в updateTokens
-        try {
-          await updateTokens(account, provider, setTokens, setLoading, setError, chainId, isMountedRef);
-          // Только после успешной загрузки добавляем сеть в loadedNetworks
-          loadedNetworks.current.add(chainId);
-        } catch (retryErr) {
-          console.error("[WalletTokens] Повторная ошибка в initializeTokens:", retryErr);
-          if (isMountedRef.current) {
-            setError(retryErr.message || 'Ошибка при повторной инициализации токенов');
-          }
+
+        const lastUpdate = parseInt(lastUpdateStr, 10);
+        if (isNaN(lastUpdate)) {
+          setTimeUntilNextUpdate(0);
+          return;
+        }
+
+        const intervalMs = effectiveUpdateIntervalMinutes * 60 * 1000;
+        const clampedIntervalMs = Math.max(intervalMs, MIN_UPDATE_INTERVAL_MS);
+        const now = Date.now();
+        const timeSinceLastUpdate = now - lastUpdate;
+        const timeLeft = clampedIntervalMs - timeSinceLastUpdate;
+
+        if (timeLeft <= 0) {
+          setTimeUntilNextUpdate(0);
+        } else {
+          setTimeUntilNextUpdate(timeLeft);
+        }
+      } catch (e) {
+        console.error("[WalletTokens] Ошибка при расчете обратного отсчета:", e);
+        setTimeUntilNextUpdate(0);
+      }
+    };
+
+    // Обновляем счетчик сразу
+    updateCountdown();
+
+    // Устанавливаем интервал для обновления счетчика каждую секунду
+    countdownIntervalRef.current = setInterval(updateCountdown, 1000);
+
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+    };
+  }, [account, chainId, effectiveUpdateIntervalMinutes]);
+  // --- КОНЕЦ УПРАВЛЕНИЯ effectiveUpdateIntervalMinutes и обратным отсчетом ---
+
+  // --- ОСНОВНОЙ ЭФФЕКТ ДЛЯ ЗАГРУЗКИ ТОКЕНОВ ОСНОВНОЙ СЕТИ ---
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    const initializeTokens = async () => {
+      if (!account || !provider || !chainId) {
+        console.log("[WalletTokens] Пропуск инициализации токенов основной сети: нет данных", { account, provider, chainId });
+        if (isMountedRef.current) {
+            setLoading(false);
+        }
+        return;
+      }
+
+      if (loadedNetworks.current.has(chainId)) {
+        console.log(`[WalletTokens] Токены для основной сети ${chainId} уже были загружены ранее, пропуск инициализации`);
+        if (isMountedRef.current) {
+            setLoading(false);
+        }
+        return;
+      }
+
+      console.log("[WalletTokens] Начальное получение токенов для основной сети...");
+      
+      try {
+        const cachedTokens = getCachedTokens(account, chainId);
+        if (cachedTokens && Array.isArray(cachedTokens) && cachedTokens.length > 0) {
+            console.log(`[WalletTokens] Найдены закэшированные токены для основной сети (${cachedTokens.length} шт.)`);
+            if (isMountedRef.current) {
+                setTokens(prevTokens => {
+                    const tokensWithoutCurrentChain = prevTokens.filter(token => token.chainId !== chainId);
+                    return [...tokensWithoutCurrentChain, ...cachedTokens];
+                });
+                setLoading(false);
+            }
+            loadedNetworks.current.add(chainId);
+        }
+
+        await updateTokens(account, provider, (newTokens) => {
+            if (isMountedRef.current) {
+                setTokens(prevTokens => {
+                    const tokensWithoutCurrentChain = prevTokens.filter(token => token.chainId !== chainId);
+                    return [...tokensWithoutCurrentChain, ...newTokens];
+                });
+            }
+        }, null, null, chainId, isMountedRef);
+        
+        loadedNetworks.current.add(chainId);
+        if (isMountedRef.current) {
+            setLoading(false);
+        }
+        
+      } catch (err) {
+        console.error("[WalletTokens] Ошибка в initializeTokens для основной сети:", err);
+        if (isMountedRef.current) {
+            setError(err.message || 'Ошибка при инициализации токенов основной сети');
+            setLoading(false);
         }
       }
     };
@@ -238,20 +241,76 @@ const WalletTokens = () => {
     initializeTokens();
 
     return () => {
-      // Устанавливаем флаг монтирования в false при размонтировании
       isMountedRef.current = false;
-      // hasFetchedTokens.current = false; // Не сбрасываем, чтобы не запрашивать снова при размонтировании
     };
-  }, [account, provider, chainId, tokens.length]); // Добавляем tokens.length для корректного сброса loading если данные есть
+  }, [account, provider, chainId]);
+  // --- КОНЕЦ ОСНОВНОГО ЭФФЕКТА ---
 
-  // === ЭФФЕКТ ДЛЯ УПРАВЛЕНИЯ ИНТЕРВАЛОМ АВТООБНОВЛЕНИЯ ===
+  // --- ЭФФЕКТ ДЛЯ ЗАГРУЗКИ ТОКЕНОВ ДОПОЛНИТЕЛЬНЫХ СЕТЕЙ ---
   useEffect(() => {
-    if (!account || !provider || !chainId || effectiveUpdateIntervalMinutes <= 0) {
-      if (intervalRef.current) {
-        console.log('[WalletTokens] Очистка интервала обновления токенов');
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
+    const loadTokensForSelectedChains = async () => {
+      if (!account || !provider) return;
+
+      const chainsToLoad = Array.from(selectedChains).filter(chainIdToLoad => 
+        chainIdToLoad !== chainId && !loadedNetworks.current.has(chainIdToLoad)
+      );
+
+      if (chainsToLoad.length === 0) {
+        console.log("[WalletTokens] Нет новых сетей для загрузки токенов");
+        return;
       }
+
+      console.log(`[WalletTokens] Начинаем загрузку токенов для дополнительных сетей:`, chainsToLoad);
+      
+      for (const chainIdToLoad of chainsToLoad) {
+        try {
+          console.log(`[WalletTokens] Загрузка токенов для сети ${chainIdToLoad}...`);
+          
+          const cachedTokens = getCachedTokens(account, chainIdToLoad);
+          if (cachedTokens && Array.isArray(cachedTokens) && cachedTokens.length > 0) {
+              console.log(`[WalletTokens] Найдены закэшированные токены для сети ${chainIdToLoad} (${cachedTokens.length} шт.)`);
+              if (isMountedRef.current) {
+                  setTokens(prevTokens => {
+                      const tokensWithoutCurrentChain = prevTokens.filter(token => token.chainId !== chainIdToLoad);
+                      return [...tokensWithoutCurrentChain, ...cachedTokens];
+                  });
+              }
+              loadedNetworks.current.add(chainIdToLoad);
+              continue;
+          }
+
+          await updateTokens(account, provider, (newTokens) => {
+            if (isMountedRef.current) {
+                setTokens(prevTokens => {
+                    const tokensWithoutCurrentChain = prevTokens.filter(token => token.chainId !== chainIdToLoad);
+                    return [...tokensWithoutCurrentChain, ...newTokens];
+                });
+            }
+          }, null, null, chainIdToLoad, isMountedRef);
+          
+          loadedNetworks.current.add(chainIdToLoad);
+          console.log(`[WalletTokens] Токены для сети ${chainIdToLoad} успешно загружены`);
+          
+        } catch (err) {
+          console.error(`[WalletTokens] Ошибка при загрузке токенов для сети ${chainIdToLoad}:`, err);
+        }
+      }
+    };
+
+    loadTokensForSelectedChains();
+  }, [selectedChains, account, provider, chainId]);
+  // --- КОНЕЦ ЭФФЕКТА ДОПОЛНИТЕЛЬНЫХ СЕТЕЙ ---
+
+  // --- ЭФФЕКТ ДЛЯ УПРАВЛЕНИЯ ИНТЕРВАЛОМ АВТООБНОВЛЕНИЯ ---
+  useEffect(() => {
+    if (intervalRef.current) {
+      console.log('[WalletTokens] Очистка предыдущего интервала обновления токенов');
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    if (!account || !provider || !chainId || effectiveUpdateIntervalMinutes <= 0) {
+      console.log('[WalletTokens] Недостаточно данных для установки интервала обновления');
       return;
     }
 
@@ -259,37 +318,46 @@ const WalletTokens = () => {
     const intervalMs = effectiveUpdateIntervalMinutes * 60 * 1000;
     const clampedIntervalMs = Math.max(intervalMs, MIN_UPDATE_INTERVAL_MS);
 
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-
     intervalRef.current = setInterval(async () => {
-      // Проверяем, что компонент смонтирован перед выполнением
       if (!isMountedRef.current) {
         console.log("[WalletTokens] Компонент размонтирован, отмена фонового обновления");
         return;
       }
-      console.log(`[WalletTokens] Автоматическое обновление токенов (интервал: ${effectiveUpdateIntervalMinutes} минут) для сети ${chainId}`);
-      try {
-        // Не показываем UI загрузки для фонового обновления
-        // Передаем isMountedRef в updateTokens, но setLoading и setError будут null
-        await updateTokens(account, provider, setTokens, null, null, chainId, isMountedRef);
-      } catch (err) {
-        // Логируем ошибку, но не отображаем пользователю для фонового обновления
-        console.error("[WalletTokens] Ошибка при фоновом обновлении токенов:", err);
-        // Ошибки фонового обновления не отображаем пользователю
+      
+      // Проверяем, можно ли выполнить обновление
+      const canUpdate = canPerformBackgroundUpdate(account, chainId, clampedIntervalMs);
+      console.log(`[WalletTokens] Проверка возможности фонового обновления для сети ${chainId}:`, canUpdate);
+      
+      if (canUpdate) {
+        console.log(`[WalletTokens] Автоматическое обновление токенов для основной сети ${chainId}`);
+        try {
+          await updateTokens(account, provider, (newTokens) => {
+              if (isMountedRef.current) {
+                  setTokens(prevTokens => {
+                      const tokensWithoutCurrentChain = prevTokens.filter(token => token.chainId !== chainId);
+                      return [...tokensWithoutCurrentChain, ...newTokens];
+                  });
+              }
+          }, null, null, chainId, isMountedRef);
+          // После обновления сбросим счетчик до следующего обновления
+          setTimeUntilNextUpdate(clampedIntervalMs);
+        } catch (err) {
+          console.error("[WalletTokens] Ошибка при фоновом обновлении токенов основной сети:", err);
+        }
+      } else {
+        console.log(`[WalletTokens] Фоновое обновление для сети ${chainId} отложено согласно политике кэширования.`);
       }
-    }, clampedIntervalMs);
+    }, clampedIntervalMs); // Интервал срабатывает каждые clampedIntervalMs
 
     return () => {
       if (intervalRef.current) {
-        console.log('[WalletTokens] Очистка интервала обновления токенов');
+        console.log('[WalletTokens] Очистка интервала обновления токенов при размонтировании/изменении зависимостей');
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
     };
-  }, [account, provider, chainId, effectiveUpdateIntervalMinutes]);
-  // === КОНЕЦ ЭФФЕКТА ===
+  }, [account, provider, chainId, effectiveUpdateIntervalMinutes]); // Зависимость от effectiveUpdateIntervalMinutes
+  // --- КОНЕЦ ЭФФЕКТА ИНТЕРВАЛА ---
 
   // === ЛОГИКА ФИЛЬТРАЦИИ ТОКЕНОВ ДЛЯ ОТОБРАЖЕНИЯ ===
   const filteredTokens = useMemo(() => {
@@ -302,183 +370,140 @@ const WalletTokens = () => {
     });
 
     if (!Array.isArray(tokens) || tokens.length === 0) {
-      console.log("[WalletTokens] Нет токенов для фильтрации");
+      console.log("[WalletTokens] Нет токенов для фильтрации (массив пустой)");
       return [];
     }
 
     let result = [...tokens];
-    console.log(`[WalletTokens] Начальное количество токенов: ${result.length}`);
+    console.log(`[WalletTokens] Начальное количество токенов для фильтрации: ${result.length}`);
 
-    // Фильтр по сетям
-    // Если selectedChains не пустой, фильтруем по выбранным сетям
     if (selectedChains.size > 0) {
       const initialCount = result.length;
-      result = result.filter(token => {
-        // Проверяем, что у токена есть chainId и он в списке выбранных
-        if (token.chainId !== undefined && selectedChains.has(token.chainId)) {
-          console.log(`[WalletTokens] Токен ${token.symbol} (${token.chainId}) в selectedChains: true`);
-          return true;
-        } else {
-          console.log(`[WalletTokens] Токен ${token.symbol} (${token.chainId}) в selectedChains: false`);
-          return false;
-        }
-      });
+      result = result.filter(token => 
+        token.chainId !== undefined && selectedChains.has(token.chainId)
+      );
       console.log(`[WalletTokens] После фильтра по сетям: ${result.length} (отфильтровано ${initialCount - result.length})`);
-    } else {
-      console.log(`[WalletTokens] selectedChains пустой, фильтр по сетям не применяется`);
     }
 
-    // Фильтр по балансу
-    // showZeroBalance: false -> фильтр НЕ активен -> показываем ВСЕ (включая нулевые)
-    // showZeroBalance: true -> фильтр активен -> скрываем нулевые
     if (showZeroBalance) {
       const initialCount = result.length;
       result = result.filter(token => {
         try {
           const balance = parseFloat(ethers.utils.formatUnits(token.balance, token.decimals));
-          const shouldShow = balance > 0;
-          console.log(`[WalletTokens] Токен ${token.symbol} баланс: ${balance}, показать: ${shouldShow}`);
-          return shouldShow;
+          return balance > 0;
         } catch (err) {
           console.error(`[WalletTokens] Ошибка при парсинге баланса токена ${token.symbol}:`, err);
-          return true; // Если ошибка, показываем токен
+          return true;
         }
       });
       console.log(`[WalletTokens] После фильтра по балансу: ${result.length} (отфильтровано ${initialCount - result.length})`);
     }
 
-    // Фильтр по стоимости
-    // showLowValue: false -> фильтр НЕ активен -> показываем ВСЕ (включая низкостоймостные)
-    // showLowValue: true -> фильтр активен -> скрываем < $0.10
     if (showLowValue) {
       const initialCount = result.length;
       result = result.filter(token => {
         try {
           const balanceFormatted = parseFloat(ethers.utils.formatUnits(token.balance, token.decimals));
           const priceUSD = parseFloat(token.priceUSD);
-          if (isNaN(priceUSD)) {
-            console.log(`[WalletTokens] Токен ${token.symbol} цена не определена, показываем`);
-            return true; // Если цена не определена, показываем токен
-          }
+          if (isNaN(priceUSD)) return true;
           const totalValueUSD = balanceFormatted * priceUSD;
-          const shouldShow = totalValueUSD >= MIN_TOKEN_VALUE_USD;
-          console.log(`[WalletTokens] Токен ${token.symbol} стоимость: $${totalValueUSD.toFixed(2)}, показать: ${shouldShow}`);
-          return shouldShow;
+          return totalValueUSD >= MIN_TOKEN_VALUE_USD;
         } catch (err) {
           console.error(`[WalletTokens] Ошибка при расчете стоимости токена ${token.symbol}:`, err);
-          return true; // Если ошибка, показываем токен
+          return true;
         }
       });
       console.log(`[WalletTokens] После фильтра по стоимости: ${result.length} (отфильтровано ${initialCount - result.length})`);
     }
 
-    // Сортировка: сначала по стоимости (убывание), затем по символу (возрастание)
     result.sort((a, b) => {
       try {
         const aBalanceFormatted = parseFloat(ethers.utils.formatUnits(a.balance, a.decimals));
         const bBalanceFormatted = parseFloat(ethers.utils.formatUnits(b.balance, b.decimals));
         const aPriceUSD = parseFloat(a.priceUSD) || 0;
         const bPriceUSD = parseFloat(b.priceUSD) || 0;
-
         const aValueUSD = aBalanceFormatted * aPriceUSD;
         const bValueUSD = bBalanceFormatted * bPriceUSD;
 
-        // Сортировка по стоимости (убывание)
         if (bValueUSD !== aValueUSD) {
           return bValueUSD - aValueUSD;
         }
-
-        // Если стоимость одинаковая, сортируем по символу (возрастание)
         return a.symbol.localeCompare(b.symbol);
       } catch (err) {
         console.error("[WalletTokens] Ошибка при сортировке токенов:", err);
-        return 0; // Не меняем порядок в случае ошибки
+        return 0;
       }
     });
 
     console.log(`[WalletTokens] Финальное количество токенов после фильтрации: ${result.length}`);
     return result;
-  }, [tokens, showZeroBalance, showLowValue, selectedChains, chainId]); // Добавлен chainId как зависимость
-  // === КОНЕЦ ЛОГИКИ ФИЛЬТРАЦИИ ТОКЕНОВ ===
+  }, [tokens, showZeroBalance, showLowValue, selectedChains, chainId]); 
 
   // === ОБРАБОТЧИКИ ФИЛЬТРОВ ===
-  const toggleZeroBalanceFilter = () => {
+  const toggleZeroBalanceFilter = useCallback(() => {
     console.log("[WalletTokens] Переключение фильтра нулевых балансов");
     setShowZeroBalance(prev => !prev);
-  };
-  
-  const toggleLowValueFilter = () => {
+  }, []);
+
+  const toggleLowValueFilter = useCallback(() => {
     console.log("[WalletTokens] Переключение фильтра низкой стоимости");
     setShowLowValue(prev => !prev);
-  };
-  
-  const toggleInactiveNetworksVisibility = () => {
+  }, []);
+
+  const toggleInactiveNetworksVisibility = useCallback(() => {
     console.log("[WalletTokens] Переключение видимости неактивных сетей");
     setShowInactiveNetworks(prev => !prev);
-  };
-  
-  // Обработчик для выбора/отмены выбора сети
-  const toggleChainSelection = async (chainIdToToggle) => {
+  }, []);
+
+  const toggleChainSelection = useCallback((chainIdToToggle) => {
     console.log(`[WalletTokens] Переключение выбора сети ${chainIdToToggle}`);
     
-    const newSelectedChains = new Set(selectedChains);
-    const wasSelected = newSelectedChains.has(chainIdToToggle);
-    
-    if (wasSelected) {
-      newSelectedChains.delete(chainIdToToggle);
-      console.log(`[WalletTokens] Сеть ${chainIdToToggle} удалена из selectedChains`);
-    } else {
-      newSelectedChains.add(chainIdToToggle);
-      console.log(`[WalletTokens] Сеть ${chainIdToToggle} добавлена в selectedChains`);
-      
-      // Если сеть еще не загружалась, загружаем токены для нее
-      if (!loadedNetworks.current.has(chainIdToToggle)) {
-        console.log(`[WalletTokens] Сеть ${chainIdToToggle} еще не загружалась, начинаем загрузку...`);
-        // Устанавливаем loading только если компонент смонтирован
-        if (isMountedRef.current) {
-            setLoading(true);
+    setSelectedChains(prevSelectedChains => {
+        const newSelectedChains = new Set(prevSelectedChains);
+        if (newSelectedChains.has(chainIdToToggle)) {
+            newSelectedChains.delete(chainIdToToggle);
+            console.log(`[WalletTokens] Сеть ${chainIdToToggle} удалена из selectedChains`);
+        } else {
+            newSelectedChains.add(chainIdToToggle);
+            console.log(`[WalletTokens] Сеть ${chainIdToToggle} добавлена в selectedChains`);
         }
-        // Устанавливаем setError только если компонент смонтирован
-        if (isMountedRef.current) {
-            setError(null);
-        }
-        
-        try {
-          const networkTokens = await fetchTokensForNetwork(chainIdToToggle);
-          
-          // Проверяем, что компонент смонтирован перед обновлением состояния
-          if (isMountedRef.current) {
-            // Объединяем новые токены с существующими
-            setTokens(prevTokens => {
-              // Удаляем старые токены этой сети (на случай, если они были)
-              const filteredTokens = prevTokens.filter(token => token.chainId !== chainIdToToggle);
-              // Добавляем новые токены этой сети
-              return [...filteredTokens, ...networkTokens];
-            });
-            // setLoading(false); // Уже устанавливается в finally fetchTokensForNetwork
-            console.log(`[WalletTokens] Установлено ${networkTokens.length} токенов для сети ${chainIdToToggle}`);
-            // Помечаем сеть как загруженную
-            loadedNetworks.current.add(chainIdToToggle);
-          }
-        } catch (err) {
-          console.error(`[WalletTokens] Ошибка при загрузке токенов для сети ${chainIdToToggle}:`, err);
-          // Устанавливаем error только если компонент смонтирован
-          if (isMountedRef.current) {
-              setError(`Не удалось загрузить токены для сети ${chainIdToToggle}: ${err.message || 'Неизвестная ошибка'}`);
-          }
-          // Устанавливаем loading в false только если компонент смонтирован
-          if (isMountedRef.current) {
-              setLoading(false);
-          }
-        }
-      }
-    }
-    
-    setSelectedChains(newSelectedChains);
-  };
-  // === КОНЕЦ ОБРАБОТЧИКОВ ФИЛЬТРОВ ===
+        return newSelectedChains;
+    });
+  }, []);
 
-  // === ОБРАБОТЧИК КОПИРОВАНИЯ АДРЕСА ===
+  const handleRefresh = useCallback(async () => {
+    if (!account || !provider || !chainId) {
+        console.log("[WalletTokens] handleRefresh: Недостаточно данных для обновления", { account, provider, chainId });
+        return;
+    }
+    console.log("[WalletTokens] Начинаем обновление токенов для текущей сети...");
+    
+    // Очищаем список загруженных сетей только для основной сети
+    loadedNetworks.current.delete(chainId);
+    
+    try {
+        await updateTokens(account, provider, (newTokens) => {
+            if (isMountedRef.current) {
+                setTokens(prevTokens => {
+                    const tokensWithoutCurrentChain = prevTokens.filter(token => token.chainId !== chainId);
+                    return [...tokensWithoutCurrentChain, ...newTokens];
+                });
+            }
+        }, setLoading, setError, chainId, isMountedRef);
+        loadedNetworks.current.add(chainId);
+        // Сбросим счетчик после ручного обновления
+        const intervalMs = effectiveUpdateIntervalMinutes * 60 * 1000;
+        const clampedIntervalMs = Math.max(intervalMs, MIN_UPDATE_INTERVAL_MS);
+        setTimeUntilNextUpdate(clampedIntervalMs);
+    } catch (err) {
+        console.error("[WalletTokens] Ошибка при ручном обновлении токенов:", err);
+        if (isMountedRef.current) {
+            setError(err.message || 'Ошибка при обновлении токенов');
+        }
+    }
+  }, [account, provider, chainId, effectiveUpdateIntervalMinutes]);
+
+  // === ОБРАБОТЧИКИ ДЛЯ ТОКЕНОВ ===
   const copyToClipboard = async (text) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -487,9 +512,7 @@ const WalletTokens = () => {
       console.error('[WalletTokens] Ошибка при копировании: ', err);
     }
   };
-  // === КОНЕЦ ОБРАБОТЧИКА КОПИРОВАНИЯ ===
 
-  // === ОБРАБОТЧИК ОТКРЫТИЯ В ЭКСПЛОРЕРЕ ===
   const openInExplorer = (address, tokenChainId) => {
     if (address && tokenChainId) {
       const networkConfig = SUPPORTED_CHAINS[tokenChainId];
@@ -506,16 +529,14 @@ const WalletTokens = () => {
       }
     }
   };
-  // === КОНЕЦ ОБРАБОТЧИКА ОТКРЫТИЯ В ЭКСПЛОРЕРЕ ===
 
-  // === РЕНДЕР СОСТОЯНИЙ ЗАГРУЗКИ И ОШИБКИ ВНУТРИ ТАБЛИЦЫ ===
+  // === РЕНДЕР СОДЕРЖИМОГО ТАБЛИЦЫ ===
   const renderTableContent = () => {
     console.log("[WalletTokens] Рендер содержимого таблицы:", { 
       loading, 
       error, 
       tokensLength: tokens.length, 
-      filteredTokensLength: filteredTokens.length,
-      hasFetchedTokens: hasFetchedTokens.current
+      filteredTokensLength: filteredTokens.length
     });
     
     if (loading && tokens.length === 0) {
@@ -550,7 +571,6 @@ const WalletTokens = () => {
       );
     }
 
-    // Если токены загружены
     if (tokens.length > 0) {
       if (filteredTokens.length === 0) {
         return (
@@ -563,7 +583,6 @@ const WalletTokens = () => {
       }
       
       return filteredTokens.map((token) => {
-        // Проверяем наличие всех необходимых данных
         const tokenSymbol = token.symbol || 'Unknown';
         const tokenName = token.name || 'Unknown Token';
         const tokenAddress = token.contractAddress || '0x0000...';
@@ -580,7 +599,6 @@ const WalletTokens = () => {
           totalValueFormatted = `$${totalValueNum.toFixed(2)}`;
         }
 
-        // Получаем информацию о сети
         const chainInfo = SUPPORTED_CHAINS[tokenChainId];
         const chainName = chainInfo ? chainInfo.shortName : `Chain ${tokenChainId || 'unknown'}`;
 
@@ -637,7 +655,6 @@ const WalletTokens = () => {
         );
       });
     } else {
-      // Нет токенов
       return (
         <tr>
           <td colSpan="6" className="px-6 py-8 text-center text-sm text-gray-500">
@@ -647,7 +664,16 @@ const WalletTokens = () => {
       );
     }
   };
-  // === КОНЕЦ РЕНДЕРА СОСТОЯНИЙ ===
+
+  // === ФОРМАТИРОВАНИЕ ВРЕМЕНИ ОБРАТНОГО ОТСЧЕТА ===
+  const formatTimeLeft = (milliseconds) => {
+    if (milliseconds <= 0) return 'Скоро';
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+  // === КОНЕЦ ФОРМАТИРОВАНИЯ ===
 
   return (
     <div className="min-h-screen py-8 px-4 bg-gradient-to-br from-gray-900 to-indigo-900 text-white">
@@ -679,6 +705,9 @@ const WalletTokens = () => {
               <div className="flex items-center text-sm text-gray-400">
                 <span>Интервал:</span>
                 <span className="ml-1 font-medium">{effectiveUpdateIntervalMinutes} мин</span>
+                <span className="mx-2">|</span>
+                <span>След. обновление:</span>
+                <span className="ml-1 font-medium">{formatTimeLeft(timeUntilNextUpdate)}</span>
               </div>
               <button
                 onClick={handleRefresh}
@@ -698,18 +727,12 @@ const WalletTokens = () => {
             </div>
           </div>
         </div>
-        {/* === КОНЕЦ БЛОКА КОШЕЛЬКА === */}
 
         {/* === 2. БЛОК ФИЛЬТРА СЕТЕЙ === */}
         <div className="mb-6 p-6 bg-gray-800 bg-opacity-50 border border-gray-700 rounded-xl shadow-lg">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold">Фильтр сетей</h2>
-            <button
-              onClick={toggleInactiveNetworksVisibility}
-              className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-full transition"
-            >
-              {showInactiveNetworks ? 'Скрыть неактивные' : 'Показать неактивные'}
-            </button>
+            {/* Кнопка скрыта по предыдущему запросу */}
           </div>
           
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -719,7 +742,7 @@ const WalletTokens = () => {
               const isCurrent = chainIdNum === chainId;
               const isLoaded = loadedNetworks.current.has(chainIdNum);
               
-              // Если не показываем неактивные и сеть не текущая и не выбрана, скрываем
+              // Условие отображения с учетом showInactiveNetworks
               if (!showInactiveNetworks && !isSelected && !isCurrent) {
                 return null;
               }
@@ -738,6 +761,7 @@ const WalletTokens = () => {
                 >
                   <div className="text-sm font-bold truncate">{chainData.shortName.toUpperCase()}</div>
                   <div className="text-xs mt-1 truncate">{chainData.name}</div>
+                  <div className="text-xs mt-1 text-gray-400">{chainIdNum}</div> {/* Отображение chainId */}
                   {isSelected && (
                     <div className="absolute top-1 right-1 w-3 h-3 bg-green-400 rounded-full border border-gray-800"></div>
                   )}
@@ -750,17 +774,19 @@ const WalletTokens = () => {
                 </button>
               );
             })}
-            {/* Кнопка показать/скрыть неактивные сети */}
+            {/* Добавляем последнюю кнопку для скрытия/показа неактивных сетей */}
             <button
               onClick={toggleInactiveNetworksVisibility}
               className={`p-4 rounded-xl border-2 transition-all duration-200 ${
                 showInactiveNetworks
-                  ? 'bg-gray-700 border-gray-500 text-gray-300'
+                  ? 'bg-gray-700 border-gray-500 text-gray-300 hover:bg-gray-600'
                   : 'bg-gray-800 bg-opacity-50 border-gray-600 text-gray-400 hover:border-gray-400'
               }`}
             >
-              <div className="text-sm font-bold">{showInactiveNetworks ? 'Скрыть неактивные' : 'Показать неактивные'}</div>
-              <div className="text-xs mt-1">сети</div>
+              <div className="text-sm font-bold text-center">
+                {showInactiveNetworks ? 'Скрыть неактивные' : 'Показать неактивные'}
+              </div>
+              <div className="text-xs mt-1 text-center">сети</div>
             </button>
           </div>
           
@@ -770,7 +796,6 @@ const WalletTokens = () => {
             </div>
           )}
         </div>
-        {/* === КОНЕЦ БЛОКА ФИЛЬТРА СЕТЕЙ === */}
 
         {/* === 3. БЛОК ФИЛЬТРОВ ТОКЕНОВ === */}
         <div className="mb-6 p-6 bg-gray-800 bg-opacity-50 border border-gray-700 rounded-xl shadow-lg">
@@ -803,7 +828,6 @@ const WalletTokens = () => {
             Всего токенов: {tokens.length} | Отображается: {filteredTokens.length}
           </div>
         </div>
-        {/* === КОНЕЦ БЛОКА ФИЛЬТРОВ ТОКЕНОВ === */}
 
         {/* === 4. БЛОК ТАБЛИЦЫ === */}
         <div className="rounded-xl border border-gray-700 shadow-lg overflow-hidden">
@@ -825,7 +849,6 @@ const WalletTokens = () => {
             </table>
           </div>
         </div>
-        {/* === КОНЕЦ БЛОКА ТАБЛИЦЫ === */}
         
       </div>
     </div>
