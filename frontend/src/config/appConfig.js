@@ -3,7 +3,7 @@
 
 // === ЗАМЕНА КОНСТАНТ ===
 // Вместо дублирования, импортируем SUPPORTED_CHAINS из отдельного файла
-import { SUPPORTED_CHAINS } from './supportedChains'; // <-- Импорт из нового файла
+import { SUPPORTED_CHAINS } from './supportedChains';
 import { DEFAULT_ADMIN_CONFIG } from '../constants'; // Убедитесь, что DEFAULT_ADMIN_CONFIG определен в '../constants' с правильной структурой
 
 const ADMIN_CONFIG_KEY = 'defiPool_adminConfig';
@@ -442,14 +442,17 @@ export const getUpdateIntervalMinutes = async (userAddress) => {
                 const headers = {
                     'Content-Type': 'application/json',
                 };
+                // --- ИСПРАВЛЕНИЕ ---
                 // Добавляем заголовок с адресом пользователя, если он есть
+                // Это важно для корректной работы проверки доступа в Netlify Function
                 if (finalUserAddress) {
                     headers['X-User-Address'] = finalUserAddress;
                 }
+                // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
                 const response = await fetch('/.netlify/functions/getConfigReadOnly', {
                     method: 'GET',
-                    headers: headers,
+                    headers: headers, // Используем обновленные заголовки
                     signal: AbortSignal.timeout(10000) // 10 секунд таймаут
                 });
 
