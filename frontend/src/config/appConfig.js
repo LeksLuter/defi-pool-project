@@ -20,8 +20,8 @@ console.log(`[App Config] Инициализация CACHE_DURATION_MS: ${CACHE_
 
 /**
  * Загружает глобальную конфигурацию приложения.
- * В админке использует adminAddress для проверки прав, но загружает конфигурацию как пользователь.
- * На других страницах использует userAddress и readonly API.
+ * В админке использует adminAddress и основной API с заголовком X-Admin-Address.
+ * На других страницах использует userAddress и readonly API с заголовком X-User-Address.
  * @param {string} [adminAddress] - Адрес кошелька администратора (для админки)
  * @param {string} [userAddress] - Адрес кошелька пользователя (для остальных страниц)
  * @returns {Promise<Object>} Объект конфигурации
@@ -38,17 +38,80 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
     }
 
     // 1. Попытка загрузки с бэкенда (локальный API или Netlify Functions)
-    // Приоритет: если это админка, загружаем как пользователь (но с правами админа на сервере)
-    // Если это не админка, но есть userAddress, загружаем как пользователь
-    if ((adminAddress && isAdminPage) || (userAddress && !isAdminPage)) {
-        // === ЗАГРУЗКА КОНФИГУРАЦИИ (READONLY) ===
-        // Используем userAddress для загрузки конфигурации, независимо от того, админ это или нет
-        // Права администратора проверяются на сервере отдельно для операций записи
-        const addressToUse = isAdminPage ? adminAddress : userAddress;
-        const contextLabel = isAdminPage ? "админка (readonly)" : "readonly/user";
-        
+    if (adminAddress && isAdminPage) {
+        // === ЗАГРУЗКА В АДМИНКЕ ===
         try {
-            console.log(`[App Config] Попытка загрузки конфигурации с сервера (${contextLabel}) для ${addressToUse}...`);
+            console.log(`[App Config] Попытка загрузки конфигурации с сервера (админка) для ${adminAddress}...`);
+            // Определяем URL для API в зависимости от среды выполнения
+            let apiUrl = '';
+            if (typeof window !== 'undefined') {
+                const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                if (isLocalhost) {
+                    apiUrl = `${LOCAL_API_BASE_URL}/app/config`; // Локальный API для app config (админка)
+                } else {
+                    apiUrl = '/.netlify/functions/getConfig'; // Netlify Functions для админки (чтение/запись)
+                }
+            } else {
+                // Для SSR или других сред
+                apiUrl = '/.netlify/functions/getConfig';
+            }
+
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-Admin-Address': adminAddress, // В админке используем X-Admin-Address
+            };
+
+            const response = await fetch(apiUrl, {
+                method: 'GET',
+                headers: headers,
+                signal: AbortSignal.timeout(10000) // 10 секунд таймаут
+            });
+
+            console.log("[App Config] Ответ от сервера (админка):", response.status, response.statusText);
+
+            if (response.ok) {
+                const serverConfig = await response.json();
+                console.log("[App Config] Конфигурация успешно загружена с сервера (админка):", serverConfig);
+
+                // Объединяем с дефолтной конфигурацией на случай, если какие-то поля отсутствуют
+                const mergedConfig = { ...DEFAULT_ADMIN_CONFIG, ...serverConfig };
+
+                // Сохраняем в localStorage как резервную копию
+                try {
+                    localStorage.setItem(ADMIN_CONFIG_KEY, JSON.stringify(mergedConfig));
+                    console.log("[App Config] Конфигурация сохранена в localStorage как резерв (админка)");
+                } catch (storageError) {
+                    console.error("[App Config] Ошибка при сохранении в localStorage (админка):", storageError);
+                }
+
+                // Обновляем глобальную константу CACHE_DURATION_MS
+                if (typeof mergedConfig.updateIntervalMinutes === 'number' && mergedConfig.updateIntervalMinutes > 0) {
+                    CACHE_DURATION_MS = mergedConfig.updateIntervalMinutes * 60 * 1000;
+                    console.log(`[App Config] CACHE_DURATION_MS обновлено до: ${CACHE_DURATION_MS}мс (на основе ${mergedConfig.updateIntervalMinutes} минут)`);
+                }
+
+                return mergedConfig;
+            } else if (response.status === 404) {
+                console.log("[App Config] Конфигурация на сервере не найдена (админка), будет использована дефолтная или локальная.");
+                // Продолжаем к локальной загрузке
+            } else if (response.status === 403) {
+                const errorText = await response.text();
+                console.warn(`[App Config] Доступ запрещен (админка): ${response.status} ${response.statusText} - ${errorText}`);
+                // Можно выбросить ошибку или обработать иначе
+                throw new Error(`Доступ запрещен: ${errorText}`);
+            } else {
+                const errorText = await response.text();
+                console.warn(`[App Config] Сервер вернул ошибку при загрузке конфигурации (админка): ${response.status} ${response.statusText} - ${errorText}`);
+                // Продолжаем к локальной загрузке
+            }
+        } catch (e) {
+            console.error("[App Config] Ошибка сети при загрузке конфигурации с сервера (админка):", e);
+            // Продолжаем к локальной загрузке
+        }
+    } else if (userAddress && !isAdminPage) {
+        // === ЗАГРУЗКА ДЛЯ ПОЛЬЗОВАТЕЛЕЙ (READONLY) ===
+        try {
+            console.log(`[App Config] Попытка загрузки конфигурации с сервера (readonly/user) для ${userAddress}...`);
             // Определяем URL для API в зависимости от среды выполнения
             let apiUrl = '';
             if (typeof window !== 'undefined') {
@@ -65,7 +128,7 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
 
             const headers = {
                 'Content-Type': 'application/json',
-                'X-User-Address': addressToUse, // ВСЕГДА используем X-User-Address для получения конфигурации
+                'X-User-Address': userAddress, // Используем user address для readonly
             };
 
             const response = await fetch(apiUrl, {
@@ -74,11 +137,11 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
                 signal: AbortSignal.timeout(10000) // 10 секунд таймаут
             });
 
-            console.log("[App Config] Ответ от сервера (readonly):", response.status, response.statusText);
+            console.log("[App Config] Ответ от сервера (readonly/user):", response.status, response.statusText);
 
             if (response.ok) {
                 const serverConfig = await response.json();
-                console.log("[App Config] Конфигурация успешно загружена с сервера (readonly):", serverConfig);
+                console.log("[App Config] Конфигурация успешно загружена с сервера (readonly/user):", serverConfig);
 
                 // ИСПРАВЛЕНИЕ: Обработка структуры ответа от Netlify Function
                 // Netlify Function getConfigReadOnly возвращает { config: {...} }
@@ -90,9 +153,9 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
                 // Сохраняем в localStorage как резервную копию
                 try {
                     localStorage.setItem(ADMIN_CONFIG_KEY, JSON.stringify(mergedConfig));
-                    console.log("[App Config] Конфигурация сохранена в localStorage как резерв (readonly)");
+                    console.log("[App Config] Конфигурация сохранена в localStorage как резерв (readonly/user)");
                 } catch (storageError) {
-                    console.error("[App Config] Ошибка при сохранении в localStorage (readonly):", storageError);
+                    console.error("[App Config] Ошибка при сохранении в localStorage (readonly/user):", storageError);
                 }
 
                 // Обновляем глобальную константу CACHE_DURATION_MS
@@ -103,21 +166,19 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
 
                 return mergedConfig;
             } else if (response.status === 404) {
-                console.log("[App Config] Конфигурация на сервере не найдена (readonly), будет использована дефолтная или локальная.");
+                console.log("[App Config] Конфигурация на сервере не найдена (readonly/user), будет использована дефолтная или локальная.");
                 // Продолжаем к локальной загрузке
             } else {
                 const errorText = await response.text();
-                console.warn(`[App Config] Сервер (readonly) вернул ошибку при загрузке конфига: ${response.status} ${response.statusText}. Текст: ${errorText}`);
+                console.warn(`[App Config] Сервер (readonly/user) вернул ошибку при загрузке конфига: ${response.status} ${response.statusText}. Текст: ${errorText}`);
                 // Продолжаем к локальной загрузке
             }
         } catch (e) {
-            console.error("[App Config] Ошибка сети при загрузке конфигурации с сервера (readonly):", e);
+            console.error("[App Config] Ошибка сети при загрузке конфигурации с сервера (readonly/user):", e);
             // Продолжаем к локальной загрузке
         }
-    } 
-    // Если ни adminAddress в админке, ни userAddress не обычной странице не предоставлены
-    else {
-        console.warn("[App Config] Адрес пользователя не предоставлен для загрузки конфигурации. Пропуск загрузки с сервера.");
+    } else {
+        console.warn("[App Config] Адрес пользователя или администратора не предоставлен, пропуск загрузки с сервера.");
     }
 
     // 2. Попытка загрузки из localStorage
@@ -450,7 +511,7 @@ export const getUpdateIntervalMinutes = async (userAddress) => {
  * @returns {Promise<void>}
  */
 export const updateTokenServicesConfig = async (newTokenServicesConfig, adminAddress) => {
-    const currentConfig = await loadAppConfig(adminAddress, adminAddress); // Передаем adminAddress как userAddress для загрузки
+    const currentConfig = await loadAppConfig(adminAddress);
     const updatedConfig = { ...currentConfig, tokenServices: newTokenServicesConfig };
     // Сохраняем в базу данных
     await saveAppConfig(updatedConfig, adminAddress);
@@ -464,7 +525,7 @@ export const updateTokenServicesConfig = async (newTokenServicesConfig, adminAdd
  * @returns {Promise<void>}
  */
 export const updatePriceServicesConfig = async (newPriceServicesConfig, adminAddress) => {
-    const currentConfig = await loadAppConfig(adminAddress, adminAddress); // Передаем adminAddress как userAddress для загрузки
+    const currentConfig = await loadAppConfig(adminAddress);
     const updatedConfig = { ...currentConfig, priceServices: newPriceServicesConfig };
     // Сохраняем в базу данных
     await saveAppConfig(updatedConfig, adminAddress);
@@ -478,7 +539,7 @@ export const updatePriceServicesConfig = async (newPriceServicesConfig, adminAdd
  * @returns {Promise<void>}
  */
 export const updateUpdateIntervalMinutes = async (newInterval, adminAddress) => {
-    const currentConfig = await loadAppConfig(adminAddress, adminAddress); // Передаем adminAddress как userAddress для загрузки
+    const currentConfig = await loadAppConfig(adminAddress);
     const updatedConfig = { ...currentConfig, updateIntervalMinutes: newInterval };
     // Сохраняем в базу данных
     await saveAppConfig(updatedConfig, adminAddress);
