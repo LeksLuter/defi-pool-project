@@ -1,11 +1,15 @@
 // frontend/src/services/priceAggregatorService.js
+
+// Импортируем сервисы цен
 import * as etherscanV2Service from './etherscanV2Service';
-import * as coingeckoService from './coingeckoService';
-import * as coinmarketcapService from './coinmarketcapService';
 import * as alchemyService from './alchemyService';
 import * as defillamaService from './defillamaService';
-import { getPriceServicesConfig } from '../config/appConfig';
+import * as coingeckoService from './coingeckoService';
+import * as coinmarketcapService from './coinmarketcapService';
+// Импортируем конфигурацию сервисов цен
+import { getPriceServicesConfig } from '../config/appConfig'; // Убедитесь, что путь правильный
 import { SUPPORTED_CHAINS } from '../config/supportedChains';
+// Импортируем функции работы с кэшем, если они нужны
 import { saveTokensToCache, getCachedTokens, isCacheExpired } from './cacheService';
 import { setLastUpdateTime, canPerformBackgroundUpdate } from './cacheService';
 
@@ -58,12 +62,25 @@ export const fetchTokenPriceWithFallback = async (contractAddress, chainId, apiK
             servicePrice = await defillamaService.fetchTokenPrice(contractAddress, chainId, apiKey);
             break;
           case 'CoinGecko':
-            if (coingeckoId) {
-              servicePrice = await coingeckoService.fetchTokenPrice(coingeckoId, apiKey);
+            // === ИСПРАВЛЕНИЕ 1: Автоматическое получение CoinGecko ID ===
+            let effectiveCoingeckoId = coingeckoId;
+            
+            // Если CoinGecko ID не был передан, пытаемся получить его
+            if (!effectiveCoingeckoId) {
+              console.log(`[Price Aggregator] CoinGecko ID не предоставлен для токена ${contractAddress}, пытаемся получить его через CoinGecko Service`);
+              effectiveCoingeckoId = await coingeckoService.getTokenIdByAddress(contractAddress, chainId);
+              console.log(`[Price Aggregator] Полученный CoinGecko ID для токена ${contractAddress}: ${effectiveCoingeckoId}`);
+            }
+            
+            // Если CoinGecko ID найден (переданный или полученный), запрашиваем цену
+            if (effectiveCoingeckoId) {
+              servicePrice = await coingeckoService.fetchTokenPrice(effectiveCoingeckoId, apiKey);
+              console.log(`[Price Aggregator] Запрошена цена у CoinGecko для токена ${contractAddress} с ID ${effectiveCoingeckoId}: ${servicePrice}`);
             } else {
-              console.warn(`[Price Aggregator] Не удалось получить CoinGecko ID для токена ${contractAddress}`);
+              console.warn(`[Price Aggregator] Не удалось получить CoinGecko ID для токена ${contractAddress} в сети ${chainId}`);
             }
             break;
+            // === КОНЕЦ ИСПРАВЛЕНИЯ 1 ===
           case 'CoinMarketCap':
             if (cmcId) {
               servicePrice = await coinmarketcapService.fetchTokenPrice(cmcId, apiKey);
@@ -74,13 +91,21 @@ export const fetchTokenPriceWithFallback = async (contractAddress, chainId, apiK
             servicePrice = null;
         }
         
+        // === ИСПРАВЛЕНИЕ 2: Усиленная проверка корректности цены ===
         // Проверяем, получили ли мы корректную цену
-        if (servicePrice !== null && !isNaN(servicePrice) && servicePrice > 0) {
+        // Условие: значение должно быть числом, не NaN, не Infinity и больше 0
+        if (servicePrice !== null && 
+            servicePrice !== undefined && 
+            typeof servicePrice === 'number' && 
+            !isNaN(servicePrice) && 
+            isFinite(servicePrice) && 
+            servicePrice > 0) {
           console.log(`[Price Aggregator] Цена для токена ${contractAddress} получена через ${serviceName}: $${servicePrice}`);
           return servicePrice;
         } else {
-          console.log(`[Price Aggregator] Сервис ${serviceName} не вернул корректную цену для токена ${contractAddress}. Получено: ${servicePrice}`);
+          console.log(`[Price Aggregator] Сервис ${serviceName} не вернул корректную цену для токена ${contractAddress}. Получено: ${servicePrice} (тип: ${typeof servicePrice})`);
         }
+        // === КОНЕЦ ИСПРАВЛЕНИЯ 2 ===
       } else {
         console.log(`[Price Aggregator] Сервис ${serviceName} отключен в конфигурации`);
       }
@@ -88,10 +113,10 @@ export const fetchTokenPriceWithFallback = async (contractAddress, chainId, apiK
     
     // Если ни один из сервисов не вернул цену
     console.warn(`[Price Aggregator] Не удалось получить цену для токена ${contractAddress} ни через один из сервисов`);
-    return 0;
+    return 0; // Возвращаем 0, если цена не найдена
   } catch (error) {
     console.error('[Price Aggregator] Критическая ошибка в fetchTokenPriceWithFallback:', error);
-    return 0;
+    return 0; // Возвращаем 0 в случае критической ошибки
   }
 };
 

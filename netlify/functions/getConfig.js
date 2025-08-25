@@ -1,34 +1,26 @@
-// netlify/functions/getConfig.js
-const { Client } = require('pg');
-
-// Дефолтная конфигурация
-const DEFAULT_APP_CONFIG = {
-  tokenServices: {
-    EtherscanV2: true,
-    Alchemy: true,
-    DefiLlama: true,
-    CoinGecko: true,
-    CoinMarketCap: true,
-  },
-  priceServices: {
-    EtherscanV2: true,
-    Alchemy: true,
-    DefiLlama: true,
-    CoinGecko: true,
-    CoinMarketCap: true,
-  },
-  updateIntervalMinutes: 5
-};
+import { getClient, DEFAULT_APP_CONFIG } from './utils/db.js'; // Импорт общего модуля
 
 exports.handler = async (event, context) => {
   try {
-    console.log("=== getConfig (Admin Read) Function Called ===");
-    console.log("Headers:", event.headers);
+    console.log("=== Get Config Function Called (Admin Read) ===");
 
-    const adminAddress = event.headers['x-admin-address'];
-    console.log("Admin Address:", adminAddress);
+    // Проверяем метод запроса
+    if (event.httpMethod !== 'GET') {
+      return {
+        statusCode: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'Метод не разрешен' }),
+      };
+    }
+
+    // Получаем заголовок X-Admin-Address
+    const adminAddress = event.headers['x-admin-address'] || event.headers['X-Admin-Address'];
 
     if (!adminAddress) {
+      console.warn("[getConfig] Заголовок X-Admin-Address не предоставлен");
       return {
         statusCode: 400,
         headers: {
@@ -39,83 +31,44 @@ exports.handler = async (event, context) => {
       };
     }
 
-    if (!process.env.NEON_DATABASE_URL) {
-      console.error("NEON_DATABASE_URL не установлен");
-      return {
-        statusCode: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({
-          error: 'База данных не настроена: NEON_DATABASE_URL отсутствует',
-        }),
-      };
-    }
+    console.log(`[getConfig] Запрос конфигурации от администратора: ${adminAddress}`);
 
-    const client = new Client({
-      connectionString: process.env.NEON_DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-    });
+    // Подключение к Neon через администратора (так как это защищенный endpoint)
+    const client = await getClient(false); // false для админского подключения
 
-    await client.connect();
-    console.log("Подключение к Neon через администратора успешно");
+    try {
+      // Получаем конфигурацию из таблицы app_config
+      const query = 'SELECT config_data FROM app_config WHERE admin_address = $1';
+      const result = await client.query(query, [adminAddress]);
 
-    // Создаем таблицы если они не существуют
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS app_config (
-        id SERIAL PRIMARY KEY,
-        config JSONB NOT NULL,
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS admins (
-        address TEXT PRIMARY KEY,
-        added_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Проверка прав администратора
-    const adminCheckResult = await client.query('SELECT 1 FROM admins WHERE address = $1', [adminAddress]);
-    if (adminCheckResult.rows.length === 0) {
-        await client.end();
+      if (result.rowCount > 0) {
+        const configData = result.rows[0].config_data;
+        console.log(`[getConfig] Конфигурация найдена для администратора ${adminAddress}`);
+        // Возвращаем найденную конфигурацию
         return {
-            statusCode: 403,
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-            },
-            body: JSON.stringify({ error: 'Доступ запрещен. Адрес не является администратором.' }),
+          statusCode: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+          body: JSON.stringify(configData), // config_data уже является объектом JSONB
         };
+      } else {
+        console.log(`[getConfig] Конфигурация не найдена для администратора ${adminAddress}, возврат дефолтной`);
+        // Если конфигурация не найдена, возвращаем дефолтную
+        return {
+          statusCode: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+          body: JSON.stringify(DEFAULT_APP_CONFIG),
+        };
+      }
+    } finally {
+      await client.end();
     }
 
-    // Получаем конфигурацию
-    const result = await client.query('SELECT config FROM app_config ORDER BY id DESC LIMIT 1');
-
-    await client.end();
-
-    if (result.rows.length > 0) {
-      console.log("Конфигурация приложения найдена в базе:", result.rows[0].config);
-      return {
-        statusCode: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify(result.rows[0].config),
-      };
-    } else {
-      console.log("Конфигурация не найдена, возвращаем дефолтную");
-      return {
-        statusCode: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify(DEFAULT_APP_CONFIG),
-      };
-    }
   } catch (error) {
     console.error("Ошибка в getConfig (Admin Read):", error);
     return {

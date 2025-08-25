@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+// frontend/src/components/AdminPanel.jsx
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 // ИСПРАВЛЕНО: Импорт функций для работы с конфигурацией приложения из appConfig.js
 import { loadAppConfig, saveAppConfig } from '../config/appConfig';
@@ -27,64 +29,87 @@ const AdminPanel = () => {
   // Эти функции напрямую взаимодействуют с API для управления списком админов
   // Предполагается, что API доступен по /api/admins (локально) или через Netlify Functions
 
-  const fetchAdminsList = async () => {
+  // ИСПРАВЛЕНИЕ: useCallback для предотвращения повторных созданий функции
+  const fetchAdminsList = useCallback(async () => {
     if (!account) return;
 
     setIsLoadingAdmins(true);
     setAdminActionStatus('Загрузка списка администраторов...');
-    try {
-      console.log(`[Admin Panel] Загрузка списка администраторов для ${account}...`);
 
+    try {
+      console.log(`[Admin Panel] === НАЧАЛО ЗАГРУЗКИ СПИСКА АДМИНИСТРАТОРОВ ДЛЯ ${account} ===`);
+      
       // Определяем URL для API
       let apiUrl = '';
       if (typeof window !== 'undefined') {
         const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         if (isLocalhost) {
           apiUrl = 'http://localhost:3001/api/admins'; // Локальный API сервер
+          console.log(`[Admin Panel] Используется локальный API сервер: ${apiUrl}`);
         } else {
           // Netlify Functions
           apiUrl = '/.netlify/functions/getAdmins';
+          console.log(`[Admin Panel] Используются Netlify Functions: ${apiUrl}`);
         }
       } else {
         // Для SSR или других сред, предполагаем Netlify Functions
         apiUrl = '/.netlify/functions/getAdmins';
+        console.log(`[Admin Panel] Предполагается использование Netlify Functions (SSR/другая среда): ${apiUrl}`);
       }
 
+      // === ИЗМЕНЕНИЕ 1: Увеличиваем таймаут до 30 секунд ===
+      console.log(`[Admin Panel] Запрос к API: ${apiUrl} с таймаутом 30 секунд`);
       const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           'X-Admin-Address': account,
         },
-        signal: AbortSignal.timeout(10000)
+        // === ИЗМЕНЕНИЕ 1: Увеличиваем таймаут до 30 секунд (30000 мс) ===
+        signal: AbortSignal.timeout(30000) // 30 секунд таймаут
       });
+      console.log(`[Admin Panel] Ответ от API: ${response.status} ${response.statusText}`);
+      // === КОНЕЦ ИЗМЕНЕНИЯ 1 ===
 
       if (response.ok) {
         const data = await response.json();
+        console.log(`[Admin Panel] Данные получены от API:`, data);
         setAdminsList(data.admins || []);
         setAdminActionStatus('Список администраторов загружен.');
+        console.log(`[Admin Panel] === СПИСОК АДМИНИСТРАТОРОВ УСПЕШНО ЗАГРУЖЕН ДЛЯ ${account} ===`);
       } else if (response.status === 403) {
+        console.warn(`[Admin Panel] Доступ запрещен (403) при загрузке списка администраторов`);
         setAdminActionStatus('Ошибка: Доступ запрещен.');
       } else {
         const errorText = await response.text();
-        setAdminActionStatus(`Ошибка при загрузке админов: ${errorText}`);
+        console.warn(`[Admin Panel] Ошибка ${response.status} ${response.statusText} при загрузке списка администраторов. Response body: ${errorText}`);
+        setAdminActionStatus(`Ошибка при загрузке списка администраторов: ${response.status} ${response.statusText}`);
       }
     } catch (e) {
-      console.error("[Admin Panel] Ошибка при загрузке списка администраторов:", e);
-      setAdminActionStatus('Ошибка сети при загрузке списка администраторов.');
+      // === ИЗМЕНЕНИЕ 2: Более подробное логирование ошибки ===
+      console.error("[Admin Panel] === КРИТИЧЕСКАЯ ОШИБКА ПРИ ЗАГРУЗКЕ СПИСКА АДМИНИСТРАТОРОВ ===:", e);
+      if (e.name === 'AbortError') {
+        console.error("[Admin Panel] Ошибка вызвана таймаутом AbortSignal");
+        setAdminActionStatus('Ошибка: Превышен таймаут ожидания ответа от сервера (30 секунд).');
+      } else if (e instanceof TypeError) {
+        console.error("[Admin Panel] Ошибка сети или CORS:", e);
+        setAdminActionStatus('Ошибка сети или CORS при загрузке списка администраторов.');
+      } else {
+        console.error("[Admin Panel] Другая ошибка:", e);
+        setAdminActionStatus('Ошибка сети при загрузке списка администраторов.');
+      }
+      // === КОНЕЦ ИЗМЕНЕНИЯ 2 ===
     } finally {
       setIsLoadingAdmins(false);
     }
-  };
+  }, [account]); // Зависимость только от account
 
-  const addAdmin = async () => {
-    if (!account || !newAdminAddress) {
-      setAdminActionStatus('Ошибка: Не указан адрес нового администратора.');
-      return;
-    }
+  // ИСПРАВЛЕНИЕ: useCallback для предотвращения повторных созданий функции
+  const addAdmin = useCallback(async () => {
+    if (!account || !newAdminAddress) return;
 
     setIsLoadingAdmins(true);
-    setAdminActionStatus('Добавление администратора...');
+    setAdminActionStatus(`Добавление администратора ${newAdminAddress}...`);
     try {
       console.log(`[Admin Panel] Добавление администратора ${newAdminAddress} админом ${account}...`);
 
@@ -110,13 +135,13 @@ const AdminPanel = () => {
           'X-Admin-Address': account,
         },
         body: JSON.stringify({ newAdminAddress }),
-        signal: AbortSignal.timeout(10000)
+        signal: AbortSignal.timeout(10000) // 10 секунд таймаут
       });
 
       if (response.ok) {
         setAdminActionStatus(`Администратор ${newAdminAddress} успешно добавлен.`);
         setNewAdminAddress(''); // Очищаем поле ввода
-        // Обновляем список
+        // Обновляем список админов
         await fetchAdminsList();
       } else if (response.status === 403) {
         setAdminActionStatus('Ошибка: Доступ запрещен.');
@@ -130,9 +155,10 @@ const AdminPanel = () => {
     } finally {
       setIsLoadingAdmins(false);
     }
-  };
+  }, [account, newAdminAddress, fetchAdminsList]); // Зависимости
 
-  const removeAdmin = async (addressToRemove) => {
+  // ИСПРАВЛЕНИЕ: useCallback для предотвращения повторных созданий функции
+  const removeAdmin = useCallback(async (addressToRemove) => {
     if (!account || !addressToRemove) return;
 
     const confirmRemoval = window.confirm(`Вы уверены, что хотите удалить администратора ${addressToRemove}?`);
@@ -145,38 +171,32 @@ const AdminPanel = () => {
 
       // Определяем URL для API
       let apiUrl = '';
-      let fetchOptions = {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Address': account,
-        },
-        signal: AbortSignal.timeout(10000)
-      };
-
       if (typeof window !== 'undefined') {
         const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         if (isLocalhost) {
           // Для локального API используем DELETE с адресом в URL
           apiUrl = `http://localhost:3001/api/admins/${encodeURIComponent(addressToRemove)}`;
         } else {
-          // Для Netlify Functions используем query param
+          // Netlify Functions
           apiUrl = `/.netlify/functions/removeAdmin?address=${encodeURIComponent(addressToRemove)}`;
         }
       } else {
-        // Для SSR или других сред, предполагаем Netlify Functions с query param
+        // Для SSR или других сред, предполагаем Netlify Functions
         apiUrl = `/.netlify/functions/removeAdmin?address=${encodeURIComponent(addressToRemove)}`;
       }
 
-      // Для локального API тело запроса DELETE может не требоваться или обрабатывается иначе
-      // Для Netlify Functions параметр передается в URL, тело может не быть нужно
-      // Оставляем базовые опции как есть
-
-      const response = await fetch(apiUrl, fetchOptions);
+      const response = await fetch(apiUrl, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Address': account,
+        },
+        signal: AbortSignal.timeout(10000) // 10 секунд таймаут
+      });
 
       if (response.ok) {
         setAdminActionStatus(`Администратор ${addressToRemove} успешно удален.`);
-        // Обновляем список
+        // Обновляем список админов
         await fetchAdminsList();
       } else if (response.status === 403) {
         setAdminActionStatus('Ошибка: Доступ запрещен.');
@@ -190,15 +210,16 @@ const AdminPanel = () => {
     } finally {
       setIsLoadingAdmins(false);
     }
-  };
+  }, [account, fetchAdminsList]); // Зависимости
 
-  // Загружаем список админов при монтировании компонента (если пользователь админ)
+  // ИСПРАВЛЕНИЕ: useEffect с правильными зависимостями
   useEffect(() => {
-    if (isAdmin) {
+    console.log(`[Admin Panel] useEffect triggered, isAdmin: ${isAdmin}, account: ${account}`);
+    if (isAdmin && account) {
+      console.log(`[Admin Panel] Calling fetchAdminsList`);
       fetchAdminsList();
     }
-  }, [isAdmin, account]); // Зависимости
-
+  }, [isAdmin, account, fetchAdminsList]); // Правильные зависимости
   // === КОНЕЦ ФУНКЦИЙ ДЛЯ УПРАВЛЕНИЯ АДМИНИСТРАТОРАМИ ===
 
   // === ЗАГРУЗКА НАСТРОЕК ИЗ БД/LocalStorage ===

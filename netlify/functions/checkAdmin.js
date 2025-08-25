@@ -1,85 +1,85 @@
-// netlify/functions/checkAdmin.js
-const { Client } = require('pg');
+import { getClient } from './utils/db.js'; // Импорт общего модуля
+
+/**
+ * Проверяет, является ли указанный адрес администратором.
+ * @param {string} address - Адрес Ethereum для проверки.
+ * @returns {Promise<boolean>} - True, если адрес является администратором.
+ */
+const isAdminInDB = async (address) => {
+  // Используем подключение только для чтения
+  const client = await getClient(true);
+  try {
+    console.log(`[checkAdmin - DB] Проверка адреса ${address} в списке администраторов`);
+    const query = 'SELECT 1 FROM admins WHERE address = $1';
+    const result = await client.query(query, [address]);
+    const isAdmin = result.rowCount > 0;
+    console.log(`[checkAdmin - DB] Адрес ${address} ${isAdmin ? 'найден' : 'не найден'} в списке администраторов`);
+    return isAdmin;
+  } finally {
+    await client.end();
+  }
+};
 
 exports.handler = async (event, context) => {
   try {
-    console.log("=== checkAdmin Function Called ===");
-    console.log("Query Params:", event.queryStringParameters);
-    console.log("Headers:", event.headers);
+    console.log("=== Check Admin Function Called ===");
 
-    // Получаем адрес из query string или headers (для гибкости)
-    const userAddress = event.queryStringParameters?.address || event.headers['x-user-address'];
-    console.log("User Address to check:", userAddress);
+    // Проверяем метод запроса
+    if (event.httpMethod !== 'GET') {
+      return {
+        statusCode: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'Метод не разрешен' }),
+      };
+    }
 
-    if (!userAddress) {
+    // Получаем адрес из query string
+    const urlParams = new URLSearchParams(event.queryStringParameters || {});
+    const addressToCheck = urlParams.get('address');
+
+    if (!addressToCheck) {
       return {
         statusCode: 400,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({ error: 'Требуется параметр address в query string или заголовок X-User-Address' }),
+        body: JSON.stringify({ error: 'Требуется параметр адреса (address)' }),
       };
     }
 
-    // Проверяем переменные окружения
-    console.log("NEON_DATABASE_URL_READONLY:", process.env.NEON_DATABASE_URL_READONLY ? "SET" : "NOT SET");
-    console.log("NEON_DATABASE_URL:", process.env.NEON_DATABASE_URL ? "SET" : "NOT SET");
+    console.log(`[checkAdmin] Проверка адреса: ${addressToCheck}`);
 
-    // Используем URL для пользователя с ограниченными правами, если доступен
-    const databaseUrl = process.env.NEON_DATABASE_URL_READONLY || process.env.NEON_DATABASE_URL;
+    // Проверяем, является ли адрес администратором
+    const isAdmin = await isAdminInDB(addressToCheck);
+    console.log(`[checkAdmin] Результат проверки для ${addressToCheck}: ${isAdmin}`);
 
-    if (!databaseUrl) {
-      console.error("NEON_DATABASE_URL_READONLY или NEON_DATABASE_URL не установлен");
-      return {
-        statusCode: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({
-          error: 'База данных не настроена: NEON_DATABASE_URL_READONLY или NEON_DATABASE_URL отсутствует',
-        }),
-      };
-    }
-
-    // Подключение к Neon через пользователя с ограниченными правами
-    const client = new Client({
-      connectionString: databaseUrl,
-      ssl: { rejectUnauthorized: false },
-    });
-
-    await client.connect();
-    console.log("Подключение к Neon для проверки админа успешно");
-
-    // Проверяем, есть ли адрес в таблице admins
-    const result = await client.query(
-      'SELECT 1 FROM admins WHERE address = $1',
-      [userAddress.toLowerCase()] // Приводим к нижнему регистру для консистентности
-    );
-
-    await client.end();
-
-    const isAdmin = result.rows.length > 0;
-    console.log(`Проверка isAdmin для ${userAddress}: ${isAdmin}`);
-
+    // Возвращаем результат в формате, ожидаемом фронтендом
     return {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
       },
-      body: JSON.stringify({ isAdmin: isAdmin, address: userAddress }),
+      body: JSON.stringify({ isAdmin, address: addressToCheck }),
     };
+
   } catch (error) {
     console.error("Ошибка в checkAdmin:", error);
+    // Включаем стек ошибок для лучшей отладки на сервере
     return {
       statusCode: 500,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
       },
-      body: JSON.stringify({ error: 'Внутренняя ошибка сервера: ' + error.message }),
+      body: JSON.stringify({
+        error: 'Внутренняя ошибка сервера: ' + error.message,
+        // stack: error.stack // Можно включить для отладки, но лучше убрать в продакшене
+      }),
     };
   }
 };

@@ -1,16 +1,26 @@
-// netlify/functions/saveConfig.js
-const { Client } = require('pg');
+import { getClient } from './utils/db.js'; // Импорт общего модуля
 
 exports.handler = async (event, context) => {
   try {
-    console.log("=== saveConfig Function Called ===");
-    console.log("Headers:", event.headers);
-    console.log("Body:", event.body);
+    console.log("=== Save Config Function Called ===");
 
-    const adminAddress = event.headers['x-admin-address'];
-    console.log("Admin Address:", adminAddress);
+    // Проверяем метод запроса
+    if (event.httpMethod !== 'POST') {
+      return {
+        statusCode: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'Метод не разрешен' }),
+      };
+    }
+
+    // Получаем заголовок X-Admin-Address
+    const adminAddress = event.headers['x-admin-address'] || event.headers['X-Admin-Address'];
 
     if (!adminAddress) {
+      console.warn("[saveConfig] Заголовок X-Admin-Address не предоставлен");
       return {
         statusCode: 400,
         headers: {
@@ -21,12 +31,14 @@ exports.handler = async (event, context) => {
       };
     }
 
+    console.log(`[saveConfig] Сохранение конфигурации от администратора: ${adminAddress}`);
+
+    // Парсим тело запроса
     let configData;
     try {
       configData = JSON.parse(event.body);
-      console.log("Config Data to Save:", configData);
     } catch (parseError) {
-      console.error("Ошибка парсинга JSON:", parseError);
+      console.error("[saveConfig] Ошибка парсинга JSON тела запроса:", parseError);
       return {
         statusCode: 400,
         headers: {
@@ -37,76 +49,42 @@ exports.handler = async (event, context) => {
       };
     }
 
-    if (!process.env.NEON_DATABASE_URL) {
-      console.error("NEON_DATABASE_URL не установлен");
+    console.log("[saveConfig] Полученные данные конфигурации:", configData);
+
+    // Подключение к Neon через администратора (так как это защищенный endpoint)
+    const client = await getClient(false); // false для админского подключения
+
+    try {
+      // Вставляем или обновляем конфигурацию в таблице app_config
+      // Предполагаем, что у администратора может быть только одна конфигурация
+      const upsertQuery = `
+        INSERT INTO app_config (admin_address, config_data, updated_at)
+        VALUES ($1, $2, NOW())
+        ON CONFLICT (admin_address)
+        DO UPDATE SET
+          config_data = EXCLUDED.config_data,
+          updated_at = NOW()
+        RETURNING id;
+      `;
+      const upsertValues = [adminAddress, configData]; // configData будет автоматически сериализован в JSONB
+
+      const result = await client.query(upsertQuery, upsertValues);
+      const configId = result.rows[0]?.id;
+
+      console.log(`[saveConfig] Конфигурация сохранена/обновлена для администратора ${adminAddress}, ID: ${configId}`);
+
       return {
-        statusCode: 500,
+        statusCode: 200,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({ error: 'База данных не настроена' }),
+        body: JSON.stringify({ message: 'Конфигурация приложения сохранена в базе данных', updatedBy: adminAddress }),
       };
+    } finally {
+      await client.end();
     }
 
-    const client = new Client({
-      connectionString: process.env.NEON_DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-    });
-
-    await client.connect();
-    console.log("Подключение к Neon для сохранения успешно");
-
-    // Создаем таблицы если они не существуют
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS app_config (
-        id SERIAL PRIMARY KEY,
-        config JSONB NOT NULL,
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS admins (
-        address TEXT PRIMARY KEY,
-        added_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Проверка прав администратора
-    const adminCheckResult = await client.query('SELECT 1 FROM admins WHERE address = $1', [adminAddress]);
-    if (adminCheckResult.rows.length === 0) {
-        await client.end();
-        return {
-            statusCode: 403,
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-            },
-            body: JSON.stringify({ error: 'Доступ запрещен. Адрес не является администратором.' }),
-        };
-    }
-
-    // Сохраняем конфигурацию
-    await client.query(
-      `INSERT INTO app_config (config, updated_at)
-       VALUES ($1, NOW())
-       ON CONFLICT (id) -- Предполагаем, что id - SERIAL PRIMARY KEY
-       DO UPDATE SET config = $1, updated_at = NOW()`,
-      [configData]
-    );
-
-    await client.end();
-
-    console.log("Конфигурация приложения успешно сохранена в базе администратором:", adminAddress);
-
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ message: 'Конфигурация приложения сохранена в базе данных', updatedBy: adminAddress }),
-    };
   } catch (error) {
     console.error("Ошибка в saveConfig:", error);
     return {

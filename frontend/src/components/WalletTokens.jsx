@@ -404,9 +404,11 @@ const WalletTokens = () => {
       result = result.filter(token => {
         try {
           const balanceFormatted = parseFloat(ethers.utils.formatUnits(token.balance, token.decimals));
-          const priceUSD = parseFloat(token.priceUSD);
-          if (isNaN(priceUSD)) return true;
-          const totalValueUSD = balanceFormatted * priceUSD;
+          // Исправлено: явная проверка на null и NaN
+          const priceUSD = token.priceUSD;
+          if (priceUSD === null || priceUSD === undefined || isNaN(parseFloat(priceUSD))) return true;
+          const priceNum = parseFloat(priceUSD);
+          const totalValueUSD = balanceFormatted * priceNum;
           return totalValueUSD >= MIN_TOKEN_VALUE_USD;
         } catch (err) {
           console.error(`[WalletTokens] Ошибка при расчете стоимости токена ${token.symbol}:`, err);
@@ -420,10 +422,13 @@ const WalletTokens = () => {
       try {
         const aBalanceFormatted = parseFloat(ethers.utils.formatUnits(a.balance, a.decimals));
         const bBalanceFormatted = parseFloat(ethers.utils.formatUnits(b.balance, b.decimals));
-        const aPriceUSD = parseFloat(a.priceUSD) || 0;
-        const bPriceUSD = parseFloat(b.priceUSD) || 0;
-        const aValueUSD = aBalanceFormatted * aPriceUSD;
-        const bValueUSD = bBalanceFormatted * bPriceUSD;
+        // Исправлено: явная проверка на null и NaN
+        const aPriceUSD = a.priceUSD;
+        const bPriceUSD = b.priceUSD;
+        const aPriceNum = (aPriceUSD !== null && aPriceUSD !== undefined && !isNaN(parseFloat(aPriceUSD))) ? parseFloat(aPriceUSD) : 0;
+        const bPriceNum = (bPriceUSD !== null && bPriceUSD !== undefined && !isNaN(parseFloat(bPriceUSD))) ? parseFloat(bPriceUSD) : 0;
+        const aValueUSD = aBalanceFormatted * aPriceNum;
+        const bValueUSD = bBalanceFormatted * bPriceNum;
 
         if (bValueUSD !== aValueUSD) {
           return bValueUSD - aValueUSD;
@@ -588,17 +593,47 @@ const WalletTokens = () => {
         const tokenAddress = token.contractAddress || '0x0000...';
         const tokenChainId = token.chainId;
         
-        const balanceFormatted = parseFloat(ethers.utils.formatUnits(token.balance, token.decimals)).toFixed(4);
-        const priceUSD = parseFloat(token.priceUSD);
-        const priceFormatted = !isNaN(priceUSD) ? `$${priceUSD.toFixed(4)}` : 'N/A';
-        let totalValueUSD = 'N/A';
-        let totalValueFormatted = 'N/A';
-        if (!isNaN(priceUSD)) {
-          const totalValueNum = parseFloat(balanceFormatted) * priceUSD;
-          totalValueUSD = totalValueNum;
-          totalValueFormatted = `$${totalValueNum.toFixed(2)}`;
+        // Исправлено: явная проверка и форматирование баланса
+        let balanceFormatted = '0.0000';
+        try {
+          balanceFormatted = parseFloat(ethers.utils.formatUnits(token.balance, token.decimals)).toFixed(4);
+        } catch (err) {
+          console.error(`[WalletTokens] Ошибка при форматировании баланса для токена ${tokenSymbol}:`, err);
+          balanceFormatted = '0.0000';
         }
 
+        // Исправлено: явная проверка и форматирование цены
+let priceFormatted = 'N/A';
+let totalValueFormatted = 'N/A';
+let isLowValue = false;
+
+// Получаем значение priceUSD из токена
+const rawPriceUSD = token.priceUSD;
+console.log(`[WalletTokens] Токен ${tokenSymbol} (${tokenAddress}), raw priceUSD:`, rawPriceUSD, typeof rawPriceUSD); // Отладочный лог
+
+// Проверяем, является ли значение числом
+const numericPriceUSD = typeof rawPriceUSD === 'number' ? rawPriceUSD : parseFloat(rawPriceUSD);
+
+// Проверяем, является ли число корректным
+if (typeof numericPriceUSD === 'number' && !isNaN(numericPriceUSD) && isFinite(numericPriceUSD)) {
+  // Если цена корректна, форматируем ее
+  priceFormatted = `$${numericPriceUSD.toFixed(4)}`;
+  
+  // Рассчитываем общую стоимость
+  const balanceNum = parseFloat(balanceFormatted);
+  const totalValueNum = balanceNum * numericPriceUSD;
+  totalValueFormatted = `$${totalValueNum.toFixed(2)}`;
+  
+  // Проверяем, является ли стоимость "низкой"
+  if (totalValueNum < MIN_TOKEN_VALUE_USD) {
+    isLowValue = true;
+  }
+} else {
+  // Если цена некорректна, отображаем N/A
+  console.log(`[WalletTokens] Цена недоступна для токена ${tokenSymbol} (${tokenAddress}), raw: ${rawPriceUSD}`); // Отладочный лог
+  priceFormatted = 'N/A';
+  totalValueFormatted = 'N/A';
+}
         const chainInfo = SUPPORTED_CHAINS[tokenChainId];
         const chainName = chainInfo ? chainInfo.shortName : `Chain ${tokenChainId || 'unknown'}`;
 
@@ -627,7 +662,7 @@ const WalletTokens = () => {
             <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
               {priceFormatted}
             </td>
-            <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-medium ${totalValueUSD !== 'N/A' && totalValueUSD < MIN_TOKEN_VALUE_USD ? 'text-yellow-500' : ''}`}>
+            <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-medium ${isLowValue ? 'text-yellow-500' : ''}`}>
               {totalValueFormatted}
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
