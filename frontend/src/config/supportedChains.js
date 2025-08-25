@@ -21,6 +21,7 @@ export const SUPPORTED_CHAINS = {
     nativeTokenSymbol: 'MATIC',
     nativeTokenName: 'Polygon',
     nativeTokenAddress: '0x0000000000000000000000000000000000000000',
+    nativeTokenCoinGeckoId: 'matic-network',
     explorerUrl: 'https://polygonscan.com',
     apiUrl: 'https://api.etherscan.io/v2/api',
     coinGeckoId: 'polygon-pos',
