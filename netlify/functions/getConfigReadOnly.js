@@ -24,14 +24,15 @@ exports.handler = async (event, context) => {
     const client = await getClient(true); // true для readonly подключения
 
     try {
+      // ИСПРАВЛЕНО: config_data -> config
       // Получаем конфигурацию из таблицы app_config
       // Предполагаем, что есть одна "публичная" или "дефолтная" конфигурация
       // или последняя сохраненная админом. Здесь выбираем первую запись.
-      const query = 'SELECT config_data FROM app_config LIMIT 1';
+      const query = 'SELECT config FROM app_config LIMIT 1';
       const result = await client.query(query);
 
       if (result.rowCount > 0) {
-        const configData = result.rows[0].config_data;
+        const configData = result.rows[0].config; // ИСПРАВЛЕНО: config
         console.log("[getConfigReadOnly] Конфигурация найдена");
         // Возвращаем найденную конфигурацию
         return {

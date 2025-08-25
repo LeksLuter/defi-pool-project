@@ -37,12 +37,12 @@ exports.handler = async (event, context) => {
     const client = await getClient(false); // false для админского подключения
 
     try {
-      // Получаем конфигурацию из таблицы app_config
-      const query = 'SELECT config_data FROM app_config WHERE admin_address = $1';
+      // ИСПРАВЛЕНО: config_data -> config
+      const query = 'SELECT config FROM app_config WHERE admin_address = $1';
       const result = await client.query(query, [adminAddress]);
 
       if (result.rowCount > 0) {
-        const configData = result.rows[0].config_data;
+        const configData = result.rows[0].config; // ИСПРАВЛЕНО: config
         console.log(`[getConfig] Конфигурация найдена для администратора ${adminAddress}`);
         // Возвращаем найденную конфигурацию
         return {
