@@ -80,15 +80,31 @@ const getTokenFromDatabase = async (contractAddress, chainId) => {
         // Выполняем HTTP GET запрос
         const response = await fetch(url);
 
-        // Проверяем успешность ответа
-        if (!response.ok) {
-          if (response.status === 404) {
-            console.log(`[CoinGecko Service] getTokenFromDatabase: Токен с адресом ${contractAddress} в сети ${chainId} не найден в БД`);
-            return null;
+        // --- ИСПРАВЛЕНИЕ: Проверка Content-Type ---
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          // Если Content-Type не application/json или отсутствует
+          const errorText = await response.text(); // Читаем тело как текст
+          console.warn(`[CoinGecko Service] getTokenFromDatabase: Ответ не является JSON. Content-Type: ${contentType}. Status: ${response.status} ${response.statusText}. Body preview: ${errorText.substring(0, 200)}...`);
+
+          // Если статус не 2xx, пробуем повторить
+          if (!response.ok && retries < MAX_RETRIES) {
+            const delay = Math.pow(2, retries) * BASE_DELAY_MS + Math.random() * 1000;
+            console.warn(`[CoinGecko Service] getTokenFromDatabase: Неудачный статус и не-JSON ответ. Повторная попытка через ${delay.toFixed(0)}мс... (Попытка ${retries + 1}/${MAX_RETRIES + 1})`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            retries++;
+            continue;
           }
-          const errorText = await response.text();
+          // Если статус 2xx, но не JSON, или исчерпаны попытки - возвращаем null
+          return null;
+        }
+        // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+
+        // Проверяем успешность ответа (после проверки Content-Type)
+        if (!response.ok) {
+          const errorText = await response.text(); // Читаем тело как текст для логирования
           console.warn(`[CoinGecko Service] getTokenFromDatabase: HTTP ошибка ${response.status} - ${response.statusText}. Body: ${errorText}`);
-          // Для других ошибок (500 и т.д.) пробуем повторить
+          // Пробуем повторить
           if (retries < MAX_RETRIES) {
             const delay = Math.pow(2, retries) * BASE_DELAY_MS + Math.random() * 1000;
             console.warn(`[CoinGecko Service] getTokenFromDatabase: Повторная попытка через ${delay.toFixed(0)}мс... (Попытка ${retries + 1}/${MAX_RETRIES + 1})`);
@@ -99,7 +115,7 @@ const getTokenFromDatabase = async (contractAddress, chainId) => {
           return null;
         }
 
-        // Парсим JSON ответ
+        // Парсим JSON ответ (только если Content-Type правильный и статус OK)
         const tokenData = await response.json();
         console.log(`[CoinGecko Service] getTokenFromDatabase: Получен ответ от API для ${contractAddress} в сети ${chainId}:`, tokenData);
 
@@ -114,7 +130,14 @@ const getTokenFromDatabase = async (contractAddress, chainId) => {
           return tokenData || null;
         }
       } catch (error) {
-        console.error('[CoinGecko Service] getTokenFromDatabase: Ошибка при запросе к API (попытка ' + (retries + 1) + '):', error);
+        // --- ИСПРАВЛЕНИЕ: Уточнение типа ошибки ---
+        if (error instanceof SyntaxError && error.message.includes('Unexpected token')) {
+          console.error('[CoinGecko Service] getTokenFromDatabase: Ошибка парсинга JSON (возможно, получен HTML). Ошибка:', error.message);
+        } else {
+          console.error('[CoinGecko Service] getTokenFromDatabase: Ошибка при запросе к API (попытка ' + (retries + 1) + '):', error);
+        }
+        // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+
         if (retries < MAX_RETRIES) {
           const delay = Math.pow(2, retries) * BASE_DELAY_MS + Math.random() * 1000;
           console.warn(`[CoinGecko Service] getTokenFromDatabase: Ошибка сети. Повторная попытка через ${delay.toFixed(0)}мс... (Попытка ${retries + 1}/${MAX_RETRIES + 1})`);
@@ -248,6 +271,22 @@ const fetchTokenIdFromLocalAPIServer = async (contractAddress, chainId) => {
         // Выполняем HTTP GET запрос
         const response = await fetch(url);
 
+        // --- ИСПРАВЛЕНИЕ: Проверка Content-Type ---
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const errorText = await response.text();
+          console.warn(`[CoinGecko Service] fetchTokenIdFromLocalAPIServer: Ответ не является JSON. Content-Type: ${contentType}. Status: ${response.status} ${response.statusText}. Body preview: ${errorText.substring(0, 200)}...`);
+          if (!response.ok && retries < MAX_RETRIES) {
+            const delay = Math.pow(2, retries) * BASE_DELAY_MS + Math.random() * 1000;
+            console.warn(`[CoinGecko Service] fetchTokenIdFromLocalAPIServer: Неудачный статус и не-JSON ответ. Повторная попытка через ${delay.toFixed(0)}мс... (Попытка ${retries + 1}/${MAX_RETRIES + 1})`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            retries++;
+            continue;
+          }
+          return null;
+        }
+        // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+
         // Проверяем успешность ответа
         if (!response.ok) {
           const errorText = await response.text();
@@ -277,7 +316,11 @@ const fetchTokenIdFromLocalAPIServer = async (contractAddress, chainId) => {
           return null;
         }
       } catch (error) {
-        console.error('[CoinGecko Service] fetchTokenIdFromLocalAPIServer: Ошибка при запросе к локальному API (попытка ' + (retries + 1) + '):', error);
+        if (error instanceof SyntaxError && error.message.includes('Unexpected token')) {
+          console.error('[CoinGecko Service] fetchTokenIdFromLocalAPIServer: Ошибка парсинга JSON (возможно, получен HTML). Ошибка:', error.message);
+        } else {
+          console.error('[CoinGecko Service] fetchTokenIdFromLocalAPIServer: Ошибка при запросе к локальному API (попытка ' + (retries + 1) + '):', error);
+        }
         if (retries < MAX_RETRIES) {
           const delay = Math.pow(2, retries) * BASE_DELAY_MS + Math.random() * 1000;
           console.warn(`[CoinGecko Service] fetchTokenIdFromLocalAPIServer: Ошибка сети. Повторная попытка через ${delay.toFixed(0)}мс... (Попытка ${retries + 1}/${MAX_RETRIES + 1})`);
