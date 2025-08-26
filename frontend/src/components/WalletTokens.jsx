@@ -424,8 +424,10 @@ const WalletTokens = () => {
         // Исправлено: явная проверка на null и NaN
         const aPriceUSD = a.priceUSD;
         const bPriceUSD = b.priceUSD;
-        const aPriceNum = (aPriceUSD !== null && aPriceUSD !== undefined && !isNaN(parseFloat(aPriceUSD))) ? parseFloat(aPriceUSD) : 0;
-        const bPriceNum = (bPriceUSD !== null && bPriceUSD !== undefined && !isNaN(parseFloat(bPriceUSD))) ? parseFloat(bPriceUSD) : 0;
+
+        // Проверяем, являются ли цены валидными числами
+        const aPriceNum = (typeof aPriceUSD === 'number' && !isNaN(aPriceUSD)) ? aPriceUSD : 0;
+        const bPriceNum = (typeof bPriceUSD === 'number' && !isNaN(bPriceUSD)) ? bPriceUSD : 0;
         const aValueUSD = aBalanceFormatted * aPriceNum;
         const bValueUSD = bBalanceFormatted * bPriceNum;
 
