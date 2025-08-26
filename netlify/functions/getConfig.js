@@ -120,9 +120,10 @@ exports.handler = async (event, context) => {
     }
 
     // Запрашиваем конфигурацию из БД для данного администратора
+    // === КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Изменено имя таблицы с app_configs на app_config ===
     const query = `
-      SELECT config_data
-      FROM app_configs
+      SELECT config
+      FROM app_config
       WHERE admin_address = $1
     `;
     console.log(`[getConfig] Выполнение SQL-запроса для адреса ${normalizedAdminAddress}`);
@@ -133,9 +134,9 @@ exports.handler = async (event, context) => {
 
     if (result.rows.length > 0) {
       // Конфигурация найдена
-      const configData = result.rows[0].config_data;
+      const configData = result.rows[0].config;
 
-      // Дополнительная проверка на случай, если config_data в БД NULL
+      // Дополнительная проверка на случай, если config в БД NULL
       if (configData === null) {
         console.log(`[getConfig] Конфигурация в БД для ${normalizedAdminAddress} равна NULL, возвращаем дефолтную`);
         return {
