@@ -1,27 +1,44 @@
-// netlify/functions/removeAdmin.js
 const { Client } = require('pg');
 
 exports.handler = async (event, context) => {
   try {
     console.log("=== removeAdmin Function Called ===");
-    console.log("Headers:", event.headers);
-    console.log("Path Parameters:", event.pathParameters);
-    console.log("Query String Parameters:", event.queryStringParameters);
-    console.log("HTTP Method:", event.httpMethod);
+    console.log("Event received:", JSON.stringify(event, null, 2));
 
-    if (event.httpMethod !== 'DELETE') {
+    // Проверяем метод запроса - теперь только GET (параметры в query string)
+    if (event.httpMethod !== 'GET') {
       return {
         statusCode: 405,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({ error: 'Метод не разрешен. Используйте DELETE.' }),
+        body: JSON.stringify({ error: 'Метод не разрешен' }),
       };
     }
 
-    const adminAddress = event.headers['x-admin-address'];
-    console.log("Admin Address:", adminAddress);
+    // Получаем заголовок X-Admin-Address (адрес текущего админа)
+    let adminAddress = null;
+    const headers = event.headers || {};
+    const multiValueHeaders = event.multiValueHeaders || {};
+
+    // Поиск X-Admin-Address в headers (регистронезависимо, но ожидаем верхний регистр)
+    for (const key in headers) {
+      if (key === 'X-Admin-Address') {
+        adminAddress = headers[key];
+        break;
+      }
+    }
+
+    // Если не найден в headers, проверяем в multiValueHeaders
+    if (!adminAddress) {
+      for (const key in multiValueHeaders) {
+        if (key === 'X-Admin-Address' && Array.isArray(multiValueHeaders[key]) && multiValueHeaders[key].length > 0) {
+          adminAddress = multiValueHeaders[key][0];
+          break;
+        }
+      }
+    }
 
     if (!adminAddress) {
       return {
@@ -34,11 +51,8 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Получаем адрес для удаления из query string или path parameters
-    // В зависимости от того, как вы настроите роутинг в netlify.toml
-    // Например: DELETE /.netlify/functions/removeAdmin?address=0x...
-    const addressToRemove = event.queryStringParameters?.address || (event.pathParameters ? event.pathParameters['address'] : null);
-    
+    // Получаем адрес для удаления из query string
+    const addressToRemove = event.queryStringParameters?.address;
     if (!addressToRemove) {
       return {
         statusCode: 400,
@@ -50,91 +64,79 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Проверяем переменные окружения
-    console.log("NEON_DATABASE_URL:", process.env.NEON_DATABASE_URL ? "SET" : "NOT SET");
-
-    if (!process.env.NEON_DATABASE_URL) {
-      console.error("NEON_DATABASE_URL не установлен");
+    // Проверка формата адреса Ethereum
+    if (!/^0x[a-fA-F0-9]{40}$/.test(addressToRemove)) {
       return {
-        statusCode: 500,
+        statusCode: 400,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({
-          error: 'База данных не настроена: NEON_DATABASE_URL отсутствует',
-        }),
+        body: JSON.stringify({ error: 'Неверный формат адреса Ethereum для удаления' }),
       };
     }
 
-    // Подключение к Neon через администратора
+    // Подключение к базе данных
     const client = new Client({
       connectionString: process.env.NEON_DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
     });
 
     await client.connect();
-    console.log("Подключение к Neon для удаления админа успешно");
+    console.log("[removeAdmin] Подключение к БД установлено");
 
-    // Проверяем, является ли запрашивающий адрес администратором
-    const adminCheckResult = await client.query(
-      'SELECT 1 FROM admins WHERE address = $1',
-      [adminAddress.toLowerCase()]
-    );
+    try {
+      // Проверка, является ли текущий адрес администратором
+      console.log(`[removeAdmin] Проверка прав администратора для адреса: ${adminAddress}`);
+      const adminCheckQuery = 'SELECT 1 FROM admins WHERE address = $1';
+      const adminCheckResult = await client.query(adminCheckQuery, [adminAddress]);
 
-    if (adminCheckResult.rows.length === 0) {
-        await client.end();
+      if (adminCheckResult.rows.length === 0) {
+        console.warn(`[removeAdmin] Адрес ${adminAddress} не является администратором`);
         return {
-            statusCode: 403,
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-            },
-            body: JSON.stringify({ error: 'Доступ запрещен. Адрес не является администратором.' }),
-        };
-    }
-
-    // Удаляем администратора
-    // Запрещаем админу удалить сам себя
-    if (adminAddress.toLowerCase() === addressToRemove.toLowerCase()) {
-        await client.end();
-        return {
-            statusCode: 400,
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-            },
-            body: JSON.stringify({ error: 'Нельзя удалить самого себя из списка администраторов.' }),
-        };
-    }
-
-    const deleteResult = await client.query(
-      'DELETE FROM admins WHERE address = $1',
-      [addressToRemove.toLowerCase()]
-    );
-
-    await client.end();
-
-    if (deleteResult.rowCount > 0) {
-        console.log(`Адрес ${addressToRemove} успешно удален из списка администраторов админом ${adminAddress}`);
-        return {
-          statusCode: 200,
+          statusCode: 403,
           headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
           },
-          body: JSON.stringify({ message: `Адрес ${addressToRemove} удален из списка администраторов` }),
+          body: JSON.stringify({ error: 'Доступ запрещен. Адрес не является администратором.' }),
         };
-    } else {
-        console.log(`Адрес ${addressToRemove} не найден в списке администраторов`);
+      }
+
+      // Проверка, является ли удаляемый адрес администратором
+      console.log(`[removeAdmin] Проверка, является ли адрес ${addressToRemove} администратором`);
+      const targetAdminQuery = 'SELECT 1 FROM admins WHERE address = $1';
+      const targetAdminResult = await client.query(targetAdminQuery, [addressToRemove]);
+
+      if (targetAdminResult.rows.length === 0) {
+        console.warn(`[removeAdmin] Адрес ${addressToRemove} не найден в списке администраторов`);
         return {
-          statusCode: 404,
+          statusCode: 404, // Not Found
           headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
           },
           body: JSON.stringify({ error: `Адрес ${addressToRemove} не найден в списке администраторов` }),
         };
+      }
+
+      // Удаление администратора
+      console.log(`[removeAdmin] Удаление администратора: ${addressToRemove}`);
+      const deleteQuery = 'DELETE FROM admins WHERE address = $1';
+      await client.query(deleteQuery, [addressToRemove]);
+
+      console.log(`[removeAdmin] Адрес ${addressToRemove} успешно удален из списка администраторов`);
+
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ message: 'Администратор успешно удален', address: addressToRemove }),
+      };
+    } finally {
+      await client.end();
+      console.log("[removeAdmin] Подключение к БД закрыто");
     }
   } catch (error) {
     console.error("Ошибка в removeAdmin:", error);

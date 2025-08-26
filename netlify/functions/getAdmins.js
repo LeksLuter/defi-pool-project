@@ -1,17 +1,44 @@
-// netlify/functions/getAdmins.js
 const { Client } = require('pg');
-
-// Имитируем DEFAULT_APP_CONFIG для проверки структуры, если нужно
-// const DEFAULT_APP_CONFIG = { /* ... */ };
 
 exports.handler = async (event, context) => {
   try {
     console.log("=== getAdmins Function Called ===");
     console.log("Headers:", event.headers);
-    console.log("HTTP Method:", event.httpMethod);
 
-    const adminAddress = event.headers['x-admin-address'];
-    console.log("Admin Address:", adminAddress);
+    // Проверяем метод запроса - теперь только GET
+    if (event.httpMethod !== 'GET') {
+      return {
+        statusCode: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'Метод не разрешен' }),
+      };
+    }
+
+    // Получаем заголовок X-Admin-Address
+    let adminAddress = null;
+    const headers = event.headers || {};
+    const multiValueHeaders = event.multiValueHeaders || {};
+
+    // Поиск X-Admin-Address в headers (регистронезависимо, но ожидаем верхний регистр)
+    for (const key in headers) {
+      if (key === 'X-Admin-Address') {
+        adminAddress = headers[key];
+        break;
+      }
+    }
+
+    // Если не найден в headers, проверяем в multiValueHeaders
+    if (!adminAddress) {
+      for (const key in multiValueHeaders) {
+        if (key === 'X-Admin-Address' && Array.isArray(multiValueHeaders[key]) && multiValueHeaders[key].length > 0) {
+          adminAddress = multiValueHeaders[key][0];
+          break;
+        }
+      }
+    }
 
     if (!adminAddress) {
       return {
@@ -24,78 +51,61 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Проверяем переменные окружения
-    console.log("NEON_DATABASE_URL:", process.env.NEON_DATABASE_URL ? "SET" : "NOT SET");
+    // Подключение к базе данных
+    const client = new Client({
+      connectionString: process.env.NEON_DATABASE_URL,
+    });
 
-    if (!process.env.NEON_DATABASE_URL) {
-      console.error("NEON_DATABASE_URL не установлен");
+    await client.connect();
+    console.log("[getAdmins] Подключение к БД установлено");
+
+    try {
+      // Проверка, является ли адрес администратором
+      console.log(`[getAdmins] Проверка прав администратора для адреса: ${adminAddress}`);
+      const adminCheckQuery = 'SELECT 1 FROM admins WHERE address = $1';
+      const adminCheckResult = await client.query(adminCheckQuery, [adminAddress]);
+
+      if (adminCheckResult.rows.length === 0) {
+        console.warn(`[getAdmins] Адрес ${adminAddress} не является администратором`);
+        return {
+          statusCode: 403,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+          body: JSON.stringify({ error: 'Доступ запрещен. Адрес не является администратором.' }),
+        };
+      }
+
+      // Получение списка всех администраторов
+      console.log("[getAdmins] Получение списка всех администраторов");
+      const query = 'SELECT address FROM admins ORDER BY created_at ASC';
+      const result = await client.query(query);
+
+      const adminsList = result.rows.map(row => row.address);
+      console.log("[getAdmins] Список администраторов получен:", adminsList);
+
       return {
-        statusCode: 500,
+        statusCode: 200,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({
-          error: 'База данных не настроена: NEON_DATABASE_URL отсутствует',
-        }),
+        body: JSON.stringify({ admins: adminsList }),
       };
+    } finally {
+      await client.end();
+      console.log("[getAdmins] Подключение к БД закрыто");
     }
-
-    // Подключение к Neon через администратора (так как это защищенный endpoint)
-    const client = new Client({
-      connectionString: process.env.NEON_DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-    });
-
-    await client.connect();
-    console.log("Подключение к Neon через администратора успешно");
-
-    // Проверяем, является ли запрашивающий адрес администратором
-    const adminCheckResult = await client.query(
-      'SELECT 1 FROM admins WHERE address = $1',
-      [adminAddress.toLowerCase()]
-    );
-
-    if (adminCheckResult.rows.length === 0) {
-        await client.end();
-        return {
-            statusCode: 403,
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-            },
-            body: JSON.stringify({ error: 'Доступ запрещен. Адрес не является администратором.' }),
-        };
-    }
-
-    // Получаем список всех администраторов
-    const result = await client.query(
-      'SELECT address FROM admins ORDER BY added_at DESC'
-    );
-
-    await client.end();
-
-    const adminsList = result.rows.map(row => row.address);
-    console.log("Список администраторов успешно получен:", adminsList);
-
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ admins: adminsList }),
-    };
   } catch (error) {
     console.error("Ошибка в getAdmins:", error);
-    // Включаем стек ошибок для лучшей отладки на сервере
     return {
       statusCode: 500,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         error: 'Внутренняя ошибка сервера: ' + error.message,
         // stack: error.stack // Можно включить для отладки, но лучше убрать в продакшене
       }),

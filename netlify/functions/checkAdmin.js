@@ -1,30 +1,26 @@
-import { getClient } from './utils/db.js'; // Импорт общего модуля
+import { getClient } from './utils/db.js';
 
-/**
- * Проверяет, является ли указанный адрес администратором.
- * @param {string} address - Адрес Ethereum для проверки.
- * @returns {Promise<boolean>} - True, если адрес является администратором.
- */
 const isAdminInDB = async (address) => {
   // Используем подключение только для чтения
   const client = await getClient(true);
   try {
-    console.log(`[checkAdmin - DB] Проверка адреса ${address} в списке администраторов`);
+    console.log(`[isAdminInDB] Проверка наличия адреса ${address} в списке администраторов`);
     const query = 'SELECT 1 FROM admins WHERE address = $1';
     const result = await client.query(query, [address]);
-    const isAdmin = result.rowCount > 0;
-    console.log(`[checkAdmin - DB] Адрес ${address} ${isAdmin ? 'найден' : 'не найден'} в списке администраторов`);
-    return isAdmin;
+    console.log(`[isAdminInDB] Результат проверки: найдено записей: ${result.rows.length}`);
+    return result.rows.length > 0;
   } finally {
     await client.end();
+    console.log("[isAdminInDB] Клиент БД закрыт");
   }
 };
 
 exports.handler = async (event, context) => {
   try {
-    console.log("=== Check Admin Function Called ===");
+    console.log("=== checkAdmin Function Called ===");
+    console.log("Event received:", JSON.stringify(event, null, 2));
 
-    // Проверяем метод запроса
+    // Проверяем метод запроса - теперь только GET
     if (event.httpMethod !== 'GET') {
       return {
         statusCode: 405,
@@ -37,49 +33,51 @@ exports.handler = async (event, context) => {
     }
 
     // Получаем адрес из query string
-    const urlParams = new URLSearchParams(event.queryStringParameters || {});
-    const addressToCheck = urlParams.get('address');
-
-    if (!addressToCheck) {
+    const address = event.queryStringParameters?.address;
+    if (!address) {
       return {
         statusCode: 400,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({ error: 'Требуется параметр адреса (address)' }),
+        body: JSON.stringify({ error: 'Требуется параметр address в query string' }),
       };
     }
 
-    console.log(`[checkAdmin] Проверка адреса: ${addressToCheck}`);
+    // Проверка формата адреса Ethereum
+    if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'Неверный формат адреса Ethereum' }),
+      };
+    }
 
     // Проверяем, является ли адрес администратором
-    const isAdmin = await isAdminInDB(addressToCheck);
-    console.log(`[checkAdmin] Результат проверки для ${addressToCheck}: ${isAdmin}`);
+    console.log(`[checkAdmin] Проверка, является ли адрес ${address} администратором`);
+    const isAdmin = await isAdminInDB(address);
 
-    // Возвращаем результат в формате, ожидаемом фронтендом
     return {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
       },
-      body: JSON.stringify({ isAdmin, address: addressToCheck }),
+      body: JSON.stringify({ isAdmin, address }),
     };
-
   } catch (error) {
     console.error("Ошибка в checkAdmin:", error);
-    // Включаем стек ошибок для лучшей отладки на сервере
     return {
       statusCode: 500,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
       },
-      body: JSON.stringify({
-        error: 'Внутренняя ошибка сервера: ' + error.message,
-        // stack: error.stack // Можно включить для отладки, но лучше убрать в продакшене
-      }),
+      body: JSON.stringify({ error: 'Внутренняя ошибка сервера: ' + error.message }),
     };
   }
 };

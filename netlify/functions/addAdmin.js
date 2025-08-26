@@ -1,26 +1,44 @@
-// netlify/functions/addAdmin.js
 const { Client } = require('pg');
 
 exports.handler = async (event, context) => {
   try {
     console.log("=== addAdmin Function Called ===");
-    console.log("Headers:", event.headers);
-    console.log("Body:", event.body);
-    console.log("HTTP Method:", event.httpMethod);
+    console.log("Event received:", JSON.stringify(event, null, 2));
 
-    if (event.httpMethod !== 'POST') {
+    // Проверяем метод запроса - теперь только GET (параметры в query string)
+    if (event.httpMethod !== 'GET') {
       return {
         statusCode: 405,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({ error: 'Метод не разрешен. Используйте POST.' }),
+        body: JSON.stringify({ error: 'Метод не разрешен' }),
       };
     }
 
-    const adminAddress = event.headers['x-admin-address'];
-    console.log("Admin Address:", adminAddress);
+    // Получаем заголовок X-Admin-Address (адрес текущего админа)
+    let adminAddress = null;
+    const headers = event.headers || {};
+    const multiValueHeaders = event.multiValueHeaders || {};
+
+    // Поиск X-Admin-Address в headers (регистронезависимо, но ожидаем верхний регистр)
+    for (const key in headers) {
+      if (key === 'X-Admin-Address') {
+        adminAddress = headers[key];
+        break;
+      }
+    }
+
+    // Если не найден в headers, проверяем в multiValueHeaders
+    if (!adminAddress) {
+      for (const key in multiValueHeaders) {
+        if (key === 'X-Admin-Address' && Array.isArray(multiValueHeaders[key]) && multiValueHeaders[key].length > 0) {
+          adminAddress = multiValueHeaders[key][0];
+          break;
+        }
+      }
+    }
 
     if (!adminAddress) {
       return {
@@ -33,22 +51,8 @@ exports.handler = async (event, context) => {
       };
     }
 
-    let requestBody;
-    try {
-      requestBody = JSON.parse(event.body);
-    } catch (parseError) {
-      console.error("Ошибка парсинга JSON:", parseError);
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'Неверный формат JSON в теле запроса' }),
-      };
-    }
-
-    const newAdminAddress = requestBody.newAdminAddress;
+    // Получаем адрес нового админа из query string
+    const newAdminAddress = event.queryStringParameters?.newAdminAddress;
     if (!newAdminAddress) {
       return {
         statusCode: 400,
@@ -56,72 +60,84 @@ exports.handler = async (event, context) => {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({ error: 'Требуется поле newAdminAddress в теле запроса' }),
+        body: JSON.stringify({ error: 'Требуется параметр newAdminAddress в query string' }),
       };
     }
 
-    // Проверяем переменные окружения
-    console.log("NEON_DATABASE_URL:", process.env.NEON_DATABASE_URL ? "SET" : "NOT SET");
-
-    if (!process.env.NEON_DATABASE_URL) {
-      console.error("NEON_DATABASE_URL не установлен");
+    // Проверка формата адреса Ethereum
+    if (!/^0x[a-fA-F0-9]{40}$/.test(newAdminAddress)) {
       return {
-        statusCode: 500,
+        statusCode: 400,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({
-          error: 'База данных не настроена: NEON_DATABASE_URL отсутствует',
-        }),
+        body: JSON.stringify({ error: 'Неверный формат адреса Ethereum для нового администратора' }),
       };
     }
 
-    // Подключение к Neon через администратора
+    // Подключение к базе данных
     const client = new Client({
       connectionString: process.env.NEON_DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
     });
 
     await client.connect();
-    console.log("Подключение к Neon для добавления админа успешно");
+    console.log("[addAdmin] Подключение к БД установлено");
 
-    // Проверяем, является ли запрашивающий адрес администратором
-    const adminCheckResult = await client.query(
-      'SELECT 1 FROM admins WHERE address = $1',
-      [adminAddress.toLowerCase()]
-    );
+    try {
+      // Проверка, является ли текущий адрес администратором
+      console.log(`[addAdmin] Проверка прав администратора для адреса: ${adminAddress}`);
+      const adminCheckQuery = 'SELECT 1 FROM admins WHERE address = $1';
+      const adminCheckResult = await client.query(adminCheckQuery, [adminAddress]);
 
-    if (adminCheckResult.rows.length === 0) {
-        await client.end();
+      if (adminCheckResult.rows.length === 0) {
+        console.warn(`[addAdmin] Адрес ${adminAddress} не является администратором`);
         return {
-            statusCode: 403,
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-            },
-            body: JSON.stringify({ error: 'Доступ запрещен. Адрес не является администратором.' }),
+          statusCode: 403,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+          body: JSON.stringify({ error: 'Доступ запрещен. Адрес не является администратором.' }),
         };
+      }
+
+      // Проверка, не является ли новый адрес уже администратором
+      console.log(`[addAdmin] Проверка, не является ли адрес ${newAdminAddress} уже администратором`);
+      const existingAdminQuery = 'SELECT 1 FROM admins WHERE address = $1';
+      const existingAdminResult = await client.query(existingAdminQuery, [newAdminAddress]);
+
+      if (existingAdminResult.rows.length > 0) {
+        console.warn(`[addAdmin] Адрес ${newAdminAddress} уже является администратором`);
+        return {
+          statusCode: 409, // Conflict
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+          body: JSON.stringify({ error: 'Адрес уже является администратором' }),
+        };
+      }
+
+      // Добавление нового администратора
+      console.log(`[addAdmin] Добавление нового администратора: ${newAdminAddress}`);
+      const insertQuery = 'INSERT INTO admins (address, created_at) VALUES ($1, NOW())';
+      await client.query(insertQuery, [newAdminAddress]);
+
+      console.log(`[addAdmin] Адрес ${newAdminAddress} успешно добавлен как администратор`);
+
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ message: 'Администратор успешно добавлен', address: newAdminAddress }),
+      };
+    } finally {
+      await client.end();
+      console.log("[addAdmin] Подключение к БД закрыто");
     }
-
-    // Добавляем нового администратора
-    await client.query(
-      'INSERT INTO admins (address) VALUES ($1) ON CONFLICT (address) DO NOTHING',
-      [newAdminAddress.toLowerCase()]
-    );
-
-    await client.end();
-
-    console.log(`Адрес ${newAdminAddress} успешно добавлен в список администраторов админом ${adminAddress}`);
-
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ message: `Адрес ${newAdminAddress} добавлен в список администраторов` }),
-    };
   } catch (error) {
     console.error("Ошибка в addAdmin:", error);
     return {
