@@ -48,7 +48,7 @@ exports.handler = async (event, context) => {
       }
     }
 
-    console.log(`[getConfig] Извлеченный adminAddress: '${adminAddress}'`);
+    console.log(`[getConfig] Извеченный adminAddress: '${adminAddress}'`);
 
     // Проверка, что adminAddress предоставлен и не пустая строка
     if (!adminAddress || adminAddress.trim() === '') {
@@ -120,11 +120,12 @@ exports.handler = async (event, context) => {
     }
 
     // Запрашиваем конфигурацию из БД для данного администратора
-    // === КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Изменено имя таблицы с app_configs на app_config ===
+    // === КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 1: Изменено имя таблицы с app_configs на app_config ===
+    // === КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 2: Изменено имя столбца с admin_address на address ===
     const query = `
       SELECT config
       FROM app_config
-      WHERE admin_address = $1
+      WHERE address = $1
     `;
     console.log(`[getConfig] Выполнение SQL-запроса для адреса ${normalizedAdminAddress}`);
     const result = await client.query(query, [normalizedAdminAddress]);
