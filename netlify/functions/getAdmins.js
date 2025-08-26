@@ -5,7 +5,6 @@ exports.handler = async (event, context) => {
     console.log("=== getAdmins Function Called ===");
     console.log("Headers:", event.headers);
 
-    // Проверяем метод запроса - теперь только GET
     if (event.httpMethod !== 'GET') {
       return {
         statusCode: 405,
@@ -17,12 +16,10 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Получаем заголовок X-Admin-Address
     let adminAddress = null;
     const headers = event.headers || {};
     const multiValueHeaders = event.multiValueHeaders || {};
 
-    // Поиск X-Admin-Address в headers (регистронезависимо, но ожидаем верхний регистр)
     for (const key in headers) {
       if (key === 'X-Admin-Address') {
         adminAddress = headers[key];
@@ -30,7 +27,6 @@ exports.handler = async (event, context) => {
       }
     }
 
-    // Если не найден в headers, проверяем в multiValueHeaders
     if (!adminAddress) {
       for (const key in multiValueHeaders) {
         if (key === 'X-Admin-Address' && Array.isArray(multiValueHeaders[key]) && multiValueHeaders[key].length > 0) {
@@ -51,7 +47,6 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Подключение к базе данных
     const client = new Client({
       connectionString: process.env.NEON_DATABASE_URL,
     });
@@ -60,6 +55,31 @@ exports.handler = async (event, context) => {
     console.log("[getAdmins] Подключение к БД установлено");
 
     try {
+      // Проверка существования таблицы admins
+      console.log("[getAdmins] Проверка существования таблицы admins...");
+      const checkAdminsTableQuery = `
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'admins'
+        ) AS table_exists;
+      `;
+      const checkAdminsResult = await client.query(checkAdminsTableQuery);
+      const adminsTableExists = checkAdminsResult.rows[0].table_exists;
+      console.log(`[getAdmins] Существует ли таблица admins: ${adminsTableExists}`);
+
+      if (!adminsTableExists) {
+        console.error("[getAdmins] Таблица admins не найдена в базе данных!");
+        return {
+          statusCode: 500,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+          body: JSON.stringify({ error: 'Таблица администраторов не найдена в базе данных.' }),
+        };
+      }
+
       // Проверка, является ли адрес администратором
       console.log(`[getAdmins] Проверка прав администратора для адреса: ${adminAddress}`);
       const adminCheckQuery = 'SELECT 1 FROM admins WHERE address = $1';
@@ -79,7 +99,7 @@ exports.handler = async (event, context) => {
 
       // Получение списка всех администраторов
       console.log("[getAdmins] Получение списка всех администраторов");
-      const query = 'SELECT address FROM admins ORDER BY created_at ASC';
+      const query = 'SELECT address FROM admins ORDER BY added_at ASC'; // Используем правильное имя столбца
       const result = await client.query(query);
 
       const adminsList = result.rows.map(row => row.address);
@@ -107,7 +127,6 @@ exports.handler = async (event, context) => {
       },
       body: JSON.stringify({
         error: 'Внутренняя ошибка сервера: ' + error.message,
-        // stack: error.stack // Можно включить для отладки, но лучше убрать в продакшене
       }),
     };
   }
