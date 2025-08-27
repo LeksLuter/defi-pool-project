@@ -1,19 +1,20 @@
 // netlify/functions/saveConfig.js
+// netlify/functions/saveConfig.js
 import { getClient } from './utils/db.js';
-
 exports.handler = async (event, context) => {
   try {
     console.log("=== Save Config Function Called ===");
     console.log("Event received:", JSON.stringify(event, null, 2));
     
-    if (event.httpMethod !== 'GET') {
+    // ИЗМЕНЕНО: Проверяем метод запроса - теперь только POST
+    if (event.httpMethod !== 'POST') {
       return {
         statusCode: 405,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({ error: 'Метод не разрешен' }),
+        body: JSON.stringify({ error: 'Метод не разрешен. Используйте POST.' }),
       };
     }
     
@@ -51,31 +52,27 @@ exports.handler = async (event, context) => {
     
     console.log(`[saveConfig] Сохранение конфигурации от администратора: ${adminAddress}`);
     
-    const configJson = event.queryStringParameters?.config;
-    if (!configJson) {
-      console.error("[saveConfig] Параметр config не найден в query string");
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'Параметр config обязателен в query string' }),
-      };
-    }
-    
+    // ИЗМЕНЕНО: Получаем данные из тела запроса, а не из query string
     let configData;
     try {
-      configData = JSON.parse(decodeURIComponent(configJson));
+      if (!event.body) {
+        throw new Error("Тело запроса отсутствует");
+      }
+      
+      if (typeof event.body === 'string') {
+        configData = JSON.parse(event.body);
+      } else {
+        configData = event.body;
+      }
     } catch (parseError) {
-      console.error("[saveConfig] Ошибка парсинга JSON из query string:", parseError);
+      console.error("[saveConfig] Ошибка парсинга JSON из тела запроса:", parseError);
       return {
         statusCode: 400,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({ error: 'Неверный формат JSON в параметре config query string' }),
+        body: JSON.stringify({ error: 'Неверный формат JSON в теле запроса' }),
       };
     }
     
