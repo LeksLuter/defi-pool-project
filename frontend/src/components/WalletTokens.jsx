@@ -956,4 +956,3 @@ const WalletTokens = () => {
 };
 
 export default WalletTokens;
-`
