@@ -21,6 +21,7 @@ const WalletTokens = () => {
   const [error, setError] = useState(null);
   // === СОСТОЯНИЕ ДЛЯ ИНТЕРВАЛА ===
   const [effectiveUpdateIntervalMinutes, setEffectiveUpdateIntervalMinutes] = useState(5); // Начальное значение
+  const [intervalLoading, setIntervalLoading] = useState(true); // Состояние загрузки интервала
   // === СОСТОЯНИЕ ДЛЯ ОБРАТНОГО ОТСЧЕТА ===
   const [timeUntilNextUpdate, setTimeUntilNextUpdate] = useState(0); // В миллисекундах
   const [lastUpdateTime, setLastUpdateTime] = useState(null); // Время последнего обновления
@@ -178,7 +179,7 @@ const WalletTokens = () => {
       setLastUpdateTime(now);
       setLastUpdateTime(account, chainId, now);
       
-      // Сбросим счетчик после ручного обновления
+      // Сбрасим счетчик после ручного обновления
       const intervalMs = effectiveUpdateIntervalMinutes * 60 * 1000;
       const clampedIntervalMs = Math.max(intervalMs, MIN_UPDATE_INTERVAL_MS);
       setTimeUntilNextUpdate(clampedIntervalMs);
@@ -270,15 +271,18 @@ const WalletTokens = () => {
     const loadUpdateInterval = async () => {
       try {
         console.log(`[WalletTokens] Попытка загрузки интервала обновления для пользователя: ${account}`);
+        setIntervalLoading(true);
         const intervalMinutes = await getUpdateIntervalMinutes(account);
         console.log(`[WalletTokens] Загружен интервал обновления: ${intervalMinutes} минут`);
         if (!isCancelled && isMountedRef.current) {
           setEffectiveUpdateIntervalMinutes(intervalMinutes);
+          setIntervalLoading(false);
         }
       } catch (error) {
         console.error('[WalletTokens] Ошибка при загрузке интервала обновления:', error);
         if (!isCancelled && isMountedRef.current) {
           setEffectiveUpdateIntervalMinutes(5);
+          setIntervalLoading(false);
         }
       }
     };
@@ -297,7 +301,7 @@ const WalletTokens = () => {
       clearInterval(countdownIntervalRef.current);
     }
     
-    if (!account || !chainId) {
+    if (!account || !chainId || intervalLoading) {
       setTimeUntilNextUpdate(0);
       setLastUpdateTime(null);
       return;
@@ -359,9 +363,9 @@ const WalletTokens = () => {
         clearInterval(countdownIntervalRef.current);
       }
     };
-  }, [account, chainId, effectiveUpdateIntervalMinutes]);
+  }, [account, chainId, effectiveUpdateIntervalMinutes, intervalLoading]);
   // --- КОНЕЦ УПРАВЛЕНИЯ effectiveUpdateIntervalMinutes и обратным отсчетом ---
-  
+    
   // --- ОСНОВНОЙ ЭФФЕКТ ДЛЯ ЗАГРУЗКИ ТОКЕНОВ ОСНОВНОЙ СЕТИ ---
   useEffect(() => {
     isMountedRef.current = true;
