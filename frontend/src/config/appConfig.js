@@ -15,7 +15,6 @@ export let CURRENT_APP_CONFIG = { ...DEFAULT_ADMIN_CONFIG };
 // Глобальная переменная для интервала кэширования (пересчитывается из updateIntervalMinutes)
 export let CACHE_DURATION_MS = DEFAULT_ADMIN_CONFIG.updateIntervalMinutes * 60 * 1000;
 // === КОНЕЦ ГЛОБАЛЬНЫХ ПЕРЕМЕННЫХ ===
-
 // === ОСНОВНАЯ ФУНКЦИЯ ЗАГРУЗКИ ===
 /**
  * Загружает глобальную конфигурацию приложения.
@@ -259,7 +258,6 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
     return { ...DEFAULT_ADMIN_CONFIG };
 };
 // === КОНЕЦ ОСНОВНОЙ ФУНКЦИИ ЗАГРУЗКИ ===
-
 // === ФУНКЦИЯ СОХРАНЕНИЯ ===
 /**
  * Сохраняет конфигурацию администратора.
@@ -301,6 +299,8 @@ export const saveAppConfig = async (config, adminAddress) => {
             
             // Выполняем запрос к API
             console.log("[App Config] Выполняем запрос к API:", apiUrl);
+            
+            // ИЗМЕНЕНО: Используем POST метод и отправляем данные в теле запроса
             const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: headers,
@@ -382,7 +382,6 @@ export const saveAppConfig = async (config, adminAddress) => {
     }
 };
 // === КОНЕЦ ФУНКЦИИ СОХРАНЕНИЯ ===
-
 // === ФУНКЦИИ ДОСТУПА К КОНКРЕТНЫМ ЧАСТЯМ КОНФИГУРАЦИИ ===
 /**
  * Получает настройки сервисов для получения токенов.
@@ -408,7 +407,6 @@ export const getTokenServicesConfig = () => {
     console.log("[App Config] Возврат дефолтной конфигурации токенов:", DEFAULT_ADMIN_CONFIG.tokenServices);
     return DEFAULT_ADMIN_CONFIG.tokenServices;
 };
-
 /**
  * Получает настройки сервисов для получения цен.
  * @returns {Object} Объект с настройками сервисов цен
@@ -433,7 +431,6 @@ export const getPriceServicesConfig = () => {
     console.log("[App Config] Возврат дефолтной конфигурации цен:", DEFAULT_ADMIN_CONFIG.priceServices);
     return DEFAULT_ADMIN_CONFIG.priceServices;
 };
-
 /**
  * Обновляет настройки сервисов для получения токенов в localStorage.
  * @param {Object} newTokenServicesConfig - Новые настройки сервисов токенов
@@ -458,7 +455,6 @@ export const updateTokenServicesConfig = (newTokenServicesConfig) => {
         console.error("[App Config] Ошибка при обновлении настроек сервисов токенов в localStorage:", e);
     }
 };
-
 /**
  * Обновляет настройки сервисов для получения цен в localStorage.
  * @param {Object} newPriceServicesConfig - Новые настройки сервисов цен
@@ -483,7 +479,6 @@ export const updatePriceServicesConfig = (newPriceServicesConfig) => {
         console.error("[App Config] Ошибка при обновлении настроек сервисов цен в localStorage:", e);
     }
 };
-
 /**
  * Обновляет интервал обновления в localStorage.
  * @param {number} newIntervalMinutes - Новый интервал обновления в минутах
@@ -514,7 +509,6 @@ export const updateUpdateIntervalMinutes = (newIntervalMinutes) => {
         console.error("[App Config] Ошибка при обновлении интервала обновления в localStorage:", e);
     }
 };
-
 /**
  * Получает интервал обновления в минутах.
  * @param {string} [userAddress] - Адрес пользователя (для readonly загрузки)
