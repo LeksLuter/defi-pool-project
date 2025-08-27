@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
+
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
@@ -10,6 +11,7 @@ contract LiquidityPool is ERC721Enumerable {
     address public immutable token0;
     address public immutable token1;
     uint256 public immutable feeRate; // 0.3% = 30, 1% = 100
+
     uint256 public reserve0;
     uint256 public reserve1;
 
@@ -35,14 +37,9 @@ contract LiquidityPool is ERC721Enumerable {
         address _token1,
         uint256 _feeRate
     ) ERC721("LPToken", "LP-NFT") {
-        require(_token0 != address(0) && _token1 != address(0), "Zero address");
-        require(_token0 != _token1, "Same tokens");
-        require(_feeRate > 0 && _feeRate <= 1000, "Invalid fee rate"); // 0.01% to 10%
-        
         token0 = _token0;
         token1 = _token1;
         feeRate = _feeRate;
-        _tokenIdCounter = 0; // Инициализация счетчика
     }
 
     function addLiquidity(
@@ -70,29 +67,20 @@ contract LiquidityPool is ERC721Enumerable {
             collectedFee1: 0,
             owner: msg.sender
         }));
-
         _mint(msg.sender, tokenId);
+
         emit LiquidityAdded(tokenId, amount0, amount1);
     }
 
     function removeLiquidity(uint256 tokenId) external {
         require(ownerOf(tokenId) == msg.sender, "Only owner can remove liquidity");
         Position storage pos = positions[tokenId];
-        
-        require(pos.liquidity0 > 0 || pos.liquidity1 > 0, "Position already removed");
 
         reserve0 -= pos.liquidity0;
         reserve1 -= pos.liquidity1;
 
         IERC20(token0).safeTransfer(msg.sender, pos.liquidity0 + pos.collectedFee0);
         IERC20(token1).safeTransfer(msg.sender, pos.liquidity1 + pos.collectedFee1);
-
-        // Обнуляем поля позиции
-        pos.liquidity0 = 0;
-        pos.liquidity1 = 0;
-        pos.collectedFee0 = 0;
-        pos.collectedFee1 = 0;
-        pos.owner = address(0);
 
         _burn(tokenId);
         emit LiquidityRemoved(tokenId, pos.liquidity0, pos.liquidity1);
@@ -103,32 +91,26 @@ contract LiquidityPool is ERC721Enumerable {
         require(amountIn > 0, "Amount must be > 0");
 
         if (tokenIn == token0) {
-            uint256 feeAmount = (amountIn * feeRate) / 10000;
-            uint256 amountInAfterFee = amountIn - feeAmount;
-            uint256 amountOut = (amountInAfterFee * reserve1) / reserve0;
-            
+            uint256 amountOut = (amountIn * reserve1) / reserve0;
             require(reserve1 >= amountOut, "Insufficient liquidity");
-            
+
             IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
             IERC20(token1).safeTransfer(msg.sender, amountOut);
-            
+
             reserve0 += amountIn;
             reserve1 -= amountOut;
-            
+
             emit Swap(msg.sender, token0, token1, amountIn, amountOut);
         } else {
-            uint256 feeAmount = (amountIn * feeRate) / 10000;
-            uint256 amountInAfterFee = amountIn - feeAmount;
-            uint256 amountOut = (amountInAfterFee * reserve0) / reserve1;
-            
+            uint256 amountOut = (amountIn * reserve0) / reserve1;
             require(reserve0 >= amountOut, "Insufficient liquidity");
-            
+
             IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
             IERC20(token0).safeTransfer(msg.sender, amountOut);
-            
+
             reserve1 += amountIn;
             reserve0 -= amountOut;
-            
+
             emit Swap(msg.sender, token1, token0, amountIn, amountOut);
         }
     }
