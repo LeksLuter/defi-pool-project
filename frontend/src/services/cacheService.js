@@ -1,5 +1,4 @@
 // frontend/src/services/cacheService.js
-// frontend/src/services/cacheService.js
 const CACHE_PREFIX = 'walletTokens';
 const DEFAULT_CACHE_EXPIRY_MINUTES = 10;
 
@@ -52,12 +51,15 @@ export const saveTokensToCache = (account, chainId, tokens) => {
   }
 };
 
-export const setLastUpdateTime = (account, chainId) => {
+// ИСПРАВЛЕНО: Функция теперь принимает параметр timestamp
+export const setLastUpdateTime = (account, chainId, timestamp) => {
   if (!account || !chainId) return;
   
   try {
     const lastUpdateKey = getLastUpdateKey(account, chainId);
-    localStorage.setItem(lastUpdateKey, Date.now().toString());
+    const timeToSave = timestamp !== undefined ? timestamp : Date.now();
+    localStorage.setItem(lastUpdateKey, timeToSave.toString());
+    console.log(`[Кэш] Время последнего обновления сохранено: ${new Date(timeToSave).toLocaleTimeString()}`);
   } catch (error) {
     console.error('[Кэш] Ошибка при сохранении времени последнего обновления:', error);
   }

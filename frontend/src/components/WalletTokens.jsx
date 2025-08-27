@@ -14,6 +14,7 @@ const MIN_TOKEN_VALUE_USD = 0.1;
 const MIN_UPDATE_INTERVAL_MS = 30000; // 30 секунд
 const SELECTED_CHAINS_STORAGE_KEY = 'defiPool_selectedChains'; // Ключ для localStorage
 // === КОНЕЦ КОНСТАНТ ===
+
 const WalletTokens = () => {
   const { provider, account, signer, chainId, switchNetwork } = useWeb3();
   const [tokens, setTokens] = useState([]); // Содержит все токены
@@ -22,12 +23,12 @@ const WalletTokens = () => {
   // === СОСТОЯНИЕ ДЛЯ ИНТЕРВАЛА ===
   const [effectiveUpdateIntervalMinutes, setEffectiveUpdateIntervalMinutes] = useState(5); // Начальное значение
   const [intervalLoading, setIntervalLoading] = useState(true); // Состояние загрузки интервала
+  // === КОНЕЦ СОСТОЯНИЯ ===
   // === СОСТОЯНИЕ ДЛЯ ОБРАТНОГО ОТСЧЕТА ===
   const [timeUntilNextUpdate, setTimeUntilNextUpdate] = useState(0); // В миллисекундах
   const [lastUpdateTime, setLastUpdateTime] = useState(null); // Время последнего обновления
   const countdownIntervalRef = useRef(null);
   // === КОНЕЦ СОСТОЯНИЯ ДЛЯ ОБРАТНОГО ОТСЧЕТА ===
-  // === КОНЕЦ СОСТОЯНИЯ ===
   const intervalRef = useRef(null);
   // === useRef ДЛЯ ОТСЛЕЖИВАНИЯ МОНТИРОВАНИЯ ===
   const isMountedRef = useRef(true);
@@ -174,12 +175,12 @@ const WalletTokens = () => {
       }, setLoading, setError, chainId, isMountedRef);
       loadedNetworks.current.add(chainId);
       
-      // Сохраняем время последнего обновления
+      // ИСПРАВЛЕНО: Правильное сохранение времени
       const now = Date.now();
-      setLastUpdateTime(now);
-      setLastUpdateTime(account, chainId, now);
+      setLastUpdateTime(now); // Обновляем состояние компонента
+      setLastUpdateTime(account, chainId, now); // Сохраняем в localStorage
       
-      // Сбрасим счетчик после ручного обновления
+      // Сбрасываем счетчик после обновления
       const intervalMs = effectiveUpdateIntervalMinutes * 60 * 1000;
       const clampedIntervalMs = Math.max(intervalMs, MIN_UPDATE_INTERVAL_MS);
       setTimeUntilNextUpdate(clampedIntervalMs);
@@ -264,7 +265,7 @@ const WalletTokens = () => {
       console.warn("[WalletTokens] Не удалось сохранить selectedChains в localStorage:", e);
     }
   }, [selectedChains]);
-  
+
   // --- УПРАВЛЕНИЕ effectiveUpdateIntervalMinutes и обратным отсчетом ---
   useEffect(() => {
     let isCancelled = false;
@@ -294,20 +295,20 @@ const WalletTokens = () => {
     };
   }, [account]);
   
-  // Эффект для управления обратным отсчетом
+  // === ИСПРАВЛЕННЫЙ ЭФФЕКТ ДЛЯ УПРАВЛЕНИЯ ОБРАТНЫМ ОТСЧЁТОМ ===
   useEffect(() => {
     // Очищаем предыдущий интервал отсчета
     if (countdownIntervalRef.current) {
       clearInterval(countdownIntervalRef.current);
     }
-    
-    if (!account || !chainId || intervalLoading) {
+
+    if (!account || !chainId) {
       setTimeUntilNextUpdate(0);
       setLastUpdateTime(null);
       return;
     }
-    
-    // Получаем время последнего обновления из localStorage
+
+    // Функция получения времени последнего обновления из localStorage
     const getLastUpdateFromStorage = () => {
       try {
         const lastUpdateKey = `defiPool_lastUpdate_${account}_${chainId}`;
@@ -323,14 +324,14 @@ const WalletTokens = () => {
       }
       return null;
     };
-    
+
+    // Функция обновления счетчика
     const updateCountdown = () => {
       try {
         const lastUpdate = getLastUpdateFromStorage();
         setLastUpdateTime(lastUpdate);
         
         if (!lastUpdate) {
-          // Если времени обновления нет, считаем, что обновление нужно было давно
           setTimeUntilNextUpdate(0);
           return;
         }
@@ -351,11 +352,9 @@ const WalletTokens = () => {
         setTimeUntilNextUpdate(0);
       }
     };
-    
-    // Обновляем счетчик сразу
+
+    // Обновляем счетчик сразу и затем каждую секунду
     updateCountdown();
-    
-    // Устанавливаем интервал для обновления счетчика каждую секунду
     countdownIntervalRef.current = setInterval(updateCountdown, 1000);
     
     return () => {
@@ -363,8 +362,25 @@ const WalletTokens = () => {
         clearInterval(countdownIntervalRef.current);
       }
     };
-  }, [account, chainId, effectiveUpdateIntervalMinutes, intervalLoading]);
-  // --- КОНЕЦ УПРАВЛЕНИЯ effectiveUpdateIntervalMinutes и обратным отсчетом ---
+  }, [account, chainId, effectiveUpdateIntervalMinutes]); // Убрали intervalLoading из зависимостей
+  // === КОНЕЦ ИСПРАВЛЕННОГО ЭФФЕКТА ===
+
+  // === ДОБАВЛЕННЫЙ ЭФФЕКТ ДЛЯ СИНХРОНИЗАЦИИ КОНФИГУРАЦИИ ===
+  useEffect(() => {
+    const handleConfigUpdate = (event) => {
+      const newConfig = event.detail;
+      if (newConfig && typeof newConfig.updateIntervalMinutes === 'number' && newConfig.updateIntervalMinutes > 0) {
+        console.log(`[WalletTokens] Обновление интервала через событие: ${newConfig.updateIntervalMinutes} минут`);
+        setEffectiveUpdateIntervalMinutes(newConfig.updateIntervalMinutes);
+      }
+    };
+
+    window.addEventListener('appConfigUpdated', handleConfigUpdate);
+    return () => {
+      window.removeEventListener('appConfigUpdated', handleConfigUpdate);
+    };
+  }, []);
+  // === КОНЕЦ ДОБАВЛЕННОГО ЭФФЕКТА ===
     
   // --- ОСНОВНОЙ ЭФФЕКТ ДЛЯ ЗАГРУЗКИ ТОКЕНОВ ОСНОВНОЙ СЕТИ ---
   useEffect(() => {
@@ -546,7 +562,6 @@ const WalletTokens = () => {
       setTotalBalanceLoading(false);
       return;
     }
-
     let total = 0;
     for (const token of filteredTokens) {
       try {
@@ -613,14 +628,11 @@ const WalletTokens = () => {
       }
       return filteredTokens.map((token) => {
         // === ИСПРАВЛЕНИЕ 1: Используем данные из объекта токена ===
-        // Убираем жесткое задание имени для нативного токена Polygon.
-        // Если tokenService правильно его получил как POL, он отобразится корректно.
         const displaySymbol = token.symbol || 'Unknown';
         const displayName = token.name || 'Unknown Token';
         // === КОНЕЦ ИСПРАВЛЕНИЯ 1 ===
         const tokenAddress = token.contractAddress || '0x0000...';
         const tokenChainId = token.chainId;
-        // Исправлено: явная проверка и форматирование баланса
         let balanceFormatted = '0.0000';
         try {
           balanceFormatted = parseFloat(ethers.utils.formatUnits(token.balance, token.decimals)).toFixed(4);
@@ -632,27 +644,20 @@ const WalletTokens = () => {
         let priceFormatted = 'N/A';
         let totalValueFormatted = 'N/A';
         let isLowValue = false;
-        // Получаем значение priceUSD из токена
         const rawPriceUSD = token.priceUSD;
-        // Проверяем, является ли значение числом (и не NaN)
         if (typeof rawPriceUSD === 'number' && !isNaN(rawPriceUSD)) {
-          // Если цена корректна, форматируем ее
-          // Используем toFixed(4) для цен, или toPrecision(3) для очень маленьких цен
           if (rawPriceUSD >= 1) {
             priceFormatted = `$${rawPriceUSD.toFixed(2)}`;
           } else {
             priceFormatted = `$${rawPriceUSD.toPrecision(3)}`;
           }
-          // Рассчитываем общую стоимость
           const balanceNum = parseFloat(balanceFormatted);
           const totalValueNum = balanceNum * rawPriceUSD;
           totalValueFormatted = `$${totalValueNum.toFixed(2)}`;
-          // Проверяем, является ли стоимость "низкой"
           if (totalValueNum < MIN_TOKEN_VALUE_USD) {
             isLowValue = true;
           }
         } else {
-          // Если цена некорректна, отображаем N/A
           priceFormatted = 'N/A';
           totalValueFormatted = 'N/A';
         }
@@ -800,7 +805,6 @@ const WalletTokens = () => {
               const isSelected = selectedChains.has(chainIdNum);
               const isCurrent = chainIdNum === chainId;
               const isLoaded = loadedNetworks.current.has(chainIdNum);
-              // Условие отображения с учетом showInactiveNetworks
               if (!showInactiveNetworks && !isSelected && !isCurrent) {
                 return null;
               }
@@ -817,7 +821,7 @@ const WalletTokens = () => {
                 >
                   <div className="text-sm font-bold truncate">{chainData.shortName.toUpperCase()}</div>
                   <div className="text-xs mt-1 truncate">{chainData.name}</div>
-                  <div className="text-xs mt-1 text-gray-400">{chainIdNum}</div> {/* Отображение chainId */}
+                  <div className="text-xs mt-1 text-gray-400">{chainIdNum}</div>
                   {isSelected && (
                     <div className="absolute top-1 right-1 w-3 h-3 bg-green-400 rounded-full border border-gray-800"></div>
                   )}
@@ -830,7 +834,6 @@ const WalletTokens = () => {
                 </button>
               );
             })}
-            {/* Добавляем последнюю кнопку для скрытия/показа неактивных сетей */}
             <button
               onClick={toggleInactiveNetworksVisibility}
               className={`p-4 rounded-xl border-2 transition-all duration-200 ${showInactiveNetworks
