@@ -1,4 +1,3 @@
-// frontend/src/components/WalletTokens.jsx
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
@@ -6,7 +5,7 @@ import { ethers } from 'ethers';
 import { SUPPORTED_CHAINS } from '../config/supportedChains';
 // === ИМПОРТЫ СЕРВИСОВ ===
 import { updateTokens } from '../services/tokenService'; // Основной импорт для получения данных
-import { getCachedTokens, canPerformBackgroundUpdate } from '../services/cacheService'; // Импортируем canPerformBackgroundUpdate
+import { getCachedTokens, canPerformBackgroundUpdate, setLastUpdateTime } from '../services/cacheService'; // Импортируем setLastUpdateTime
 // === ИМПОРТЫ ИЗ НОВОГО ФАЙЛА КОНФИГУРАЦИИ ===
 import { getUpdateIntervalMinutes, CACHE_DURATION_MS as DEFAULT_CACHE_DURATION_MS } from '../config/appConfig'; // Импортируем дефолтный CACHE_DURATION_MS
 // === КОНЕЦ ИМПОРТОВ ===
@@ -15,7 +14,6 @@ const MIN_TOKEN_VALUE_USD = 0.1;
 const MIN_UPDATE_INTERVAL_MS = 30000; // 30 секунд
 const SELECTED_CHAINS_STORAGE_KEY = 'defiPool_selectedChains'; // Ключ для localStorage
 // === КОНЕЦ КОНСТАНТ ===
-
 const WalletTokens = () => {
   const { provider, account, signer, chainId, switchNetwork } = useWeb3();
   const [tokens, setTokens] = useState([]); // Содержит все токены
@@ -25,6 +23,7 @@ const WalletTokens = () => {
   const [effectiveUpdateIntervalMinutes, setEffectiveUpdateIntervalMinutes] = useState(5); // Начальное значение
   // === СОСТОЯНИЕ ДЛЯ ОБРАТНОГО ОТСЧЕТА ===
   const [timeUntilNextUpdate, setTimeUntilNextUpdate] = useState(0); // В миллисекундах
+  const [lastUpdateTime, setLastUpdateTime] = useState(null); // Время последнего обновления
   const countdownIntervalRef = useRef(null);
   // === КОНЕЦ СОСТОЯНИЯ ДЛЯ ОБРАТНОГО ОТСЧЕТА ===
   // === КОНЕЦ СОСТОЯНИЯ ===
@@ -173,6 +172,12 @@ const WalletTokens = () => {
         }
       }, setLoading, setError, chainId, isMountedRef);
       loadedNetworks.current.add(chainId);
+      
+      // Сохраняем время последнего обновления
+      const now = Date.now();
+      setLastUpdateTime(now);
+      setLastUpdateTime(account, chainId, now);
+      
       // Сбросим счетчик после ручного обновления
       const intervalMs = effectiveUpdateIntervalMinutes * 60 * 1000;
       const clampedIntervalMs = Math.max(intervalMs, MIN_UPDATE_INTERVAL_MS);
@@ -291,30 +296,47 @@ const WalletTokens = () => {
     if (countdownIntervalRef.current) {
       clearInterval(countdownIntervalRef.current);
     }
+    
     if (!account || !chainId) {
       setTimeUntilNextUpdate(0);
+      setLastUpdateTime(null);
       return;
     }
-    const updateCountdown = () => {
+    
+    // Получаем время последнего обновления из localStorage
+    const getLastUpdateFromStorage = () => {
       try {
-        // Получаем время последнего обновления из кэша
         const lastUpdateKey = `defiPool_lastUpdate_${account}_${chainId}`;
         const lastUpdateStr = localStorage.getItem(lastUpdateKey);
-        if (!lastUpdateStr) {
+        if (lastUpdateStr) {
+          const lastUpdate = parseInt(lastUpdateStr, 10);
+          if (!isNaN(lastUpdate)) {
+            return lastUpdate;
+          }
+        }
+      } catch (e) {
+        console.error("[WalletTokens] Ошибка при получении времени последнего обновления:", e);
+      }
+      return null;
+    };
+    
+    const updateCountdown = () => {
+      try {
+        const lastUpdate = getLastUpdateFromStorage();
+        setLastUpdateTime(lastUpdate);
+        
+        if (!lastUpdate) {
           // Если времени обновления нет, считаем, что обновление нужно было давно
           setTimeUntilNextUpdate(0);
           return;
         }
-        const lastUpdate = parseInt(lastUpdateStr, 10);
-        if (isNaN(lastUpdate)) {
-          setTimeUntilNextUpdate(0);
-          return;
-        }
+        
         const intervalMs = effectiveUpdateIntervalMinutes * 60 * 1000;
         const clampedIntervalMs = Math.max(intervalMs, MIN_UPDATE_INTERVAL_MS);
         const now = Date.now();
         const timeSinceLastUpdate = now - lastUpdate;
         const timeLeft = clampedIntervalMs - timeSinceLastUpdate;
+        
         if (timeLeft <= 0) {
           setTimeUntilNextUpdate(0);
         } else {
@@ -325,10 +347,13 @@ const WalletTokens = () => {
         setTimeUntilNextUpdate(0);
       }
     };
+    
     // Обновляем счетчик сразу
     updateCountdown();
+    
     // Устанавливаем интервал для обновления счетчика каждую секунду
     countdownIntervalRef.current = setInterval(updateCountdown, 1000);
+    
     return () => {
       if (countdownIntervalRef.current) {
         clearInterval(countdownIntervalRef.current);
@@ -380,6 +405,17 @@ const WalletTokens = () => {
           }
         }, null, null, chainId, isMountedRef);
         loadedNetworks.current.add(chainId);
+        
+        // Сохраняем время последнего обновления
+        const now = Date.now();
+        setLastUpdateTime(now);
+        setLastUpdateTime(account, chainId, now);
+        
+        // Сбрасим счетчик после обновления
+        const intervalMs = effectiveUpdateIntervalMinutes * 60 * 1000;
+        const clampedIntervalMs = Math.max(intervalMs, MIN_UPDATE_INTERVAL_MS);
+        setTimeUntilNextUpdate(clampedIntervalMs);
+        
         if (isMountedRef.current) {
           setLoading(false);
         }
@@ -475,6 +511,12 @@ const WalletTokens = () => {
               });
             }
           }, null, null, chainId, isMountedRef);
+          
+          // Сохраняем время последнего обновления
+          const now = Date.now();
+          setLastUpdateTime(now);
+          setLastUpdateTime(account, chainId, now);
+          
           // После обновления сбросим счетчик до следующего обновления
           setTimeUntilNextUpdate(clampedIntervalMs);
         } catch (err) {
@@ -720,7 +762,9 @@ const WalletTokens = () => {
                 <span className="ml-1 font-medium">{effectiveUpdateIntervalMinutes} мин</span>
                 <span className="mx-2">|</span>
                 <span>След. обновление:</span>
-                <span className="ml-1 font-medium">{formatTimeLeft(timeUntilNextUpdate)}</span>
+                <span className={`ml-1 font-medium ${timeUntilNextUpdate < 60000 ? 'text-yellow-400' : ''}`}>
+                  {formatTimeLeft(timeUntilNextUpdate)}
+                </span>
               </div>
               <button
                 onClick={handleRefresh}
