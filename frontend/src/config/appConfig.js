@@ -1,24 +1,20 @@
 // frontend/src/config/appConfig.js
-// frontend/src/config/appConfig.js
 // Централизованный файл конфигурации приложения
 // Все настройки приложения хранятся в этом файле
-
 // === ЗАМЕНА КОНСТАНТ ===
 // Вместо дублирования, импортируем SUPPORTED_CHAINS из отдельного файла
 import { SUPPORTED_CHAINS } from './supportedChains';
 import { DEFAULT_ADMIN_CONFIG } from '../constants'; // Убедитесь, что DEFAULT_ADMIN_CONFIG определен в '../constants' с правильной структурой
 
 const ADMIN_CONFIG_KEY = 'defiPool_adminConfig';
-
 // URL для локального API сервера (если используется отдельный порт)
 // const LOCAL_API_BASE_URL = 'http://localhost:3001/api';
-
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 // Глобальная переменная для хранения текущей конфигурации (если нужно использовать вне функций)
 export let CURRENT_APP_CONFIG = { ...DEFAULT_ADMIN_CONFIG };
-
 // Глобальная переменная для интервала кэширования (пересчитывается из updateIntervalMinutes)
 export let CACHE_DURATION_MS = DEFAULT_ADMIN_CONFIG.updateIntervalMinutes * 60 * 1000;
+// === КОНЕЦ ГЛОБАЛЬНЫХ ПЕРЕМЕННЫХ ===
 
 // === ОСНОВНАЯ ФУНКЦИЯ ЗАГРУЗКИ ===
 /**
@@ -58,7 +54,7 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
                     apiUrl = '/.netlify/functions/getConfig';
                 }
             } else {
-                // Для SSR или других сред, предположим использование Netlify Functions
+                // Для SSR или других сред, предполагаем использование Netlify Functions
                 console.log("[App Config] window не определен (SSR), используем Netlify Functions для загрузки: /.netlify/functions/getConfig");
                 apiUrl = '/.netlify/functions/getConfig';
             }
@@ -149,7 +145,7 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
                     apiUrl = '/.netlify/functions/getConfigReadOnly';
                 }
             } else {
-                // Для SSR или других сред, предположим использование Netlify Functions
+                // Для SSR или других сред, предполагаем использование Netlify Functions
                 console.log("[App Config] window не определен (SSR), используем Netlify Functions для загрузки: /.netlify/functions/getConfigReadOnly");
                 apiUrl = '/.netlify/functions/getConfigReadOnly';
             }
@@ -262,6 +258,7 @@ export const loadAppConfig = async (adminAddress, userAddress) => {
     CURRENT_APP_CONFIG = { ...DEFAULT_ADMIN_CONFIG };
     return { ...DEFAULT_ADMIN_CONFIG };
 };
+// === КОНЕЦ ОСНОВНОЙ ФУНКЦИИ ЗАГРУЗКИ ===
 
 // === ФУНКЦИЯ СОХРАНЕНИЯ ===
 /**
@@ -290,7 +287,7 @@ export const saveAppConfig = async (config, adminAddress) => {
                     apiUrl = '/.netlify/functions/saveConfig';
                 }
             } else {
-                // Для SSR или других сред, предположим использование Netlify Functions
+                // Для SSR или других сред, предполагаем использование Netlify Functions
                 console.log("[App Config] window не определен (SSR), используем Netlify Functions для сохранения: /.netlify/functions/saveConfig");
                 apiUrl = '/.netlify/functions/saveConfig';
             }
@@ -384,6 +381,7 @@ export const saveAppConfig = async (config, adminAddress) => {
         throw new Error("Не удалось сохранить конфигурацию ни на сервере (локальный API или Netlify Functions), ни локально.");
     }
 };
+// === КОНЕЦ ФУНКЦИИ СОХРАНЕНИЯ ===
 
 // === ФУНКЦИИ ДОСТУПА К КОНКРЕТНЫМ ЧАСТЯМ КОНФИГУРАЦИИ ===
 /**
