@@ -1,11 +1,13 @@
 // frontend/src/services/tokenService.js
 // Сервис для получения токенов и цен с различных источников
-
 import { ethers } from 'ethers';
+
 // Импортируем CACHE_DURATION_MS из appConfig.js
 import { CACHE_DURATION_MS } from '../config/appConfig';
+
 // Импортируем функции кэширования и управления обновлением из cacheService.js
 import { saveTokensToCache, getCachedTokens, setLastUpdateTime, canPerformBackgroundUpdate } from '../services/cacheService';
+
 // Импортируем функции для получения конфигурации и интервала обновления из appConfig.js
 import { getTokenServicesConfig, getUpdateIntervalMinutes } from '../config/appConfig';
 
@@ -16,6 +18,7 @@ import * as alchemyService from './alchemyService';
 import * as defillamaService from './defillamaService'; // Правильный регистр
 import * as coingeckoService from './coingeckoService';
 import * as coinmarketcapService from './coinmarketcapService';
+
 // Импортируем агрегатор цен
 import { fetchTokensWithPrices } from './priceAggregatorService';
 // === КОНЕЦ ИМПОРТОВ СЕРВИСОВ ===
@@ -26,7 +29,6 @@ const BASE_RETRY_DELAY_MS = 2000;
 // === КОНЕЦ КОНСТАНТ ===
 
 // === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
-
 /**
  * Выполняет функцию с повторными попытками в случае ошибки.
  * @param {Function} fn Функция для выполнения.
@@ -36,6 +38,7 @@ const BASE_RETRY_DELAY_MS = 2000;
  */
 const fetchWithRetry = async (fn, serviceName, ...args) => {
   console.log(`[Token Service] Попытка получения данных от ${serviceName} (попытка 1)...`);
+
   for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
     try {
       const result = await fn(...args);
@@ -43,6 +46,7 @@ const fetchWithRetry = async (fn, serviceName, ...args) => {
       return result;
     } catch (error) {
       console.error(`[Token Service] Ошибка при получении данных от ${serviceName} (попытка ${attempt}):`, error);
+
       if (attempt < MAX_RETRY_ATTEMPTS) {
         const delay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1) + Math.random() * 1000;
         console.log(`[Token Service] Ожидание ${delay.toFixed(0)}мс перед повторной попыткой...`);
@@ -52,6 +56,7 @@ const fetchWithRetry = async (fn, serviceName, ...args) => {
       }
     }
   }
+
   return null; // Если все попытки не удались
 };
 
@@ -92,6 +97,7 @@ const fetchTokensFromAllServicesParallel = async (account, provider, chainId) =>
     // Проверяем, что сервис включен в конфигурации
     const isEnabled = tokenServicesConfig && tokenServicesConfig[service.name] === true;
     console.log(`[Token Service] Сервис ${service.name} включен для получения токенов:`, isEnabled);
+
     if (isEnabled === undefined || isEnabled === false) {
       console.log(`[Token Service] Сервис ${service.name} отключен в настройках админки для получения токенов.`);
       return false;
@@ -116,10 +122,13 @@ const fetchTokensFromAllServicesParallel = async (account, provider, chainId) =>
 
     // Объединяем результаты из всех сервисов
     let allTokens = [];
+
     tokensResults.forEach((result, index) => {
       const serviceName = enabledTokenServices[index].name;
+
       if (result.status === 'fulfilled') {
         const serviceTokens = result.value;
+
         if (Array.isArray(serviceTokens)) {
           console.log(`[Token Service] Получено ${serviceTokens.length} токенов от ${serviceName}`);
           allTokens = [...allTokens, ...serviceTokens];
@@ -133,9 +142,11 @@ const fetchTokensFromAllServicesParallel = async (account, provider, chainId) =>
 
     // Удаляем дубликаты по contractAddress
     const uniqueTokensMap = new Map();
+
     allTokens.forEach(token => {
       // Используем адрес контракта в нижнем регистре как ключ для Map
       const key = token.contractAddress?.toLowerCase();
+
       // Если токен с таким адресом уже есть, оставляем первый найденный
       if (key && !uniqueTokensMap.has(key)) {
         uniqueTokensMap.set(key, token);
@@ -152,11 +163,14 @@ const fetchTokensFromAllServicesParallel = async (account, provider, chainId) =>
     // === ИСПРАВЛЕНИЕ 1: Добавление нативного токена Polygon ===
     // Проверяем, есть ли в списке токен с адресом 0x000...000 для сети Polygon (chainId 137)
     const hasNativeToken = uniqueTokens.some(token => token.contractAddress === '0x0000000000000000000000000000000000000000');
+
     if (chainId === 137 && !hasNativeToken) {
       console.log(`[Token Service] Нативный токен не найден в списке для сети Polygon (${chainId}), добавляем MATIC...`);
+
       try {
         // Получаем баланс нативного токена (MATIC)
         let nativeBalance = '0';
+
         if (provider) {
           try {
             const balanceWei = await provider.getBalance(account);
@@ -165,7 +179,7 @@ const fetchTokensFromAllServicesParallel = async (account, provider, chainId) =>
             console.error(`[Token Service] Ошибка получения баланса MATIC для ${account}:`, balanceError);
           }
         } else {
-           console.warn(`[Token Service] Провайдер для сети ${chainId} не найден для получения баланса MATIC`);
+          console.warn(`[Token Service] Провайдер для сети ${chainId} не найден для получения баланса MATIC`);
         }
 
         // Создаем объект для нативного токена Polygon
@@ -177,25 +191,29 @@ const fetchTokensFromAllServicesParallel = async (account, provider, chainId) =>
           decimals: 18, // У MATIC 18 decimals
           logo: null, // URL логотипа, если есть
         };
+
         uniqueTokens.push(nativeToken);
         console.log(`[Token Service] Добавлен нативный токен MATIC`);
       } catch (nativeTokenError) {
         console.error(`[Token Service] Ошибка при добавлении нативного токена Polygon:`, nativeTokenError);
       }
     } else if (chainId === 137 && hasNativeToken) {
-        console.log(`[Token Service] Нативный токен уже присутствует в списке для сети Polygon (${chainId}). Проверяем корректность имени и символа...`);
-        const nativeTokenIndex = uniqueTokens.findIndex(token => token.contractAddress === '0x0000000000000000000000000000000000000000');
-        if (nativeTokenIndex !== -1) {
-            const nativeToken = uniqueTokens[nativeTokenIndex];
-            if (nativeToken.name !== 'Matic Token' || nativeToken.symbol !== 'MATIC') {
-                console.log(`[Token Service] Корректируем имя и символ нативного токена Polygon.`);
-                uniqueTokens[nativeTokenIndex] = {
-                    ...nativeToken,
-                    name: 'Matic Token',
-                    symbol: 'MATIC'
-                };
-            }
+      console.log(`[Token Service] Нативный токен уже присутствует в списке для сети Polygon (${chainId}). Проверяем корректность имени и символа...`);
+
+      const nativeTokenIndex = uniqueTokens.findIndex(token => token.contractAddress === '0x0000000000000000000000000000000000000000');
+
+      if (nativeTokenIndex !== -1) {
+        const nativeToken = uniqueTokens[nativeTokenIndex];
+
+        if (nativeToken.name !== 'Matic Token' || nativeToken.symbol !== 'MATIC') {
+          console.log(`[Token Service] Корректируем имя и символ нативного токена Polygon.`);
+          uniqueTokens[nativeTokenIndex] = {
+            ...nativeToken,
+            name: 'Matic Token',
+            symbol: 'MATIC'
+          };
         }
+      }
     }
     // === КОНЕЦ ИСПРАВЛЕНИЯ 1 ===
 
@@ -238,13 +256,14 @@ const fetchPricesFromAllServicesParallel = async (account, provider, chainId, to
 
     // Преобразуем массив токенов с ценами в объект { адрес: { priceUSD: ... } }
     const pricesObject = {};
+
     tokensWithPrices.forEach(token => {
       if (token.contractAddress) {
         pricesObject[token.contractAddress.toLowerCase()] = { priceUSD: token.priceUSD };
       }
     });
-    console.log(`[Token Service] Преобразованы цены в объект для сопоставления.`);
 
+    console.log(`[Token Service] Преобразованы цены в объект для сопоставления.`);
     return pricesObject;
   } catch (aggregatorError) {
     console.error(`[Token Service] Ошибка при получении цен через агрегатор:`, aggregatorError);
@@ -261,12 +280,14 @@ const fetchPricesFromAllServicesParallel = async (account, provider, chainId, to
  */
 const formatTokensForNetwork = async (rawTokens, chainId) => {
   console.log(`[Token Service] Форматирование ${rawTokens.length} токенов для сети ${chainId}...`);
+
   // В данном случае форматирование уже происходит в сервисах получения токенов,
   // здесь просто добавляем chainId, если его нет, и гарантируем правильный формат для Polygon native token.
   const formattedTokens = rawTokens.map(token => ({
     ...token,
     chainId: token.chainId || chainId, // Убеждаемся, что chainId присутствует
   }));
+
   console.log(`[Token Service] Форматирование токенов для сети ${chainId} завершено.`);
   return formattedTokens;
 };
@@ -284,6 +305,7 @@ export const combineTokensWithPrices = (tokensArray, pricesObject) => {
   const tokensWithPrices = tokensArray.map(token => {
     try {
       const tokenAddress = token.contractAddress;
+
       if (!tokenAddress) {
         console.warn(`[Token Service] Токен без адреса контракта, пропущен:`, token);
         return { ...token, priceUSD: null }; // Возвращаем токен без цены
@@ -295,6 +317,7 @@ export const combineTokensWithPrices = (tokensArray, pricesObject) => {
       // console.log(`[Token Service] Цена для токена ${token.symbol} (${tokenAddress}):`, priceInfo);
 
       let priceUSDValue = null;
+
       if (priceInfo && typeof priceInfo === 'object' && priceInfo.priceUSD !== undefined) {
         // Цена пришла в формате { priceUSD: <число> }
         priceUSDValue = priceInfo.priceUSD;
@@ -314,9 +337,9 @@ export const combineTokensWithPrices = (tokensArray, pricesObject) => {
         ...token,
         priceUSD: priceUSDValue // priceUSDValue будет числом или null
       };
+
       // console.log(`[Token Service] Токен после объединения с ценой:`, tokenWithPrice.symbol, tokenWithPrice.priceUSD);
       return tokenWithPrice;
-
     } catch (combineError) {
       console.error(`[Token Service] Ошибка при объединении цены для токена:`, token, combineError);
       return { ...token, priceUSD: null }; // Возвращаем токен без цены в случае ошибки
@@ -328,7 +351,6 @@ export const combineTokensWithPrices = (tokensArray, pricesObject) => {
 };
 
 // === ОСНОВНАЯ ФУНКЦИЯ ОБНОВЛЕНИЯ ===
-
 /**
  * Основная функция обновления токенов и цен.
  * @param {string} accountAddress Адрес кошелька пользователя
@@ -360,6 +382,7 @@ export const updateTokens = async (
     // === ПОЛИТИКА КЭШИРОВАНИЯ И ФОНОВОЕ ОБНОВЛЕНИЕ ===
     let actualCacheDurationMs = CACHE_DURATION_MS;
     console.log(`[Token Service] Используемое значение CACHE_DURATION_MS из appConfig.js: ${actualCacheDurationMs}мс`);
+
     try {
       // Пытаемся получить актуальный интервал обновления из конфигурации
       const updateIntervalMinutes = await getUpdateIntervalMinutes(accountAddress);
@@ -372,14 +395,18 @@ export const updateTokens = async (
     // Проверка возможности фонового обновления
     if (!canPerformBackgroundUpdate(accountAddress, chainIdValue, actualCacheDurationMs)) {
       console.log(`[Token Service] Фоновое обновление отложено для ${accountAddress} в сети ${chainIdValue}.`);
+
       // Получаем закэшированные токены
       const cachedTokens = getCachedTokens(accountAddress, chainIdValue);
+
       if (cachedTokens && cachedTokens.length > 0) {
         console.log(`[Token Service] Возвращены закэшированные данные (${cachedTokens.length} токенов) для ${accountAddress} в сети ${chainIdValue}.`);
+
         if (isMountedRefLocal?.current) {
           if (setTokens) setTokens(cachedTokens);
           if (setLoading) setLoading(false);
         }
+
         return cachedTokens;
       } else {
         console.log(`[Token Service] Нет закэшированных данных для ${accountAddress} в сети ${chainIdValue}, продолжаем обновление.`);
@@ -419,11 +446,13 @@ export const updateTokens = async (
     return formattedTokens;
   } catch (error) {
     console.error(`[Token Service] Ошибка в updateTokens для ${accountAddress} в сети ${chainIdValue}:`, error);
+
     // Устанавливаем состояние ошибки и завершаем загрузку только если компонент смонтирован
     if (isMountedRefLocal?.current) {
       if (setLoading) setLoading(false);
       if (setError) setError(error);
     }
+
     return [];
   }
 };

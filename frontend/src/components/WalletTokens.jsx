@@ -1,13 +1,17 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
+
 // Импортируем конфигурацию сетей
 import { SUPPORTED_CHAINS } from '../config/supportedChains';
+
 // === ИМПОРТЫ СЕРВИСОВ ===
 import { updateTokens } from '../services/tokenService'; // Основной импорт для получения данных
 import { getCachedTokens, canPerformBackgroundUpdate } from '../services/cacheService'; // Импортируем canPerformBackgroundUpdate
+
 // === ИМПОРТЫ ИЗ НОВОГО ФАЙЛА КОНФИГУРАЦИИ ===
 import { getUpdateIntervalMinutes, CACHE_DURATION_MS as DEFAULT_CACHE_DURATION_MS } from '../config/appConfig'; // Импортируем дефолтный CACHE_DURATION_MS
+
 // === КОНЕЦ ИМПОРТОВ ===
 
 // === КОНСТАНТЫ ===
@@ -24,16 +28,19 @@ const WalletTokens = () => {
 
   // === СОСТОЯНИЕ ДЛЯ ИНТЕРВАЛА ===
   const [effectiveUpdateIntervalMinutes, setEffectiveUpdateIntervalMinutes] = useState(5); // Начальное значение
+
   // === СОСТОЯНИЕ ДЛЯ ОБРАТНОГО ОТСЧЕТА ===
   const [timeUntilNextUpdate, setTimeUntilNextUpdate] = useState(0); // В миллисекундах
   const countdownIntervalRef = useRef(null);
   // === КОНЕЦ СОСТОЯНИЯ ДЛЯ ОБРАТНОГО ОТСЧЕТА ===
-  // === КОНЕЦ СОСТОЯНИЯ ===
 
+  // === КОНЕЦ СОСТОЯНИЯ ===
   const intervalRef = useRef(null);
+
   // === useRef ДЛЯ ОТСЛЕЖИВАНИЯ МОНТИРОВАНИЯ ===
   const isMountedRef = useRef(true);
   // === КОНЕЦ useRef ДЛЯ ОТСЛЕЖИВАНИЯ МОНТИРОВАНИЯ ===
+
   const loadedNetworks = useRef(new Set()); // Ref для отслеживания уже загруженных сетей
 
   // === СОСТОЯНИЯ ДЛЯ ФИЛЬТРОВ ОТОБРАЖЕНИЯ ===
@@ -49,7 +56,6 @@ const WalletTokens = () => {
   useEffect(() => {
     console.log("[WalletTokens] Инициализация selectedChains...");
     let initialChains = new Set();
-
     try {
       const savedChainsStr = localStorage.getItem(SELECTED_CHAINS_STORAGE_KEY);
       if (savedChainsStr) {
@@ -72,7 +78,6 @@ const WalletTokens = () => {
 
     setSelectedChains(initialChains);
   }, [chainId]);
-  // --- КОНЕЦ ИНИЦИАЛИЗАЦИИ selectedChains ---
 
   // --- СОХРАНЕНИЕ selectedChains ---
   useEffect(() => {
@@ -85,7 +90,6 @@ const WalletTokens = () => {
       console.warn("[WalletTokens] Не удалось сохранить selectedChains в localStorage:", e);
     }
   }, [selectedChains]);
-  // --- КОНЕЦ СОХРАНЕНИЯ selectedChains ---
 
   // --- УПРАВЛЕНИЕ effectiveUpdateIntervalMinutes и обратным отсчетом ---
   useEffect(() => {
@@ -96,6 +100,7 @@ const WalletTokens = () => {
         console.log(`[WalletTokens] Попытка загрузки интервала обновления для пользователя: ${account}`);
         const intervalMinutes = await getUpdateIntervalMinutes(account);
         console.log(`[WalletTokens] Загружен интервал обновления: ${intervalMinutes} минут`);
+
         if (!isCancelled && isMountedRef.current) {
           setEffectiveUpdateIntervalMinutes(intervalMinutes);
         }
@@ -175,6 +180,7 @@ const WalletTokens = () => {
       }
     };
   }, [account, chainId, effectiveUpdateIntervalMinutes]);
+
   // --- КОНЕЦ УПРАВЛЕНИЯ effectiveUpdateIntervalMinutes и обратным отсчетом ---
 
   // --- ОСНОВНОЙ ЭФФЕКТ ДЛЯ ЗАГРУЗКИ ТОКЕНОВ ОСНОВНОЙ СЕТИ ---
@@ -224,10 +230,10 @@ const WalletTokens = () => {
         }, null, null, chainId, isMountedRef);
 
         loadedNetworks.current.add(chainId);
+
         if (isMountedRef.current) {
           setLoading(false);
         }
-
       } catch (err) {
         console.error("[WalletTokens] Ошибка в initializeTokens для основной сети:", err);
         if (isMountedRef.current) {
@@ -243,6 +249,7 @@ const WalletTokens = () => {
       isMountedRef.current = false;
     };
   }, [account, provider, chainId]);
+
   // --- КОНЕЦ ОСНОВНОГО ЭФФЕКТА ---
 
   // --- ЭФФЕКТ ДЛЯ ЗАГРУЗКИ ТОКЕНОВ ДОПОЛНИТЕЛЬНЫХ СЕТЕЙ ---
@@ -289,7 +296,6 @@ const WalletTokens = () => {
 
           loadedNetworks.current.add(chainIdToLoad);
           console.log(`[WalletTokens] Токены для сети ${chainIdToLoad} успешно загружены`);
-
         } catch (err) {
           console.error(`[WalletTokens] Ошибка при загрузке токенов для сети ${chainIdToLoad}:`, err);
         }
@@ -298,6 +304,7 @@ const WalletTokens = () => {
 
     loadTokensForSelectedChains();
   }, [selectedChains, account, provider, chainId]);
+
   // --- КОНЕЦ ЭФФЕКТА ДОПОЛНИТЕЛЬНЫХ СЕТЕЙ ---
 
   // --- ЭФФЕКТ ДЛЯ УПРАВЛЕНИЯ ИНТЕРВАЛОМ АВТООБНОВЛЕНИЯ ---
@@ -314,6 +321,7 @@ const WalletTokens = () => {
     }
 
     console.log(`[WalletTokens] Установка интервала обновления токенов: ${effectiveUpdateIntervalMinutes} минут`);
+
     const intervalMs = effectiveUpdateIntervalMinutes * 60 * 1000;
     const clampedIntervalMs = Math.max(intervalMs, MIN_UPDATE_INTERVAL_MS);
 
@@ -338,6 +346,7 @@ const WalletTokens = () => {
               });
             }
           }, null, null, chainId, isMountedRef);
+
           // После обновления сбросим счетчик до следующего обновления
           setTimeUntilNextUpdate(clampedIntervalMs);
         } catch (err) {
@@ -356,6 +365,7 @@ const WalletTokens = () => {
       }
     };
   }, [account, provider, chainId, effectiveUpdateIntervalMinutes]); // Зависимость от effectiveUpdateIntervalMinutes
+
   // --- КОНЕЦ ЭФФЕКТА ИНТЕРВАЛА ---
 
   // === ЛОГИКА ФИЛЬТРАЦИИ ТОКЕНОВ ДЛЯ ОТОБРАЖЕНИЯ ===
@@ -428,6 +438,7 @@ const WalletTokens = () => {
         // Проверяем, являются ли цены валидными числами
         const aPriceNum = (typeof aPriceUSD === 'number' && !isNaN(aPriceUSD)) ? aPriceUSD : 0;
         const bPriceNum = (typeof bPriceUSD === 'number' && !isNaN(bPriceUSD)) ? bPriceUSD : 0;
+
         const aValueUSD = aBalanceFormatted * aPriceNum;
         const bValueUSD = bBalanceFormatted * bPriceNum;
 
@@ -463,7 +474,6 @@ const WalletTokens = () => {
 
   const toggleChainSelection = useCallback((chainIdToToggle) => {
     console.log(`[WalletTokens] Переключение выбора сети ${chainIdToToggle}`);
-
     setSelectedChains(prevSelectedChains => {
       const newSelectedChains = new Set(prevSelectedChains);
       if (newSelectedChains.has(chainIdToToggle)) {
@@ -482,6 +492,7 @@ const WalletTokens = () => {
       console.log("[WalletTokens] handleRefresh: Недостаточно данных для обновления", { account, provider, chainId });
       return;
     }
+
     console.log("[WalletTokens] Начинаем обновление токенов для текущей сети...");
 
     // Очищаем список загруженных сетей только для основной сети
@@ -496,7 +507,9 @@ const WalletTokens = () => {
           });
         }
       }, setLoading, setError, chainId, isMountedRef);
+
       loadedNetworks.current.add(chainId);
+
       // Сбросим счетчик после ручного обновления
       const intervalMs = effectiveUpdateIntervalMinutes * 60 * 1000;
       const clampedIntervalMs = Math.max(intervalMs, MIN_UPDATE_INTERVAL_MS);
@@ -523,6 +536,7 @@ const WalletTokens = () => {
     if (address && tokenChainId) {
       const networkConfig = SUPPORTED_CHAINS[tokenChainId];
       const explorerUrl = networkConfig?.explorerUrl;
+
       if (explorerUrl) {
         let url = '';
         if (address === '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' ||
@@ -615,7 +629,6 @@ const WalletTokens = () => {
 
         // Получаем значение priceUSD из токена
         const rawPriceUSD = token.priceUSD;
-        // console.log(`[WalletTokens] Токен ${displaySymbol} (${tokenAddress}), raw priceUSD:`, rawPriceUSD, typeof rawPriceUSD); // Отладочный лог
 
         // Проверяем, является ли значение числом (и не NaN)
         if (typeof rawPriceUSD === 'number' && !isNaN(rawPriceUSD)) {
@@ -638,7 +651,6 @@ const WalletTokens = () => {
           }
         } else {
           // Если цена некорректна, отображаем N/A
-          // console.log(`[WalletTokens] Цена недоступна для токена ${displaySymbol} (${tokenAddress}), raw: ${rawPriceUSD}`); // Отладочный лог
           priceFormatted = 'N/A';
           totalValueFormatted = 'N/A';
         }
@@ -663,7 +675,9 @@ const WalletTokens = () => {
             <td className="px-6 py-4 whitespace-nowrap">
               <div className="text-sm">{chainName}</div>
               <div className="text-xs text-gray-400">
-                {tokenAddress === '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' ? 'Нативный' : tokenAddress.substring(0, 6) + '...' + tokenAddress.substring(tokenAddress.length - 4)}
+                {tokenAddress === '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' ||
+                  tokenAddress === '0x0000000000000000000000000000000000000000' ? 'Нативный' :
+                  tokenAddress.substring(0, 6) + '...' + tokenAddress.substring(tokenAddress.length - 4)}
               </div>
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
@@ -713,9 +727,11 @@ const WalletTokens = () => {
   // === ФОРМАТИРОВАНИЕ ВРЕМЕНИ ОБРАТНОГО ОТСЧЕТА ===
   const formatTimeLeft = (milliseconds) => {
     if (milliseconds <= 0) return 'Скоро';
+
     const totalSeconds = Math.floor(milliseconds / 1000);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
+
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
   // === КОНЕЦ ФОРМАТИРОВАНИЯ ===
@@ -723,7 +739,6 @@ const WalletTokens = () => {
   return (
     <div className="min-h-screen py-8 px-4 bg-gradient-to-br from-gray-900 to-indigo-900 text-white">
       <div className="container mx-auto max-w-6xl">
-
         {/* === 1. БЛОК КОШЕЛЬКА === */}
         <div className="mb-6 p-6 bg-gray-800 bg-opacity-50 border border-gray-700 rounded-xl shadow-lg">
           <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
@@ -777,7 +792,6 @@ const WalletTokens = () => {
         <div className="mb-6 p-6 bg-gray-800 bg-opacity-50 border border-gray-700 rounded-xl shadow-lg">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold">Фильтр сетей</h2>
-            {/* Кнопка скрыта по предыдущему запросу */}
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -797,15 +811,16 @@ const WalletTokens = () => {
                   key={id}
                   onClick={() => toggleChainSelection(chainIdNum)}
                   className={`p-4 rounded-xl border-2 transition-all duration-200 relative ${isSelected
-                      ? 'bg-indigo-900 bg-opacity-70 border-indigo-500 text-white shadow-lg shadow-indigo-500/20'
-                      : isCurrent
-                        ? 'bg-gray-700 border-gray-500 text-gray-200 hover:border-indigo-400'
-                        : 'bg-gray-800 bg-opacity-50 border-gray-600 text-gray-400 hover:border-gray-400'
+                    ? 'bg-indigo-900 bg-opacity-70 border-indigo-500 text-white shadow-lg shadow-indigo-500/20'
+                    : isCurrent
+                      ? 'bg-gray-700 border-gray-500 text-gray-200 hover:border-indigo-400'
+                      : 'bg-gray-800 bg-opacity-50 border-gray-600 text-gray-400 hover:border-gray-400'
                     }`}
                 >
                   <div className="text-sm font-bold truncate">{chainData.shortName.toUpperCase()}</div>
                   <div className="text-xs mt-1 truncate">{chainData.name}</div>
                   <div className="text-xs mt-1 text-gray-400">{chainIdNum}</div> {/* Отображение chainId */}
+
                   {isSelected && (
                     <div className="absolute top-1 right-1 w-3 h-3 bg-green-400 rounded-full border border-gray-800"></div>
                   )}
@@ -818,12 +833,13 @@ const WalletTokens = () => {
                 </button>
               );
             })}
+
             {/* Добавляем последнюю кнопку для скрытия/показа неактивных сетей */}
             <button
               onClick={toggleInactiveNetworksVisibility}
               className={`p-4 rounded-xl border-2 transition-all duration-200 ${showInactiveNetworks
-                  ? 'bg-gray-700 border-gray-500 text-gray-300 hover:bg-gray-600'
-                  : 'bg-gray-800 bg-opacity-50 border-gray-600 text-gray-400 hover:border-gray-400'
+                ? 'bg-gray-700 border-gray-500 text-gray-300 hover:bg-gray-600'
+                : 'bg-gray-800 bg-opacity-50 border-gray-600 text-gray-400 hover:border-gray-400'
                 }`}
             >
               <div className="text-sm font-bold text-center">
@@ -843,12 +859,13 @@ const WalletTokens = () => {
         {/* === 3. БЛОК ФИЛЬТРОВ ТОКЕНОВ === */}
         <div className="mb-6 p-6 bg-gray-800 bg-opacity-50 border border-gray-700 rounded-xl shadow-lg">
           <h2 className="text-xl font-bold mb-4">Фильтры токенов</h2>
+
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={toggleZeroBalanceFilter}
               className={`px-4 py-2 text-sm rounded-full transition ${showZeroBalance
-                  ? 'bg-red-600 hover:bg-red-700 text-white'
-                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                ? 'bg-red-600 hover:bg-red-700 text-white'
+                : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
                 }`}
             >
               {showZeroBalance ? 'Скрыть нулевые балансы' : 'Показывать нулевые'}
@@ -857,8 +874,8 @@ const WalletTokens = () => {
             <button
               onClick={toggleLowValueFilter}
               className={`px-4 py-2 text-sm rounded-full transition ${showLowValue
-                  ? 'bg-red-600 hover:bg-red-700 text-white'
-                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                ? 'bg-red-600 hover:bg-red-700 text-white'
+                : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
                 }`}
             >
               {showLowValue ? `Скрыть < $${MIN_TOKEN_VALUE_USD.toFixed(2)}` : `Показывать < $${MIN_TOKEN_VALUE_USD.toFixed(2)}`}
@@ -890,7 +907,6 @@ const WalletTokens = () => {
             </table>
           </div>
         </div>
-
       </div>
     </div>
   );
