@@ -114,7 +114,8 @@ exports.handler = async (event, context) => {
       
       // Получаем последнюю конфигурацию из базы данных
       console.log("[getConfigReadOnly] Выполнение SQL-запроса для получения последней конфигурации");
-      const query = 'SELECT config FROM app_config ORDER BY created_at DESC LIMIT 1';
+      // ИСПРАВЛЕНО: Используем правильное имя столбца 'updated_at' вместо 'created_at'
+      const query = 'SELECT config FROM app_config ORDER BY updated_at DESC LIMIT 1';
       const result = await client.query(query);
       console.log(`[getConfigReadOnly] SQL-запрос выполнен, получено строк: ${result.rows.length}`);
       

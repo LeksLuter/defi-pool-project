@@ -1,3 +1,4 @@
+// netlify/functions/getConfig.js
 import { getClient, DEFAULT_APP_CONFIG } from './utils/db.js';
 
 exports.handler = async (event, context) => {
@@ -5,7 +6,7 @@ exports.handler = async (event, context) => {
   try {
     console.log("=== Get Config Function Called (Admin Read) ===");
     console.log("Event received:", JSON.stringify(event, null, 2));
-
+    
     if (event.httpMethod !== 'GET') {
       console.warn(`[getConfig] Неверный метод HTTP: ${event.httpMethod}`);
       return {
@@ -17,18 +18,18 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({ error: 'Метод не разрешен' }),
       };
     }
-
+    
     let adminAddress = null;
     const headers = event.headers || {};
     const multiValueHeaders = event.multiValueHeaders || {};
-
+    
     for (const key in headers) {
       if (key === 'X-Admin-Address') {
         adminAddress = headers[key];
         break;
       }
     }
-
+    
     if (!adminAddress) {
       for (const key in multiValueHeaders) {
         if (key === 'X-Admin-Address' && Array.isArray(multiValueHeaders[key]) && multiValueHeaders[key].length > 0) {
@@ -37,9 +38,9 @@ exports.handler = async (event, context) => {
         }
       }
     }
-
+    
     console.log(`[getConfig] Извлеченный adminAddress: '${adminAddress}'`);
-
+    
     if (!adminAddress || adminAddress.trim() === '') {
       console.warn("[getConfig] Заголовок X-Admin-Address не предоставлен или пуст");
       return {
@@ -51,10 +52,10 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({ error: 'Заголовок X-Admin-Address обязателен и не должен быть пустым' }),
       };
     }
-
+    
     const normalizedAdminAddress = adminAddress.trim().toLowerCase();
     console.log(`[getConfig] Нормализованный adminAddress: '${normalizedAdminAddress}'`);
-
+    
     if (!/^0x[a-fA-F0-9]{40}$/.test(normalizedAdminAddress)) {
       console.warn(`[getConfig] Неверный формат адреса Ethereum: ${normalizedAdminAddress}`);
       return {
@@ -66,9 +67,8 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({ error: 'Неверный формат адреса Ethereum в заголовке X-Admin-Address' }),
       };
     }
-
+    
     client = await getClient(false);
-
     try {
       // Проверка существования таблицы admins
       console.log("[getConfig] Проверка существования таблицы admins...");
@@ -82,7 +82,7 @@ exports.handler = async (event, context) => {
       const checkAdminsResult = await client.query(checkAdminsTableQuery);
       const adminsTableExists = checkAdminsResult.rows[0].table_exists;
       console.log(`[getConfig] Существует ли таблица admins: ${adminsTableExists}`);
-
+      
       if (!adminsTableExists) {
         console.error("[getConfig] Таблица admins не найдена в базе данных!");
         return {
@@ -94,7 +94,7 @@ exports.handler = async (event, context) => {
           body: JSON.stringify({ error: 'Таблица администраторов не найдена в базе данных.' }),
         };
       }
-
+      
       // Проверка существования таблицы app_config
       console.log("[getConfig] Проверка существования таблицы app_config...");
       const checkAppConfigTableQuery = `
@@ -107,7 +107,7 @@ exports.handler = async (event, context) => {
       const checkAppConfigResult = await client.query(checkAppConfigTableQuery);
       const appConfigTableExists = checkAppConfigResult.rows[0].table_exists;
       console.log(`[getConfig] Существует ли таблица app_config: ${appConfigTableExists}`);
-
+      
       if (!appConfigTableExists) {
         console.error("[getConfig] Таблица app_config не найдена в базе данных!");
         return {
@@ -119,13 +119,13 @@ exports.handler = async (event, context) => {
           body: JSON.stringify({ error: 'Таблица конфигурации приложения не найдена в базе данных.' }),
         };
       }
-
+      
       // Выполняем проверку прав администратора
       console.log(`[getConfig] Выполнение проверки прав администратора для адреса ${normalizedAdminAddress}`);
       const adminCheckQuery = 'SELECT 1 FROM admins WHERE address = $1';
       const adminCheckResult = await client.query(adminCheckQuery, [normalizedAdminAddress]);
       console.log(`[getConfig] Результат проверки администратора: найдено записей ${adminCheckResult.rows.length}`);
-
+      
       if (adminCheckResult.rows.length === 0) {
         console.warn(`[getConfig] Адрес ${normalizedAdminAddress} не найден в списке администраторов`);
         return {
@@ -153,16 +153,16 @@ exports.handler = async (event, context) => {
         console.log("[getConfig] Клиент БД закрыт после проверки прав администратора");
       }
     }
-
+    
     client = await getClient(false);
-
     try {
       // Получаем последнюю конфигурацию из базы данных
       console.log("[getConfig] Выполнение SQL-запроса для получения последней конфигурации");
-      const query = 'SELECT config FROM app_config ORDER BY id DESC LIMIT 1';
+      // ИСПРАВЛЕНО: Используем правильное имя столбца 'updated_at' вместо 'created_at'
+      const query = 'SELECT config FROM app_config ORDER BY updated_at DESC LIMIT 1';
       const result = await client.query(query);
       console.log(`[getConfig] SQL-запрос выполнен, получено строк: ${result.rows.length}`);
-
+      
       if (result.rows.length > 0) {
         const configData = result.rows[0].config;
         if (configData === null) {

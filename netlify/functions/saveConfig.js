@@ -1,10 +1,11 @@
+// netlify/functions/saveConfig.js
 import { getClient } from './utils/db.js';
 
 exports.handler = async (event, context) => {
   try {
     console.log("=== Save Config Function Called ===");
     console.log("Event received:", JSON.stringify(event, null, 2));
-
+    
     if (event.httpMethod !== 'GET') {
       return {
         statusCode: 405,
@@ -15,18 +16,18 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({ error: 'Метод не разрешен' }),
       };
     }
-
+    
     let adminAddress = null;
     const headers = event.headers || {};
     const multiValueHeaders = event.multiValueHeaders || {};
-
+    
     for (const key in headers) {
       if (key === 'X-Admin-Address') {
         adminAddress = headers[key];
         break;
       }
     }
-
+    
     if (!adminAddress) {
       for (const key in multiValueHeaders) {
         if (key === 'X-Admin-Address' && Array.isArray(multiValueHeaders[key]) && multiValueHeaders[key].length > 0) {
@@ -35,7 +36,7 @@ exports.handler = async (event, context) => {
         }
       }
     }
-
+    
     if (!adminAddress) {
       console.warn("[saveConfig] Заголовок X-Admin-Address не предоставлен");
       return {
@@ -47,9 +48,9 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({ error: 'Требуется заголовок X-Admin-Address' }),
       };
     }
-
+    
     console.log(`[saveConfig] Сохранение конфигурации от администратора: ${adminAddress}`);
-
+    
     const configJson = event.queryStringParameters?.config;
     if (!configJson) {
       console.error("[saveConfig] Параметр config не найден в query string");
@@ -62,7 +63,7 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({ error: 'Параметр config обязателен в query string' }),
       };
     }
-
+    
     let configData;
     try {
       configData = JSON.parse(decodeURIComponent(configJson));
@@ -77,9 +78,9 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({ error: 'Неверный формат JSON в параметре config query string' }),
       };
     }
-
+    
     console.log("[saveConfig] Полученные данные конфигурации:", configData);
-
+    
     const normalizedAdminAddress = adminAddress.trim().toLowerCase();
     if (!/^0x[a-fA-F0-9]{40}$/.test(normalizedAdminAddress)) {
       console.warn(`[saveConfig] Неверный формат адреса Ethereum: ${normalizedAdminAddress}`);
@@ -92,9 +93,8 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({ error: 'Неверный формат адреса Ethereum в заголовке X-Admin-Address' }),
       };
     }
-
+    
     const client = await getClient(false);
-
     try {
       // Проверка существования таблицы admins
       console.log("[saveConfig] Проверка существования таблицы admins...");
@@ -108,7 +108,7 @@ exports.handler = async (event, context) => {
       const checkAdminsResult = await client.query(checkAdminsTableQuery);
       const adminsTableExists = checkAdminsResult.rows[0].table_exists;
       console.log(`[saveConfig] Существует ли таблица admins: ${adminsTableExists}`);
-
+      
       if (!adminsTableExists) {
         console.error("[saveConfig] Таблица admins не найдена в базе данных!");
         return {
@@ -120,7 +120,7 @@ exports.handler = async (event, context) => {
           body: JSON.stringify({ error: 'Таблица администраторов не найдена в базе данных.' }),
         };
       }
-
+      
       // Проверка существования таблицы app_config
       console.log("[saveConfig] Проверка существования таблицы app_config...");
       const checkAppConfigTableQuery = `
@@ -133,7 +133,7 @@ exports.handler = async (event, context) => {
       const checkAppConfigResult = await client.query(checkAppConfigTableQuery);
       const appConfigTableExists = checkAppConfigResult.rows[0].table_exists;
       console.log(`[saveConfig] Существует ли таблица app_config: ${appConfigTableExists}`);
-
+      
       if (!appConfigTableExists) {
         console.error("[saveConfig] Таблица app_config не найдена в базе данных!");
         return {
@@ -145,13 +145,13 @@ exports.handler = async (event, context) => {
           body: JSON.stringify({ error: 'Таблица конфигурации приложения не найдена в базе данных.' }),
         };
       }
-
+      
       // Проверка, является ли адрес администратором
       console.log(`[saveConfig] Выполнение проверки прав администратора для адреса ${normalizedAdminAddress}`);
       const adminQuery = 'SELECT 1 FROM admins WHERE address = $1';
       const adminResult = await client.query(adminQuery, [normalizedAdminAddress]);
       console.log(`[saveConfig] Проверка прав администратора выполнена, найдено записей: ${adminResult.rows.length}`);
-
+      
       if (adminResult.rows.length === 0) {
         console.warn(`[saveConfig] Адрес ${normalizedAdminAddress} не найден в списке администраторов`);
         return {
@@ -163,7 +163,7 @@ exports.handler = async (event, context) => {
           body: JSON.stringify({ error: 'Доступ запрещен. Адрес не является администратором.', address: normalizedAdminAddress }),
         };
       }
-
+      
       // Вставка или обновление конфигурации в базе данных
       console.log(`[saveConfig] Выполнение UPSERT конфигурации для адреса ${normalizedAdminAddress}`);
       const upsertQuery = `
@@ -176,7 +176,7 @@ exports.handler = async (event, context) => {
       const upsertResult = await client.query(upsertQuery, [configData]);
       const insertedId = upsertResult.rows[0].id;
       console.log(`[saveConfig] Конфигурация успешно сохранена с ID: ${insertedId}`);
-
+      
       return {
         statusCode: 200,
         headers: {
