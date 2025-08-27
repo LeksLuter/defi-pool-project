@@ -1,3 +1,4 @@
+// frontend/src/components/WalletTokens.jsx
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
@@ -14,6 +15,7 @@ const MIN_TOKEN_VALUE_USD = 0.1;
 const MIN_UPDATE_INTERVAL_MS = 30000; // 30 секунд
 const SELECTED_CHAINS_STORAGE_KEY = 'defiPool_selectedChains'; // Ключ для localStorage
 // === КОНЕЦ КОНСТАНТ ===
+
 const WalletTokens = () => {
   const { provider, account, signer, chainId, switchNetwork } = useWeb3();
   const [tokens, setTokens] = useState([]); // Содержит все токены

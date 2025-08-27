@@ -37,7 +37,7 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({ error: 'Метод не разрешен' }),
       };
     }
-
+    
     // Получаем заголовок X-User-Address (только для readonly)
     let userAddress = null;
     const headers = event.headers || {};
@@ -62,7 +62,7 @@ exports.handler = async (event, context) => {
     }
     
     console.log(`[getConfigReadOnly] Запрос конфигурации пользователем: ${userAddress || 'Не указан'}`);
-
+    
     // Проверяем переменные окружения
     if (!process.env.NEON_DATABASE_URL) {
       console.error("[getConfigReadOnly] NEON_DATABASE_URL не задан в переменных окружения");
@@ -75,17 +75,17 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({ error: 'Ошибка конфигурации сервера: база данных не настроена' }),
       };
     }
-
+    
     // Используем подключение только для чтения
     client = new Client({
       connectionString: process.env.NEON_DATABASE_URL,
       ssl: { rejectUnauthorized: false }
     });
-
+    
     try {
       await client.connect();
       console.log("[getConfigReadOnly] Подключение к БД установлено");
-
+      
       // Проверяем существование таблицы app_config
       console.log("[getConfigReadOnly] Проверка существования таблицы app_config...");
       const checkTableQuery = `
@@ -99,7 +99,7 @@ exports.handler = async (event, context) => {
       const checkTableResult = await client.query(checkTableQuery);
       const tableExists = checkTableResult.rows[0].table_exists;
       console.log(`[getConfigReadOnly] Существует ли таблица app_config: ${tableExists}`);
-
+      
       if (!tableExists) {
         console.warn("[getConfigReadOnly] Таблица app_config не найдена в базе данных!");
         return {
@@ -111,13 +111,13 @@ exports.handler = async (event, context) => {
           body: JSON.stringify(DEFAULT_APP_CONFIG),
         };
       }
-
+      
       // Получаем последнюю конфигурацию из базы данных
       console.log("[getConfigReadOnly] Выполнение SQL-запроса для получения последней конфигурации");
       const query = 'SELECT config FROM app_config ORDER BY created_at DESC LIMIT 1';
       const result = await client.query(query);
       console.log(`[getConfigReadOnly] SQL-запрос выполнен, получено строк: ${result.rows.length}`);
-
+      
       if (result.rows.length > 0) {
         const configData = result.rows[0].config;
         
