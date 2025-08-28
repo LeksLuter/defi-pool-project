@@ -11,7 +11,7 @@ import { getTokenServicesConfig, getUpdateIntervalMinutes } from '../config/appC
 // Импортируем модули сервисов целиком
 import * as etherscanV2Service from './etherscanV2Service';
 import * as alchemyService from './alchemyService';
-import * as defillamaService from './defillamaService'; // Правильный регистр
+import * as defillamaService from './defillamaService';
 import * as coingeckoService from './coingeckoService';
 import * as coinmarketcapService from './coinmarketcapService';
 // Импортируем агрегатор цен
