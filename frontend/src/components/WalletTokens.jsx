@@ -673,12 +673,12 @@ const WalletTokens = () => {
         const tokenAddress = token.contractAddress || '0x0000...';
         const tokenChainId = token.chainId;
 
-        let balanceFormatted = '0.0000';
+        let balanceFormatted = '0.00000000';
         try {
-          balanceFormatted = parseFloat(ethers.utils.formatUnits(token.balance, token.decimals)).toFixed(4);
+          balanceFormatted = parseFloat(ethers.utils.formatUnits(token.balance, token.decimals)).toFixed(8);
         } catch (err) {
           console.error(`[WalletTokens] Ошибка при форматировании баланса для токена ${displaySymbol}:`, err);
-          balanceFormatted = '0.0000';
+          balanceFormatted = '0.00000000';
         }
 
         // === ИСПРАВЛЕНИЕ 2: Улучшенное и упрощенное отображение цены ===

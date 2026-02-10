@@ -52,7 +52,7 @@ const AddLiquidityModal = ({ pool, onClose }) => {
         {/* Заголовок модального окна */}
         <div className="px-6 py-4 border-b border-gray-700 flex justify-between items-center bg-gray-800/50">
           <h3 className="text-lg font-bold text-cyan-400">
-            Добавить ликвидность в пул <span className="text-white">{pool.token0}/{pool.token1}</span>
+            Добавить ликвидность в пул <span className="text-white" title={`${pool.token0Address}/${pool.token1Address}`}>{pool.token0}/{pool.token1}</span>
           </h3>
           <button
             onClick={onClose}

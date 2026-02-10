@@ -7,6 +7,7 @@ import CreatePoolModal from './CreatePoolModal';
 import { ethers } from 'ethers';
 import PoolFactoryABI from '../abi/PoolFactory.json';
 import LiquidityPoolABI from '../abi/LiquidityPool.json';
+import ERC20ABI from '../abi/ERC20.json';
 
 const PoolList = () => {
   const { provider, account } = useWeb3();
@@ -20,6 +21,32 @@ const PoolList = () => {
 
   // Используем переменную окружения для адреса фабрики
   const FACTORY_ADDRESS = import.meta.env.VITE_FACTORY_ADDRESS;
+
+  // Функция для получения символа токена
+  const getTokenSymbol = async (tokenAddress) => {
+    try {
+      if (!provider) return null;
+      
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        ERC20ABI.abi,
+        provider
+      );
+      
+      let symbol;
+      try {
+        symbol = await tokenContract.symbol();
+      } catch (error) {
+        // Если символ недоступен, используем часть адреса
+        symbol = tokenAddress.substring(0, 6) + '...' + tokenAddress.substring(tokenAddress.length - 4);
+      }
+      
+      return symbol;
+    } catch (error) {
+      console.error("Ошибка при получении символа токена:", tokenAddress, error);
+      return tokenAddress.substring(0, 6) + '...' + tokenAddress.substring(tokenAddress.length - 4);
+    }
+  };
 
   const fetchPools = async () => {
     if (!provider || !FACTORY_ADDRESS || FACTORY_ADDRESS === 'Не задан') {
@@ -42,7 +69,7 @@ const PoolList = () => {
 
       // Получаем адреса всех пулов
       const poolAddresses = await factory.getPools();
-      
+
       // Получаем информацию о каждом пуле
       const poolPromises = poolAddresses.map(async (address) => {
         try {
@@ -51,18 +78,23 @@ const PoolList = () => {
             LiquidityPoolABI.abi,
             provider
           );
-          
+
           // Получаем данные из контракта пула
           const token0 = await poolContract.token0();
           const token1 = await poolContract.token1();
           const feeRate = await poolContract.feeRate();
-          
-          // Для простоты используем адреса, в реальном приложении можно получить символы
+
+          // Получаем символы токенов
+          const token0Symbol = await getTokenSymbol(token0);
+          const token1Symbol = await getTokenSymbol(token1);
+
           return {
             id: address,
             address: address,
-            token0: token0.substring(0, 6) + '...' + token0.substring(token0.length - 4),
-            token1: token1.substring(0, 6) + '...' + token1.substring(token1.length - 4),
+            token0: token0Symbol,
+            token1: token1Symbol,
+            token0Address: token0, // Сохраняем адреса для возможного использования
+            token1Address: token1,
             fee: `${ethers.utils.formatUnits(feeRate, 2)}%`,
           };
         } catch (poolError) {
@@ -148,7 +180,9 @@ const PoolList = () => {
                 <div className="p-5">
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="text-xl font-bold text-white">{pool.token0}/{pool.token1}</h3>
+                      <h3 className="text-xl font-bold text-white" title={`${pool.token0Address} / ${pool.token1Address}`}>
+                        {pool.token0}/{pool.token1}
+                      </h3>
                       <p className="text-cyan-400 font-medium">{pool.fee} комиссия</p>
                     </div>
                   </div>

@@ -1,12 +1,125 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useWeb3 } from '../context/Web3Context';
+import { ethers } from 'ethers';
+import PoolFactoryABI from '../abi/PoolFactory.json';
+import LiquidityPoolABI from '../abi/LiquidityPool.json';
+import ERC20ABI from '../abi/ERC20.json';
 
 const SwapPage = () => {
-  const { signer, account } = useWeb3();
-  const [fromToken, setFromToken] = useState('TokenA');
-  const [toToken, setToToken] = useState('TokenB');
+  const { provider, signer, account } = useWeb3();
+  const [fromToken, setFromToken] = useState('');
+  const [toToken, setToToken] = useState('');
   const [amount, setAmount] = useState('');
   const [estimatedAmount, setEstimatedAmount] = useState('0.0');
+  const [pools, setPools] = useState([]);
+  const [tokens, setTokens] = useState([]);
+
+  // Используем переменную окружения для адреса фабрики
+  const FACTORY_ADDRESS = import.meta.env.VITE_FACTORY_ADDRESS;
+
+  // Функция для получения символа токена
+  const getTokenSymbol = async (tokenAddress) => {
+    try {
+      if (!provider) return null;
+      
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        ERC20ABI.abi,
+        provider
+      );
+      
+      let symbol;
+      try {
+        symbol = await tokenContract.symbol();
+      } catch (error) {
+        // Если символ недоступен, используем часть адреса
+        symbol = tokenAddress.substring(0, 6) + '...' + tokenAddress.substring(tokenAddress.length - 4);
+      }
+      
+      return symbol;
+    } catch (error) {
+      console.error("Ошибка при получении символа токена:", tokenAddress, error);
+      return tokenAddress.substring(0, 6) + '...' + tokenAddress.substring(tokenAddress.length - 4);
+    }
+  };
+
+  // Загрузка пулов и токенов при монтировании компонента
+  useEffect(() => {
+    const fetchPoolsAndTokens = async () => {
+      if (!provider || !FACTORY_ADDRESS || FACTORY_ADDRESS === 'Не задан') {
+        return;
+      }
+
+      try {
+        const factory = new ethers.Contract(
+          FACTORY_ADDRESS,
+          PoolFactoryABI.abi,
+          provider
+        );
+
+        // Получаем адреса всех пулов
+        const poolAddresses = await factory.getPools();
+
+        // Получаем информацию о каждом пуле
+        const allTokensSet = new Set(); // Используем Set для уникальности токенов
+        
+        const poolPromises = poolAddresses.map(async (address) => {
+          try {
+            const poolContract = new ethers.Contract(
+              address,
+              LiquidityPoolABI.abi,
+              provider
+            );
+
+            // Получаем данные из контракта пула
+            const token0 = await poolContract.token0();
+            const token1 = await poolContract.token1();
+            
+            // Добавляем токены в Set
+            allTokensSet.add(token0);
+            allTokensSet.add(token1);
+
+            return {
+              address,
+              token0,
+              token1
+            };
+          } catch (poolError) {
+            console.error("Ошибка при получении данных пула:", address, poolError);
+            return null;
+          }
+        });
+
+        const poolsData = (await Promise.all(poolPromises)).filter(pool => pool !== null);
+        setPools(poolsData);
+
+        // Преобразуем Set в массив и получаем символы токенов
+        const uniqueTokens = Array.from(allTokensSet);
+        const tokenSymbols = await Promise.all(uniqueTokens.map(async (tokenAddress) => {
+          const symbol = await getTokenSymbol(tokenAddress);
+          return { address: tokenAddress, symbol };
+        }));
+
+        setTokens(tokenSymbols);
+        
+        // Устанавливаем первые два токена как значения по умолчанию, если они есть
+        if (tokenSymbols.length >= 2) {
+          setFromToken(tokenSymbols[0].symbol);
+          setToToken(tokenSymbols[1].symbol);
+        }
+      } catch (err) {
+        console.error("Ошибка при загрузке пулов и токенов:", err);
+      }
+    };
+
+    fetchPoolsAndTokens();
+  }, [provider, FACTORY_ADDRESS]);
+
+  // Функция для получения адреса токена по символу
+  const getTokenAddressBySymbol = (symbol) => {
+    const token = tokens.find(t => t.symbol === symbol);
+    return token ? token.address : '';
+  };
 
   // Функция для расчета примерного выходного количества (заглушка)
   const calculateEstimatedAmount = (inputAmount, from, to) => {
@@ -30,10 +143,17 @@ const SwapPage = () => {
       alert("Введите корректную сумму");
       return;
     }
+    
+    // Получаем адреса токенов
+    const fromTokenAddress = getTokenAddressBySymbol(fromToken);
+    const toTokenAddress = getTokenAddressBySymbol(toToken);
+    
     // Здесь будет логика обмена токенов
     console.log("Обмен токенов:", {
       fromToken,
       toToken,
+      fromTokenAddress,
+      toTokenAddress,
       amount
     });
     alert("Функция обмена токенов будет реализована");
@@ -68,9 +188,11 @@ const SwapPage = () => {
                   onChange={(e) => setFromToken(e.target.value)}
                   className="w-1/3 px-3 py-3 bg-transparent text-white focus:outline-none"
                 >
-                  <option className="bg-gray-800" value="TokenA">TokenA</option>
-                  <option className="bg-gray-800" value="TokenB">TokenB</option>
-                  <option className="bg-gray-800" value="TokenC">TokenC</option>
+                  {tokens.map((token, index) => (
+                    <option key={index} className="bg-gray-800" value={token.symbol}>
+                      {token.symbol}
+                    </option>
+                  ))}
                 </select>
                 <input
                   type="number"
@@ -109,9 +231,11 @@ const SwapPage = () => {
                   onChange={(e) => setToToken(e.target.value)}
                   className="w-1/3 px-3 py-3 bg-transparent text-white focus:outline-none"
                 >
-                  <option className="bg-gray-800" value="TokenA">TokenA</option>
-                  <option className="bg-gray-800" value="TokenB">TokenB</option>
-                  <option className="bg-gray-800" value="TokenC">TokenC</option>
+                  {tokens.map((token, index) => (
+                    <option key={index} className="bg-gray-800" value={token.symbol}>
+                      {token.symbol}
+                    </option>
+                  ))}
                 </select>
                 <input
                   type="text"
