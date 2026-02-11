@@ -18,7 +18,7 @@ const DEFAULT_RETRY_DELAY_MS = 1000;
  * @param {string} apiKey API ключ (если требуется)
  * @param {string} coingeckoId ID токена на CoinGecko (если известен)
  * @param {string} cmcId ID токена на CoinMarketCap (если известен)
- * @returns {Promise<number>} Цена токена в USD или 0, если не удалось получить
+ * @returns {Promise<{price: number, source: string}>} Объект с ценой токена в USD и источником или {price: 0, source: null}, если не удалось получить
  */
 export const fetchTokenPriceWithFallback = async (contractAddress, chainId, apiKey, coingeckoId, cmcId) => {
   try {
@@ -69,6 +69,9 @@ export const fetchTokenPriceWithFallback = async (contractAddress, chainId, apiK
               if (effectiveCoingeckoId) {
                 servicePrice = await coingeckoService.fetchTokenPrice(effectiveCoingeckoId, apiKey);
                 console.log(`[Price Aggregator] Запрошена цена у CoinGecko для токена ${contractAddress} с ID ${effectiveCoingeckoId}: ${servicePrice}`);
+                
+                // Возвращаем цену и указываем, что источник - CoinGecko
+                return { price: servicePrice, source: 'CoinGecko' };
               } else {
                 console.warn(`[Price Aggregator] Не удалось получить CoinGecko ID для токена ${contractAddress} в сети ${chainId}`);
               }
@@ -99,7 +102,7 @@ export const fetchTokenPriceWithFallback = async (contractAddress, chainId, apiK
           isFinite(servicePrice) &&
           servicePrice > 0) {
           console.log(`[Price Aggregator] Цена для токена ${contractAddress} получена через ${serviceName}: $${servicePrice}`);
-          return servicePrice;
+          return { price: servicePrice, source: serviceName }; // Возвращаем объект с ценой и источником
         } else {
           console.log(`[Price Aggregator] Сервис ${serviceName} не вернул корректную цену для токена ${contractAddress}. Получено: ${servicePrice} (тип: ${typeof servicePrice})`);
         }
@@ -109,20 +112,69 @@ export const fetchTokenPriceWithFallback = async (contractAddress, chainId, apiK
       }
     }
 
+    // Если ни один из сервисов не вернул цену, пробуем получить цену для нативного токена
+    // Это может быть полезно для токенов с адресом 0x0000000000000000000000000000000000000000
+    if (contractAddress === '0x0000000000000000000000000000000000000000' || 
+        contractAddress === '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE') {
+      
+      // Пытаемся получить цену нативного токена для данной сети
+      const nativeTokenPriceResult = await getNativeTokenPrice(chainId);
+      if (nativeTokenPriceResult && typeof nativeTokenPriceResult.price === 'number' && nativeTokenPriceResult.price > 0) {
+        console.log(`[Price Aggregator] Цена нативного токена для сети ${chainId} получена: $${nativeTokenPriceResult.price}`);
+        return nativeTokenPriceResult; // Возвращаем объект с ценой и источником
+      }
+    }
+
     // Если ни один из сервисов не вернул цену
     console.warn(`[Price Aggregator] Не удалось получить цену для токена ${contractAddress} ни через один из сервисов`);
-    return 0; // Возвращаем 0, если цена не найдена
+    return { price: 0, source: null }; // Возвращаем объект с нулевой ценой и null источником
   } catch (error) {
     console.error(`[Price Aggregator] Критическая ошибка при получении цены для токена ${contractAddress}:`, error);
-    // Возвращаем 0 в случае критической ошибки
-    return 0;
+    // Возвращаем объект с нулевой ценой и null источником в случае критической ошибки
+    return { price: 0, source: null };
+  }
+};
+
+/**
+ * Получает цену нативного токена для указанной сети
+ * @param {number} chainId ID сети
+ * @returns {Promise<{price: number, source: string}>} Объект с ценой нативного токена в USD и источником или {price: 0, source: null}, если не удалось получить
+ */
+const getNativeTokenPrice = async (chainId) => {
+  try {
+    console.log(`[Price Aggregator] Попытка получения цены нативного токена для сети ${chainId}`);
+
+    // Импортируем конфигурацию поддерживаемых сетей
+    const { SUPPORTED_CHAINS } = await import('../config/supportedChains');
+    const chainConfig = SUPPORTED_CHAINS[chainId];
+
+    if (!chainConfig || !chainConfig.nativeTokenCoinGeckoId) {
+      console.warn(`[Price Aggregator] Нет конфигурации CoinGecko для нативного токена сети ${chainId}`);
+      return { price: 0, source: null };
+    }
+
+    const nativeTokenId = chainConfig.nativeTokenCoinGeckoId;
+    console.log(`[Price Aggregator] Используем CoinGecko ID для нативного токена: ${nativeTokenId}`);
+
+    // Получаем цену через CoinGecko
+    const price = await coingeckoService.fetchTokenPrice(nativeTokenId);
+    if (price && typeof price === 'number' && price > 0) {
+      console.log(`[Price Aggregator] Цена нативного токена для сети ${chainId} успешно получена: $${price}`);
+      return { price: price, source: 'CoinGecko' }; // Указываем, что цена получена через CoinGecko
+    }
+
+    console.warn(`[Price Aggregator] Не удалось получить цену нативного токена для сети ${chainId} через CoinGecko`);
+    return { price: 0, source: null };
+  } catch (error) {
+    console.error(`[Price Aggregator] Ошибка при получении цены нативного токена для сети ${chainId}:`, error);
+    return { price: 0, source: null };
   }
 };
 
 /*** Получает цены для массива токенов параллельно
  * @param {Array} tokens Массив объектов токенов
  * @param {number} chainId ID сети
- * @returns {Promise<Object>} Объект с маппингом адресов контрактов к ценам { адрес: цена }
+ * @returns {Promise<Object>} Объект с маппингом адресов контрактов к объектам {price, source}
  */
 export const fetchMultipleTokenPricesWithFallback = async (tokens, chainId) => {
   try {
@@ -136,19 +188,20 @@ export const fetchMultipleTokenPricesWithFallback = async (tokens, chainId) => {
         token.apiKey,
         token.coingeckoId,
         token.cmcId
-      ).then(price => ({
+      ).then(result => ({
         contractAddress: token.contractAddress,
-        price: price
+        price: result.price,
+        source: result.source
       }))
     );
 
     // Ждем завершения всех промисов
     const results = await Promise.all(pricePromises);
 
-    // Создаем объект с маппингом адресов контрактов к ценам
+    // Создаем объект с маппингом адресов контрактов к объектам {price, source}
     const prices = {};
     results.forEach(result => {
-      prices[result.contractAddress] = result.price;
+      prices[result.contractAddress] = { price: result.price, source: result.source };
     });
 
     console.log(`[Price Aggregator] Получены цены для ${results.length} токенов`);
@@ -172,12 +225,13 @@ export const fetchTokensWithPrices = async (tokens, chainId) => {
     const prices = await fetchMultipleTokenPricesWithFallback(tokens, chainId);
 
     // Объединяем токены с ценами
-    // === ИСПРАВЛЕНИЕ 3: Сохраняем цену в поле priceUSD, как ожидает компонент WalletTokens ===
+    // === ИСПРАВЛЕНИЕ 3: Сохраняем цену в поле priceUSD и источник в priceSource, как ожидает компонент WalletTokens ===
     const tokensWithPrices = tokens.map(token => {
-      const price = prices[token.contractAddress] || null; // Используем null для "не найдено"
+      const priceData = prices[token.contractAddress]; // Сохраняем точное значение цены (даже 0 или null)
       return {
         ...token,
-        priceUSD: price // <-- Исправлено: сохраняем в priceUSD
+        priceUSD: priceData ? priceData.price : null, // <-- Исправлено: сохраняем в priceUSD
+        priceSource: priceData ? priceData.source : null // <-- Добавлено: сохраняем источник цены
       };
     });
     // === КОНЕЦ ИСПРАВЛЕНИЯ 3 ===

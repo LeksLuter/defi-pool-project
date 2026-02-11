@@ -210,7 +210,7 @@ const fetchPricesFromAllServicesParallel = async (account, provider, chainId, to
   }
   // Используем агрегатор цен, который уже реализует логику опроса нескольких сервисов
   try {
-    const tokensWithPrices = await fetchTokensWithPrices(tokens, chainId, priceServicesConfig);
+    const tokensWithPrices = await fetchTokensWithPrices(tokens, chainId);
     console.log(`[Token Service] Цены успешно получены через агрегатор для ${tokensWithPrices.length} токенов`);
     // Возвращаем массив токенов с ценами, так как функция combineTokensWithPrices ожидает такой формат
     return tokensWithPrices;
@@ -241,42 +241,48 @@ const formatTokensForNetwork = async (rawTokens, chainId) => {
  * Объединяет массив токенов с массивом токенов с ценами.
  * @param {Array} tokensArray Массив токенов.
  * @param {Array} tokensWithPricesArray Массив токенов с ценами.
- * @returns {Array} Массив токенов с добавленным полем priceUSD.
+ * @returns {Array} Массив токенов с добавленным полем priceUSD и priceSource.
  */
 export const combineTokensWithPrices = (tokensArray, tokensWithPricesArray) => {
   console.log(`[Token Service] Объединение ${tokensArray.length} токенов с ${tokensWithPricesArray.length} токенами с ценами...`);
-  
-  // Создаем маппинг адресов токенов к ценам для быстрого поиска
+
+  // Создаем маппинг адресов токенов к ценам и источникам для быстрого поиска
   const priceMap = {};
   tokensWithPricesArray.forEach(token => {
     if (token.contractAddress) {
-      priceMap[token.contractAddress.toLowerCase()] = token.priceUSD;
+      priceMap[token.contractAddress.toLowerCase()] = {
+        price: token.priceUSD,
+        source: token.priceSource
+      };
     }
   });
-  
+
   console.log(`[Token Service] Создан маппинг цен для ${Object.keys(priceMap).length} токенов`);
-  
+
   const tokensWithPrices = tokensArray.map(token => {
     try {
       const tokenAddress = token.contractAddress;
       if (!tokenAddress) {
         console.warn(`[Token Service] Токен без адреса контракта, пропущен:`, token);
-        return { ...token, priceUSD: null }; // Возвращаем токен без цены
+        return { ...token, priceUSD: null, priceSource: null }; // Возвращаем токен без цены и источника
       }
-      
-      // Ищем цену по адресу токена
-      const priceUSDValue = priceMap[tokenAddress.toLowerCase()] || null;
-      
-      // Возвращаем токен с добавленным полем priceUSD
+
+      // Ищем цену и источник по адресу токена
+      const priceData = priceMap[tokenAddress.toLowerCase()];
+      const priceUSDValue = priceData ? priceData.price : null;
+      const priceSourceValue = priceData ? priceData.source : null;
+
+      // Возвращаем токен с добавленными полями priceUSD и priceSource
       const tokenWithPrice = {
         ...token,
-        priceUSD: priceUSDValue // priceUSDValue будет числом или null
+        priceUSD: priceUSDValue, // priceUSDValue будет числом или null
+        priceSource: priceSourceValue // priceSourceValue будет строкой или null
       };
-      
+
       return tokenWithPrice;
     } catch (combineError) {
       console.error(`[Token Service] Ошибка при объединении цены для токена:`, token, combineError);
-      return { ...token, priceUSD: null }; // Возвращаем токен без цены в случае ошибки
+      return { ...token, priceUSD: null, priceSource: null }; // Возвращаем токен без цены и источника в случае ошибки
     }
   });
   console.log(`[Token Service] Объединение токенов с ценами завершено.`);

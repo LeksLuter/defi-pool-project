@@ -687,18 +687,33 @@ const WalletTokens = () => {
         let isLowValue = false;
 
         const rawPriceUSD = token.priceUSD;
-        if (typeof rawPriceUSD === 'number' && !isNaN(rawPriceUSD)) {
+        // Проверяем, что цена - это число и не NaN (даже если цена 0, это допустимо)
+        if (typeof rawPriceUSD === 'number' && !isNaN(rawPriceUSD) && isFinite(rawPriceUSD)) {
           if (rawPriceUSD >= 1) {
             priceFormatted = `$${rawPriceUSD.toFixed(2)}`;
+          } else if (rawPriceUSD > 0) {
+            // Для маленьких положительных значений используем экспоненциальную запись или фиксированное количество знаков
+            priceFormatted = `$${rawPriceUSD.toPrecision(4)}`;
           } else {
-            priceFormatted = `$${rawPriceUSD.toPrecision(3)}`;
+            // Цена равна 0
+            priceFormatted = `$${rawPriceUSD.toFixed(2)}`;
           }
 
           const balanceNum = parseFloat(balanceFormatted);
           const totalValueNum = balanceNum * rawPriceUSD;
-          totalValueFormatted = `$${totalValueNum.toFixed(2)}`;
+          
+          // Форматируем общую стоимость
+          if (totalValueNum >= 1) {
+            totalValueFormatted = `$${totalValueNum.toFixed(2)}`;
+          } else if (totalValueNum > 0) {
+            // Для маленьких положительных значений используем экспоненциальную запись
+            totalValueFormatted = `$${totalValueNum.toPrecision(4)}`;
+          } else {
+            // Общая стоимость равна 0
+            totalValueFormatted = `$${totalValueNum.toFixed(2)}`;
+          }
 
-          if (totalValueNum < MIN_TOKEN_VALUE_USD) {
+          if (totalValueNum < MIN_TOKEN_VALUE_USD && totalValueNum > 0) {
             isLowValue = true;
           }
         } else {
@@ -739,6 +754,9 @@ const WalletTokens = () => {
             </td>
             <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-medium ${isLowValue ? 'text-yellow-500' : ''}`}>
               {totalValueFormatted}
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-400">
+              {token.priceSource || 'Aggregated'}
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
               <button
@@ -941,6 +959,7 @@ const WalletTokens = () => {
                   <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Баланс</th>
                   <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Цена</th>
                   <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Стоимость</th>
+                  <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Источник</th>
                   <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Действия</th>
                 </tr>
               </thead>

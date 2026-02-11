@@ -7,3 +7,5 @@ frontend/.env
 backend/.env
 backend/api/.env
 QWEN.md
+token_addresses.csv
+tokens.csv
